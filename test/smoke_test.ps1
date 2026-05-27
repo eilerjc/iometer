@@ -47,9 +47,11 @@ Get-Process -Name "IOmeter","Dynamo" -ErrorAction SilentlyContinue | Stop-Proces
 Start-Sleep -Seconds 1
 
 # --- Launch IOmeter in batch mode ---------------------------------------------
+# Use positional form (config result timeout) rather than /c /r /t switches,
+# as the switch form can be mishandled when launched through certain shells.
 Write-Host "[1/4] Starting IOmeter (batch mode, ${LoginTimeout}s login timeout)..." -ForegroundColor Yellow
 $iometerProc = Start-Process -FilePath $iometer `
-    -ArgumentList "/c `"$IcfFile`" /r `"$resultFile`" /t $LoginTimeout" `
+    -ArgumentList "`"$IcfFile`" `"$resultFile`" $LoginTimeout" `
     -PassThru
 
 Start-Sleep -Seconds 3

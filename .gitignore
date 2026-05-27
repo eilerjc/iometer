@@ -28,6 +28,9 @@ src/msvc9/Debug/
 # Stray files from VS build process
 src/msvs11/No
 
+# Test results (generated, not committed)
+test/results_*.csv
+
 # Windows
 Thumbs.db
 Desktop.ini
