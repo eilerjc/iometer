@@ -713,7 +713,7 @@ Test_Spec *AccessSpecList::Copy(Test_Spec * source_spec)
 	name.Format("Copy of %s", spec->name);
 	copy_number = 1;
 	do {
-		snprintf(spec->name, MAX_NAME, "%s (%d)", name, copy_number++);
+		snprintf(spec->name, MAX_NAME, "%s (%d)", (LPCTSTR)name, copy_number++);
 	} while (RefByName(spec->name) != spec);
 
 	return spec;
@@ -1313,5 +1313,5 @@ void AccessSpecList::SmartName(Test_Spec * spec)
 	while (RefByName((LPCTSTR) name)) {
 		name.Format("%s %d", name.Left(name_size), ++spec_number);
 	}
-	snprintf(spec->name, MAX_NAME, "%s", name);
+	snprintf(spec->name, MAX_NAME, "%s", (LPCTSTR)name);
 }
