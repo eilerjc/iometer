@@ -32,8 +32,9 @@ foreach ($exe in $iometer, $dynamo, $IcfFile) {
     }
 }
 
-# --- Timestamped results file -------------------------------------------------
-$stamp      = Get-Date -Format "yyyyMMdd_HHmmss"
+# --- Record start time and build result file path -----------------------------
+$startTime  = Get-Date
+$stamp      = $startTime | Get-Date -Format "yyyyMMdd_HHmmss"
 $resultFile = Join-Path $TestDir "results_$stamp.csv"
 
 Write-Host ""
@@ -47,11 +48,9 @@ Get-Process -Name "IOmeter","Dynamo" -ErrorAction SilentlyContinue | Stop-Proces
 Start-Sleep -Seconds 1
 
 # --- Launch IOmeter in batch mode ---------------------------------------------
-# Use positional form (config result timeout) rather than /c /r /t switches,
-# as the switch form can be mishandled when launched through certain shells.
 Write-Host "[1/4] Starting IOmeter (batch mode, ${LoginTimeout}s login timeout)..." -ForegroundColor Yellow
 $iometerProc = Start-Process -FilePath $iometer `
-    -ArgumentList "`"$IcfFile`" `"$resultFile`" $LoginTimeout" `
+    -ArgumentList "/c `"$IcfFile`" /r `"$resultFile`" /t $LoginTimeout" `
     -PassThru
 
 Start-Sleep -Seconds 3
@@ -87,10 +86,21 @@ if (-not $iometerProc.HasExited) {
 # --- Verify results -----------------------------------------------------------
 Write-Host "[4/4] Verifying results..." -ForegroundColor Yellow
 
-if (-not (Test-Path $resultFile)) {
-    Write-Host "FAIL: Results file was not created: $resultFile" -ForegroundColor Red
+# Find the newest results_*.csv in $TestDir written on or after $startTime.
+# Using the timestamp search (rather than the pre-computed name alone) handles
+# any slight clock skew between when the path was built and when IOmeter wrote it.
+$found = Get-ChildItem -Path $TestDir -Filter "results_*.csv" -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -ge $startTime } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+if ($null -eq $found) {
+    Write-Host "FAIL: No results file created after $($startTime.ToString('HH:mm:ss')) in $TestDir" -ForegroundColor Red
     exit 1
 }
+
+$resultFile = $found.FullName
+Write-Host "  Found  : $resultFile"
 
 # CSV column indices (0-based) from ManagerList::SaveResults:
 #   6  = IOps
