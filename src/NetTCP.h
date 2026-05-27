@@ -78,6 +78,7 @@
 #include "Network.h"
 #if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
 #include "winsock2.h"
+#include <ws2tcpip.h>
 #elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
 #include <sys/time.h>
 #include <unistd.h>
@@ -96,7 +97,7 @@ typedef struct linger LINGER;
 #if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
  // nop
 #elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
-#define socklen_t int
+ // socklen_t is typedef int in ws2tcpip.h (included above)
 #elif defined(IOMTR_OS_NETWARE)
 #define socklen_t unsigned int
 #define TCP_NODELAY	1

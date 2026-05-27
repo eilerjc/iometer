@@ -109,6 +109,7 @@
 
 #if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
 #include "winsock2.h"
+#include <ws2tcpip.h>
 #elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -158,13 +159,25 @@ Manager::Manager()
 
 	m_OsVersionInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 
-	if (!GetVersionEx(&m_OsVersionInfo))
+	// Use RtlGetVersion (via ntdll) instead of the deprecated GetVersionEx.
+	// RtlGetVersion always returns the true OS version (not app-compat-masked).
 	{
-		// non-fatal
-	#ifdef _DEBUG
-		cout << " Could not get Windows version info, error=" << GetLastError() << "." << endl;
-	#endif	
-		ZeroMemory(&m_OsVersionInfo, sizeof(m_OsVersionInfo));
+		typedef LONG (WINAPI *RtlGetVersionFunc)(OSVERSIONINFOW *);
+		HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+		RtlGetVersionFunc pRtlGetVersion = ntdll ?
+			(RtlGetVersionFunc)GetProcAddress(ntdll, "RtlGetVersion") : NULL;
+		if (pRtlGetVersion && pRtlGetVersion((OSVERSIONINFOW *)&m_OsVersionInfo) == 0)
+		{
+			// success
+		}
+		else
+		{
+			// non-fatal fallback
+		#ifdef _DEBUG
+			cout << " Could not get Windows version info." << endl;
+		#endif
+			ZeroMemory(&m_OsVersionInfo, sizeof(m_OsVersionInfo));
+		}
 	}
 #endif
 
@@ -397,11 +410,9 @@ int Manager::Report_TCP(Target_Spec * tcp_spec)
 	int retval;
 	WSADATA wd;
 #endif
-	struct hostent *hostinfo;
-	struct sockaddr_in sin;
+	struct addrinfo *addrres;
 	char hostname[128];
 	int count = 0;
-	int i;
 
 	cout << "Reporting TCP network information..." << endl;
 
@@ -420,25 +431,23 @@ int Manager::Report_TCP(Target_Spec * tcp_spec)
 		return 0;
 	}
 	// now get the host info for that host name
-	hostinfo = gethostbyname(hostname);
-	if (hostinfo == NULL) {
-		cout << "*** Error " << WSAGetLastError() << "getting host info for \"" << hostname << "\".\n";
-		return 0;
+	{
+		struct addrinfo hints = {};
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		if (getaddrinfo(hostname, NULL, &hints, &addrres) != 0) {
+			cout << "*** Error " << WSAGetLastError() << "getting host info for \"" << hostname << "\".\n";
+			return 0;
+		}
 	}
 #ifdef _DEBUG
-	printf("   My hostname: \"%s\"\n", hostinfo->h_name);
-
-	i = 0;
-	while (hostinfo->h_aliases[i] != NULL) {
-		printf("   Alias: \"%s\"\n", hostinfo->h_aliases[i]);
-		i++;
-	}
+	printf("   My hostname: \"%s\"\n", hostname);
 #endif
 
 	// report the network addresses.
-	for (i = 0; hostinfo->h_addr_list[i] != NULL; i++) {
-		memcpy(&sin.sin_addr.s_addr, hostinfo->h_addr_list[i], hostinfo->h_length);
-		strncpy(tcp_spec[count].name, inet_ntoa(sin.sin_addr), sizeof(tcp_spec[count].name) - 1);
+	for (struct addrinfo *p = addrres; p != NULL; p = p->ai_next) {
+		inet_ntop(AF_INET, &((struct sockaddr_in *)p->ai_addr)->sin_addr,
+		          tcp_spec[count].name, sizeof(tcp_spec[count].name));
 		tcp_spec[count].type = TCPClientType;	// interface to access a client
 
 #ifdef _DEBUG
@@ -452,6 +461,7 @@ int Manager::Report_TCP(Target_Spec * tcp_spec)
 			break;
 		}
 	}
+	freeaddrinfo(addrres);
 
 #if 0				// for debugging multiple-network-interface GUI; change "#if 0" to "#if 1" to enable
 	strncpy(nets[count], "foo", sizeof(nets[count]) - 1);

@@ -95,6 +95,7 @@
 #include <arpa/inet.h>
 #elif defined(IOMTR_OSFAMILY_WINDOWS)
 #include "winsock2.h"
+#include <ws2tcpip.h>
 #else
 #warning ===> WARNING: You have to do some coding here to get the port done!
 #endif
@@ -106,7 +107,7 @@
 #if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
  // nop
 #elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
-#define socklen_t int
+ // socklen_t is typedef int in ws2tcpip.h (included above)
 #elif defined(IOMTR_OS_NETWARE)
 #define socklen_t unsigned int
 #else

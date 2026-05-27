@@ -348,8 +348,7 @@ void CGalileoApp::IdentifyLocalAddresses()
 	DWORD namelength = MAX_NETWORK_NAME;
 	WSADATA wd;
 	char hostname[128];
-	hostent *hostinfo;
-	sockaddr_in sin;
+	struct addrinfo *addrres;
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Get the local machine's NetBIOS address.
@@ -367,17 +366,21 @@ void CGalileoApp::IdentifyLocalAddresses()
 	}
 
 	if (gethostname(hostname, sizeof(hostname)) != SOCKET_ERROR) {
-		hostinfo = gethostbyname(hostname);
-		if (hostinfo != NULL) {
-			for (int counter = 0; hostinfo->h_addr_list[counter] != NULL; counter++) {
-//                              ip_addresses.Add(counter);
-				memcpy(&sin.sin_addr.s_addr, hostinfo->h_addr_list[counter], hostinfo->h_length);
-//                              ip_addresses[counter] = inet_ntoa( sin.sin_addr );
-				ip_addresses.SetAtGrow(counter, inet_ntoa(sin.sin_addr));
+		struct addrinfo hints = {};
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		if (getaddrinfo(hostname, NULL, &hints, &addrres) == 0) {
+			int counter = 0;
+			for (struct addrinfo *p = addrres; p != NULL; p = p->ai_next, counter++) {
+				char ip_str[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &((struct sockaddr_in *)p->ai_addr)->sin_addr,
+				          ip_str, sizeof(ip_str));
+				ip_addresses.SetAtGrow(counter, ip_str);
 			}
+			freeaddrinfo(addrres);
 		} else {
 			// Non-fatal (might not recognize all local managers as being local, though)
-			ErrorMessage("Error getting host info (HOSTENT) for \"" + (CString) hostname + "\".");
+			ErrorMessage("Error getting host info for \"" + (CString) hostname + "\".");
 		}
 	} else {
 		// Non-fatal (might not recognize all local managers as being local, though)
