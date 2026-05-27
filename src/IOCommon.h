@@ -410,6 +410,10 @@ using namespace std;
 #if defined(IOMTR_OSFAMILY_WINDOWS)
 
 // All references to types
+// VS2010+ (MSVC 1600+) ships <stdint.h>; use it to avoid redefinition conflicts.
+#if defined(_MSC_VER) && _MSC_VER >= 1600
+#include <stdint.h>
+#else
 typedef          __int64    int64_t;
 typedef unsigned __int64   uint64_t;
 typedef          __int32    int32_t;
@@ -418,6 +422,7 @@ typedef          __int16    int16_t;
 typedef unsigned __int16   uint16_t;
 typedef          __int8      int8_t;
 typedef unsigned __int8     uint8_t;
+#endif
 
 #ifndef LONG_PTR
   #if defined(IOMTR_OS_WIN32)
