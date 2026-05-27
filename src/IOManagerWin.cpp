@@ -671,7 +671,7 @@ Report_Volumes1( Target_Spec* disk_spec, int start_count )
 		//
 
 		strcpy(mntpt_buf, bufptr);
-		length = strlen(bufptr);
+		length = (DWORD)strlen(bufptr);
 
 		// ptr points into the mntptr_buf where the new mount point name will start
 		ptr = &mntpt_buf[length];
@@ -1103,7 +1103,7 @@ int Report_NetDisks( Target_Spec *disk_spec, int start_count, bool show_unc_path
 			
 			memcpy( &disk_spec[count], &d.spec, sizeof( Target_Spec ) );
 
-			str_length = strlen( disk_spec[count].name );
+			str_length = (DWORD)strlen( disk_spec[count].name );
 
 			if (!show_unc_path)
 			{
@@ -1147,7 +1147,7 @@ int Report_NetDisks( Target_Spec *disk_spec, int start_count, bool show_unc_path
 
 char * DeleteSpaces(char *input)
 {
-	int i = strlen(input);
+	int i = (int)strlen(input);
 	char *prev = &input[i];
 
 	while (i--)
@@ -1296,7 +1296,7 @@ void Volume_GetInfo( Target_Spec *disk_spec, bool bCompatible)
 	char buffer[MAX_NAME], fs_name[MAX_NAME];
 
 	strcpy(disk_spec->basic_name, disk_spec->name); // save off a copy before we tweak with it below
-	str_length = strlen( disk_spec->name );
+	str_length = (int)strlen( disk_spec->name );
 
 	// GetVolumeInformation likes the trailing slash
 	if ( !GetVolumeInformation( 

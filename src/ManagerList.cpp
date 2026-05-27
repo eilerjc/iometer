@@ -979,7 +979,7 @@ int ManagerList::ManagerCount(TargetType type)
 {
 	int i, mgr_count, count = 0;
 
-	mgr_count = managers.GetSize();
+	mgr_count = (int)managers.GetSize();
 	for (i = 0; i < mgr_count; i++) {
 		if (IsType(managers[i]->Type(), type))
 			count++;

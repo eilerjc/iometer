@@ -913,7 +913,7 @@ DWORD PortTCP::Peek()
 	if (synchronous) {
 		FD_ZERO(&sock_set);	// clear the fd_set structure.
 		FD_SET(client_socket, &sock_set);	// Add the one and only socket to it.
-		if (select(client_socket + 1, &sock_set, NULL, NULL, &timeout)) {
+		if (select((int)(client_socket + 1), &sock_set, NULL, NULL, &timeout)) {
 			//if there is data available or select returns an error, 
 			//we want bytes_available to set by the result of recv().
 			bytes_available = recv(client_socket, buf, sizeof(buf), MSG_PEEK);

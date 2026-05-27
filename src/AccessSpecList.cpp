@@ -768,7 +768,7 @@ Test_Spec *AccessSpecList::Get(int index)
 //
 int AccessSpecList::Count()
 {
-	return spec_list.GetSize();
+	return (int)spec_list.GetSize();
 }
 
 //
@@ -777,7 +777,7 @@ int AccessSpecList::Count()
 Test_Spec *AccessSpecList::RefByName(const char *check_name)
 {
 	Test_Spec *spec;
-	int spec_count = spec_list.GetSize();
+	int spec_count = (int)spec_list.GetSize();
 
 	for (int s = 0; s < spec_count; s++) {
 		spec = Get(s);
@@ -795,7 +795,7 @@ Test_Spec *AccessSpecList::RefByName(const char *check_name)
 //
 int AccessSpecList::IndexByRef(const Test_Spec * spec)
 {
-	int spec_count = spec_list.GetSize();
+	int spec_count = (int)spec_list.GetSize();
 
 	for (int index = 0; index < spec_count; index++) {
 		if (Get(index) == spec)

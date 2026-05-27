@@ -1075,7 +1075,7 @@ void Manager::GenerateRandomData()
 				} 
 				else 
 				{
-					srand(SeedVal);
+					srand((unsigned int)SeedVal);
 
 	//random data used for writes
 #if defined(IOMTR_OSFAMILY_NETWARE)

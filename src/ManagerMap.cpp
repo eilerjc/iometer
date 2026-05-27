@@ -106,7 +106,7 @@ void ManagerMap::Reset()
 //
 void ManagerMap::Store(const CString & name, const int id, const CString & address, Manager * mgr)
 {
-	int new_index = map.GetSize();
+	int new_index = (int)map.GetSize();
 
 	map.SetSize(new_index + 1);	// grow the array by one
 
@@ -127,7 +127,7 @@ void ManagerMap::Store(const CString & name, const int id, const CString & addre
 //
 Manager *ManagerMap::Retrieve(const CString & name, const int id)
 {
-	int mapsize = map.GetSize();
+	int mapsize = (int)map.GetSize();
 
 	// Make sure the ManagerMap isn't in a waiting list state (DEBUG only)
 	ASSERT(!IsWaitingList());
@@ -152,7 +152,7 @@ Manager *ManagerMap::Retrieve(const CString & name, const int id)
 //
 BOOL ManagerMap::ManagerLoggedIn(const CString & name, const CString & address, Manager * mgr)
 {
-	int mapsize = map.GetSize();
+	int mapsize = (int)map.GetSize();
 
 	for (int counter = 0; counter < mapsize; counter++) {
 		// If manager is unassigned (waiting) and all other criteria
@@ -200,7 +200,7 @@ BOOL ManagerMap::SetIfOneManager(Manager * mgr)
 //
 BOOL ManagerMap::IsWaitingList()
 {
-	int mapsize = map.GetSize();
+	int mapsize = (int)map.GetSize();
 
 	for (int counter = 0; counter < mapsize; counter++) {
 		if (map[counter].mgr == NULL)
@@ -219,7 +219,7 @@ BOOL ManagerMap::IsWaitingList()
 //
 BOOL ManagerMap::IsThisManagerNeeded(const Manager * const mgr)
 {
-	int mapsize = map.GetSize();
+	int mapsize = (int)map.GetSize();
 
 	for (int counter = 0; counter < mapsize; counter++) {
 		if (map[counter].mgr == mgr)
@@ -235,7 +235,7 @@ BOOL ManagerMap::IsThisManagerNeeded(const Manager * const mgr)
 //
 void ManagerMap::SpawnLocalManagers()
 {
-	int mapsize = map.GetSize();
+	int mapsize = (int)map.GetSize();
 	CString nt_name;
 	DWORD namelength = MAX_NETWORK_NAME;
 
