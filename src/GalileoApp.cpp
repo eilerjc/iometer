@@ -296,6 +296,13 @@ BOOL CGalileoApp::InitInstance()
 		OpenDocumentFile(cmdline.GetConfigFile());
 	}
 
+	// Set the main window title to include version and build timestamp.
+	{
+		CString title;
+		title.Format("Iometer %s  [Built: %s %s]", m_pVersionString, __DATE__, __TIME__);
+		m_pMainWnd->SetWindowText(title);
+	}
+
 	return TRUE;
 }
 

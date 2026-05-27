@@ -203,9 +203,9 @@ void CPageDisplay::Initialize()
 	selected_button = 5;
 	theApp.pView->OnMDisplay(MDisplayErrSubmenuID, MDisplayErrIO);
 
-	SetUpdateDelay(0);
+	SetUpdateDelay(1);
 
-	SetWhichPerf(WHOLE_TEST_PERF);
+	SetWhichPerf(LAST_UPDATE_PERF);
 
 	Reset();
 }

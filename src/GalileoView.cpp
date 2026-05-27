@@ -600,7 +600,14 @@ void CGalileoView::Go()
 	} else if (m_pPageSetup->result_type != RecordNone) {
 		// The user wants to save the results to a file,
 		// but no filename was specified on the command line.
-		CFileDialog file_box(FALSE, "csv", "results",
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		CString default_result_name;
+		default_result_name.Format("results_%04d%02d%02d_%02d%02d%02d",
+			st.wYear, st.wMonth, st.wDay,
+			st.wHour, st.wMinute, st.wSecond);
+
+		CFileDialog file_box(FALSE, "csv", default_result_name,
 				     OFN_HIDEREADONLY | OFN_NOTESTFILECREATE,
 				     "CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt|All Files (*.*)|*.*||");
 		file_box.m_ofn.lpstrTitle = "Save Results";
