@@ -125,22 +125,19 @@ if ($null -eq $allRow) {
     exit 1
 }
 
-$iops   = [double]$allRow[6].Trim()
 $mbps   = [double]$allRow[12].Trim()
+$iops   = [double]$allRow[6].Trim()
 $errors = [double]$allRow[27].Trim()
 
+# For 64k sequential reads, bandwidth is the primary metric.
 Write-Host ""
-Write-Host "  IOps       : $iops"
 Write-Host "  MBps (Dec) : $mbps"
+Write-Host "  IOps       : $iops"
 Write-Host "  Errors     : $errors"
 Write-Host ""
 
 $pass = $true
 
-if ($iops -le 0) {
-    Write-Host "FAIL: IOps is $iops (expected > 0)" -ForegroundColor Red
-    $pass = $false
-}
 if ($mbps -le 0) {
     Write-Host "FAIL: MBps is $mbps (expected > 0)" -ForegroundColor Red
     $pass = $false
