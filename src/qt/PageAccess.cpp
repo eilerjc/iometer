@@ -1,44 +1,33 @@
-// PageAccess.cpp
+// PageAccess.cpp -- "Access Specifications" tab
 #include "PageAccess.h"
 #include "IometerEngine.h"
-#include <QSplitter>
-#include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QFormLayout>
+#include <QVBoxLayout>
 #include <QGroupBox>
 #include <QListWidget>
-#include <QLineEdit>
-#include <QComboBox>
-#include <QSpinBox>
-#include <QDoubleSpinBox>
-#include <QCheckBox>
 #include <QPushButton>
 #include <QLabel>
-#include <QFrame>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QMessageBox>
+#include <QRandomGenerator>
 
 static const QList<QPair<QString,int>> XFER_SIZES = {
-    {"512 B",    512},  {"1 KiB",    1024},  {"2 KiB",  2048},
-    {"4 KiB",   4096},  {"8 KiB",   8192},   {"16 KiB", 16384},
-    {"32 KiB", 32768},  {"64 KiB", 65536},   {"128 KiB",131072},
-    {"256 KiB",262144}, {"512 KiB",524288},  {"1 MiB", 1048576}
+    {"512 B",     512},   {"1 KiB",    1024},  {"2 KiB",    2048},
+    {"4 KiB",    4096},   {"8 KiB",   8192},   {"16 KiB", 16384},
+    {"32 KiB",  32768},   {"64 KiB", 65536},   {"128 KiB",131072},
+    {"256 KiB", 262144},  {"512 KiB",524288},  {"1 MiB", 1048576},
+    {"2 MiB", 2097152},   {"4 MiB", 4194304},  {"8 MiB", 8388608},
+    {"16 MiB",16777216},  {"32 MiB",33554432}, {"64 MiB",67108864}
 };
 
-static const QString STYLE =
-    "PageAccess { background:#111820; color:#ccddff; }"
-    "QGroupBox { border:1px solid #2a3a4a; border-radius:4px; margin-top:8px; "
-    "            color:#7799bb; font-weight:bold; }"
-    "QGroupBox::title { subcontrol-origin: margin; padding: 0 4px; }"
-    "QListWidget { background:#0d1520; color:#ccddff; border:1px solid #2a3a4a; }"
-    "QListWidget::item:selected { background:#1a3a6a; }"
-    "QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox "
-    "    { background:#162030; color:#ccddff; border:1px solid #2a3a4a; "
-    "      border-radius:3px; padding:2px 4px; }"
-    "QCheckBox { color:#ccddff; }"
-    "QLabel { color:#ccddff; }"
-    "QPushButton { background:#2a3a5e; color:#aaddff; border:1px solid #3a5a8e; "
-    "              border-radius:4px; padding:3px 8px; }"
-    "QPushButton:hover { background:#3a5a8e; }"
-    "QPushButton:disabled { background:#1a2a3e; color:#445566; }";
+// =============================================================================
 
 PageAccess::PageAccess(IometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
@@ -48,269 +37,308 @@ PageAccess::PageAccess(IometerEngine *engine, QWidget *parent)
     connect(engine, &IometerEngine::configChanged, this, &PageAccess::loadSpecList);
 }
 
-void PageAccess::populateXferSizes(QComboBox *cb)
-{
-    cb->clear();
-    for (const auto &p : XFER_SIZES) cb->addItem(p.first, p.second);
-}
+// =============================================================================
+// UI construction -- matches the original Access Specifications tab
+// =============================================================================
 
 void PageAccess::setupUi()
 {
-    setStyleSheet(STYLE);
-
     auto *root = new QHBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
+    root->setContentsMargins(6, 6, 6, 6);
     root->setSpacing(6);
 
-    // ── Left: spec list + buttons ─────────────────────────────────────────
-    auto *leftGroup = new QGroupBox("Access Specifications");
+    // ---- Left: Assigned Access Specifications + Move Up/Down ----------------
+    auto *leftGroup = new QGroupBox("Assigned Access Specifications");
     auto *leftLay   = new QVBoxLayout(leftGroup);
-
-    m_specList = new QListWidget;
-    m_specList->setSelectionMode(QAbstractItemView::SingleSelection);
-    leftLay->addWidget(m_specList, 1);
-
-    auto *btnRow = new QHBoxLayout;
-    m_addBtn    = new QPushButton("+");
-    m_removeBtn = new QPushButton("−");
-    m_dupBtn    = new QPushButton("⎘");
-    m_upBtn     = new QPushButton("↑");
-    m_downBtn   = new QPushButton("↓");
-    m_addBtn->setToolTip("New spec");
-    m_removeBtn->setToolTip("Delete selected");
-    m_dupBtn->setToolTip("Duplicate");
-    m_upBtn->setToolTip("Move up");
-    m_downBtn->setToolTip("Move down");
-    for (auto *b : {m_addBtn, m_removeBtn, m_dupBtn, m_upBtn, m_downBtn})
-        b->setFixedWidth(28);
-    m_removeBtn->setEnabled(false);
-    m_dupBtn->setEnabled(false);
+    leftLay->setContentsMargins(4, 8, 4, 4);
+    m_assigned = new QListWidget;
+    leftLay->addWidget(m_assigned, 1);
+    // Move Up / Move Down at bottom
+    auto *moveLay = new QHBoxLayout;
+    m_upBtn   = new QPushButton("Move Up");
+    m_downBtn = new QPushButton("Move Down");
     m_upBtn->setEnabled(false);
     m_downBtn->setEnabled(false);
-    btnRow->addWidget(m_addBtn);
-    btnRow->addWidget(m_removeBtn);
-    btnRow->addWidget(m_dupBtn);
-    btnRow->addStretch();
-    btnRow->addWidget(m_upBtn);
-    btnRow->addWidget(m_downBtn);
-    leftLay->addLayout(btnRow);
+    moveLay->addWidget(m_upBtn);
+    moveLay->addWidget(m_downBtn);
+    leftLay->addLayout(moveLay);
+    root->addWidget(leftGroup, 2);
 
-    root->addWidget(leftGroup, 1);
+    // ---- Center: << Add / Remove >> buttons ---------------------------------
+    auto *midLay = new QVBoxLayout;
+    midLay->addStretch(1);
+    m_addBtn = new QPushButton("<< Add");
+    m_removeBtn = new QPushButton("Remove >>");
+    m_addBtn->setEnabled(false);
+    m_removeBtn->setEnabled(false);
+    midLay->addWidget(m_addBtn);
+    midLay->addSpacing(6);
+    midLay->addWidget(m_removeBtn);
+    midLay->addStretch(1);
+    root->addLayout(midLay);
 
-    // ── Separator ─────────────────────────────────────────────────────────
-    auto *sep = new QFrame;
-    sep->setFrameShape(QFrame::VLine);
-    sep->setStyleSheet("color:#2a3a4a;");
-    root->addWidget(sep);
+    // ---- Right: Global Access Specifications + New/Edit/Copy/Delete ----------
+    auto *rightOuter = new QHBoxLayout;
 
-    // ── Right: spec editor ────────────────────────────────────────────────
-    auto *rightGroup = new QGroupBox("Specification Editor");
-    auto *form       = new QFormLayout(rightGroup);
-    form->setSpacing(6);
-    form->setLabelAlignment(Qt::AlignRight);
+    auto *rightGroup = new QGroupBox("Global Access Specifications");
+    auto *rightLay   = new QVBoxLayout(rightGroup);
+    rightLay->setContentsMargins(4, 8, 4, 4);
+    m_global = new QListWidget;
+    rightLay->addWidget(m_global, 1);
+    rightOuter->addWidget(rightGroup, 1);
 
-    m_nameEdit   = new QLineEdit;
-    m_xferSize   = new QComboBox; populateXferSizes(m_xferSize);
-    m_alignSize  = new QComboBox; populateXferSizes(m_alignSize);
-    m_readPct    = new QSpinBox;  m_readPct->setRange(0, 100);  m_readPct->setSuffix(" %");
-    m_seqPct     = new QSpinBox;  m_seqPct->setRange(0, 100);   m_seqPct->setSuffix(" %");
-    m_burstLen   = new QSpinBox;  m_burstLen->setRange(1, 1024);
-    m_delayMs    = new QDoubleSpinBox; m_delayMs->setRange(0, 60000); m_delayMs->setSuffix(" ms");
-    m_iterations = new QSpinBox;  m_iterations->setRange(0, 1000000);
-    m_iterations->setSpecialValueText("∞ (unlimited)");
-    m_defaultSpec = new QCheckBox("Default specification");
+    // Buttons column to the right of the global list
+    auto *btnLay = new QVBoxLayout;
+    m_newBtn  = new QPushButton("New");
+    m_editBtn = new QPushButton("Edit");
+    m_copyBtn = new QPushButton("Edit Copy");
+    m_delBtn  = new QPushButton("Delete");
+    m_editBtn->setEnabled(false);
+    m_copyBtn->setEnabled(false);
+    m_delBtn->setEnabled(false);
+    btnLay->addWidget(m_newBtn);
+    btnLay->addWidget(m_editBtn);
+    btnLay->addWidget(m_copyBtn);
+    btnLay->addWidget(m_delBtn);
+    btnLay->addStretch();
+    rightOuter->addLayout(btnLay);
 
-    m_descLabel = new QLabel;
-    m_descLabel->setWordWrap(true);
-    m_descLabel->setStyleSheet("color:#668899; font-style:italic; font-size:10px;");
+    root->addLayout(rightOuter, 3);
 
-    form->addRow("Name:",           m_nameEdit);
-    form->addRow("Transfer size:",  m_xferSize);
-    form->addRow("Alignment:",      m_alignSize);
-    form->addRow("Read %:",         m_readPct);
-    form->addRow("Sequential %:",   m_seqPct);
-    form->addRow("Burst length:",   m_burstLen);
-    form->addRow("Delay:",          m_delayMs);
-    form->addRow("Iterations:",     m_iterations);
-    form->addRow("",                m_defaultSpec);
-    form->addRow("Description:",    m_descLabel);
-
-    root->addWidget(rightGroup, 2);
-
-    // ── Connections ────────────────────────────────────────────────────────
-    connect(m_specList,  &QListWidget::itemClicked,     this, &PageAccess::onSpecSelected);
-    connect(m_addBtn,    &QPushButton::clicked,         this, &PageAccess::onAddSpec);
-    connect(m_removeBtn, &QPushButton::clicked,         this, &PageAccess::onRemoveSpec);
-    connect(m_dupBtn,    &QPushButton::clicked,         this, &PageAccess::onDuplicateSpec);
-    connect(m_upBtn,     &QPushButton::clicked,         this, &PageAccess::onMoveUp);
-    connect(m_downBtn,   &QPushButton::clicked,         this, &PageAccess::onMoveDown);
-
-    // Any change in the editor saves back
-    connect(m_nameEdit,   &QLineEdit::textEdited,            this, &PageAccess::onSpecEdited);
-    connect(m_xferSize,   QOverload<int>::of(&QComboBox::currentIndexChanged),  this, &PageAccess::onSpecEdited);
-    connect(m_alignSize,  QOverload<int>::of(&QComboBox::currentIndexChanged),  this, &PageAccess::onSpecEdited);
-    connect(m_readPct,    QOverload<int>::of(&QSpinBox::valueChanged),          this, &PageAccess::onSpecEdited);
-    connect(m_seqPct,     QOverload<int>::of(&QSpinBox::valueChanged),          this, &PageAccess::onSpecEdited);
-    connect(m_burstLen,   QOverload<int>::of(&QSpinBox::valueChanged),          this, &PageAccess::onSpecEdited);
-    connect(m_delayMs,    QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &PageAccess::onSpecEdited);
-    connect(m_iterations, QOverload<int>::of(&QSpinBox::valueChanged),          this, &PageAccess::onSpecEdited);
-    connect(m_defaultSpec, &QCheckBox::toggled,                                 this, &PageAccess::onSpecEdited);
+    // ---- Connections ---------------------------------------------------------
+    connect(m_addBtn,    &QPushButton::clicked, this, &PageAccess::onAddToAssigned);
+    connect(m_removeBtn, &QPushButton::clicked, this, &PageAccess::onRemoveFromAssigned);
+    connect(m_upBtn,     &QPushButton::clicked, this, &PageAccess::onMoveUp);
+    connect(m_downBtn,   &QPushButton::clicked, this, &PageAccess::onMoveDown);
+    connect(m_newBtn,    &QPushButton::clicked, this, &PageAccess::onNewSpec);
+    connect(m_editBtn,   &QPushButton::clicked, this, &PageAccess::onEditSpec);
+    connect(m_copyBtn,   &QPushButton::clicked, this, &PageAccess::onEditCopySpec);
+    connect(m_delBtn,    &QPushButton::clicked, this, &PageAccess::onDeleteSpec);
+    connect(m_global,   &QListWidget::itemSelectionChanged,
+            this, &PageAccess::onGlobalSelectionChanged);
+    connect(m_assigned, &QListWidget::itemSelectionChanged,
+            this, &PageAccess::onAssignedSelectionChanged);
 }
 
-void PageAccess::loadSpecList()
+// =============================================================================
+// Population
+// =============================================================================
+
+static QString specLabel(const AccessSpec &s) {
+    if (s.name == "Idle" || s.name == "Default") return s.name;
+    return s.displayLabel();
+}
+
+void PageAccess::rebuildGlobalList()
 {
-    const int savedRow = m_specList->currentRow();
-    m_specList->clear();
+    const int cur = m_global->currentRow();
+    m_global->clear();
     for (const auto &s : m_engine->accessSpecs()) {
-        auto *item = new QListWidgetItem(s.defaultSpec ? "[Default] " + s.name : s.name);
+        auto *item = new QListWidgetItem(specLabel(s));
+        item->setData(Qt::UserRole, s.name);
         if (s.defaultSpec) {
             QFont f = item->font();
             f.setBold(true);
             item->setFont(f);
-            item->setForeground(QColor(0x44, 0xaa, 0xff));
         }
-        m_specList->addItem(item);
+        m_global->addItem(item);
     }
-    const int row = qBound(0, savedRow, m_specList->count() - 1);
-    if (m_specList->count() > 0) {
-        m_specList->setCurrentRow(row);
-        loadSpecEditor(row);
-    }
+    if (cur >= 0 && cur < m_global->count())
+        m_global->setCurrentRow(cur);
 }
 
-void PageAccess::loadSpecEditor(int index)
+void PageAccess::rebuildAssignedList()
 {
-    const auto specs = m_engine->accessSpecs();
-    if (index < 0 || index >= specs.size()) return;
-    m_currentIndex = index;
-    m_updating = true;
-
-    const auto &s = specs[index];
-    m_nameEdit->setText(s.name);
-
-    // Find transfer size in combo
-    for (int i = 0; i < XFER_SIZES.size(); ++i)
-        if (XFER_SIZES[i].second == s.xferSizeBytes) { m_xferSize->setCurrentIndex(i); break; }
-    for (int i = 0; i < XFER_SIZES.size(); ++i)
-        if (XFER_SIZES[i].second == s.alignBytes)    { m_alignSize->setCurrentIndex(i); break; }
-
-    m_readPct->setValue(s.readPercent);
-    m_seqPct->setValue(s.seqPercent);
-    m_burstLen->setValue(s.burstLength);
-    m_delayMs->setValue(s.delayMs);
-    m_iterations->setValue(s.iterations);
-    m_defaultSpec->setChecked(s.defaultSpec);
-
-    // Build a description
-    const QString rwStr  = (s.readPercent == 100) ? "Read-only" :
-                           (s.readPercent == 0)   ? "Write-only" :
-                           QString("%1% Read / %2% Write").arg(s.readPercent).arg(100 - s.readPercent);
-    const QString seqStr = (s.seqPercent == 100) ? "Sequential" :
-                           (s.seqPercent == 0)   ? "Random" :
-                           QString("%1% Sequential").arg(s.seqPercent);
-    m_descLabel->setText(QString("%1 — %2 — %3")
-        .arg(XFER_SIZES.isEmpty() ? "?" :
-             [&]{ for (const auto &p : XFER_SIZES) if (p.second == s.xferSizeBytes) return p.first; return QString(); }())
-        .arg(rwStr).arg(seqStr));
-
-    m_updating = false;
-
-    const bool enabled = (index >= 0);
-    for (auto *w : QList<QWidget*>{m_nameEdit, m_xferSize, m_alignSize, m_readPct,
-                                    m_seqPct, m_burstLen, m_delayMs, m_iterations, m_defaultSpec})
-        w->setEnabled(enabled);
-    m_removeBtn->setEnabled(enabled);
-    m_dupBtn->setEnabled(enabled);
-    m_upBtn->setEnabled(index > 0);
-    m_downBtn->setEnabled(index < specs.size() - 1);
+    // The "assigned" list reflects the global assignment (assignedSpecs of all workers)
+    // For now show a placeholder empty list -- workers are configured via the engine
+    m_assigned->clear();
 }
 
-void PageAccess::onSpecSelected(QListWidgetItem *)
+void PageAccess::loadSpecList()
 {
-    loadSpecEditor(m_specList->currentRow());
+    rebuildGlobalList();
+    rebuildAssignedList();
+    onGlobalSelectionChanged();
+    onAssignedSelectionChanged();
 }
 
-void PageAccess::saveCurrentSpec()
+// =============================================================================
+// Slot implementations
+// =============================================================================
+
+void PageAccess::onGlobalSelectionChanged()
 {
-    if (m_updating || m_currentIndex < 0) return;
-    auto specs = m_engine->accessSpecs();
-    if (m_currentIndex >= specs.size()) return;
-
-    auto &s = specs[m_currentIndex];
-    s.name        = m_nameEdit->text();
-    s.xferSizeBytes = XFER_SIZES[m_xferSize->currentIndex()].second;
-    s.alignBytes    = XFER_SIZES[m_alignSize->currentIndex()].second;
-    s.readPercent   = m_readPct->value();
-    s.seqPercent    = m_seqPct->value();
-    s.burstLength   = m_burstLen->value();
-    s.delayMs       = m_delayMs->value();
-    s.iterations    = m_iterations->value();
-    s.defaultSpec   = m_defaultSpec->isChecked();
-
-    m_engine->setAccessSpecs(specs);
-    // Update the list item label without re-loading
-    auto *item = m_specList->item(m_currentIndex);
-    if (item) item->setText(s.defaultSpec ? "[Default] " + s.name : s.name);
+    const bool sel = m_global->currentRow() >= 0;
+    m_addBtn->setEnabled(sel);
+    m_editBtn->setEnabled(sel);
+    m_copyBtn->setEnabled(sel);
+    m_delBtn->setEnabled(sel);
 }
 
-void PageAccess::onSpecEdited()
+void PageAccess::onAssignedSelectionChanged()
 {
-    saveCurrentSpec();
+    const int row = m_assigned->currentRow();
+    m_removeBtn->setEnabled(row >= 0);
+    m_upBtn->setEnabled(row > 0);
+    m_downBtn->setEnabled(row >= 0 && row < m_assigned->count() - 1);
 }
 
-void PageAccess::onAddSpec()
+void PageAccess::onAddToAssigned()
 {
-    auto specs = m_engine->accessSpecs();
-    AccessSpec s;
-    s.name = QString("New Spec %1").arg(specs.size() + 1);
-    specs.append(s);
-    m_engine->setAccessSpecs(specs);
-    loadSpecList();
-    m_specList->setCurrentRow(specs.size() - 1);
-    loadSpecEditor(specs.size() - 1);
+    auto *item = m_global->currentItem();
+    if (!item) return;
+    // Add spec name to assigned list if not already present
+    const QString name = item->data(Qt::UserRole).toString();
+    for (int i = 0; i < m_assigned->count(); ++i)
+        if (m_assigned->item(i)->data(Qt::UserRole).toString() == name) return;
+    auto *newItem = new QListWidgetItem(item->text());
+    newItem->setData(Qt::UserRole, name);
+    m_assigned->addItem(newItem);
+    onAssignedSelectionChanged();
 }
 
-void PageAccess::onRemoveSpec()
+void PageAccess::onRemoveFromAssigned()
 {
-    if (m_currentIndex < 0) return;
-    auto specs = m_engine->accessSpecs();
-    specs.removeAt(m_currentIndex);
-    m_engine->setAccessSpecs(specs);
-    loadSpecList();
-}
-
-void PageAccess::onDuplicateSpec()
-{
-    if (m_currentIndex < 0) return;
-    auto specs = m_engine->accessSpecs();
-    AccessSpec dup = specs[m_currentIndex];
-    dup.name += " (copy)";
-    dup.defaultSpec = false;
-    specs.insert(m_currentIndex + 1, dup);
-    m_engine->setAccessSpecs(specs);
-    loadSpecList();
-    m_specList->setCurrentRow(m_currentIndex + 1);
-    loadSpecEditor(m_currentIndex + 1);
+    const int row = m_assigned->currentRow();
+    if (row < 0) return;
+    delete m_assigned->takeItem(row);
+    onAssignedSelectionChanged();
 }
 
 void PageAccess::onMoveUp()
 {
-    if (m_currentIndex <= 0) return;
-    auto specs = m_engine->accessSpecs();
-    specs.swapItemsAt(m_currentIndex, m_currentIndex - 1);
-    m_engine->setAccessSpecs(specs);
-    loadSpecList();
-    m_specList->setCurrentRow(m_currentIndex - 1);
-    loadSpecEditor(m_currentIndex - 1);
+    const int row = m_assigned->currentRow();
+    if (row <= 0) return;
+    auto *item = m_assigned->takeItem(row);
+    m_assigned->insertItem(row - 1, item);
+    m_assigned->setCurrentRow(row - 1);
+    onAssignedSelectionChanged();
 }
 
 void PageAccess::onMoveDown()
 {
+    const int row = m_assigned->currentRow();
+    if (row < 0 || row >= m_assigned->count() - 1) return;
+    auto *item = m_assigned->takeItem(row);
+    m_assigned->insertItem(row + 1, item);
+    m_assigned->setCurrentRow(row + 1);
+    onAssignedSelectionChanged();
+}
+
+// =============================================================================
+// Spec editor dialog
+// =============================================================================
+
+bool PageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
+{
+    QDialog dlg(this);
+    dlg.setWindowTitle(title);
+    dlg.setMinimumWidth(360);
+
+    auto *form = new QFormLayout(&dlg);
+    form->setSpacing(6);
+
+    auto *nameEdit   = new QLineEdit(spec.name);
+    auto *xferCombo  = new QComboBox;
+    auto *alignCombo = new QComboBox;
+    for (const auto &p : XFER_SIZES) {
+        xferCombo->addItem(p.first, p.second);
+        alignCombo->addItem(p.first, p.second);
+    }
+    for (int i = 0; i < XFER_SIZES.size(); ++i)
+        if (XFER_SIZES[i].second == spec.xferSizeBytes) { xferCombo->setCurrentIndex(i); break; }
+    for (int i = 0; i < XFER_SIZES.size(); ++i)
+        if (XFER_SIZES[i].second == spec.alignBytes)    { alignCombo->setCurrentIndex(i); break; }
+
+    auto *readSpin  = new QSpinBox;  readSpin->setRange(0,100);  readSpin->setValue(spec.readPercent); readSpin->setSuffix(" %");
+    auto *seqSpin   = new QSpinBox;  seqSpin->setRange(0,100);   seqSpin->setValue(spec.seqPercent);  seqSpin->setSuffix(" %");
+    auto *burstSpin = new QSpinBox;  burstSpin->setRange(1,1024); burstSpin->setValue(spec.burstLength);
+    auto *delaySpin = new QDoubleSpinBox; delaySpin->setRange(0,60000); delaySpin->setValue(spec.delayMs); delaySpin->setSuffix(" ms");
+    auto *iterSpin  = new QSpinBox;  iterSpin->setRange(0,1000000); iterSpin->setValue(spec.iterations);
+    iterSpin->setSpecialValueText("Unlimited");
+    auto *defChk    = new QCheckBox; defChk->setChecked(spec.defaultSpec);
+
+    form->addRow("Name:",             nameEdit);
+    form->addRow("Transfer size:",    xferCombo);
+    form->addRow("Alignment:",        alignCombo);
+    form->addRow("Read %:",           readSpin);
+    form->addRow("Sequential %:",     seqSpin);
+    form->addRow("Burst length:",     burstSpin);
+    form->addRow("Delay:",            delaySpin);
+    form->addRow("Iterations:",       iterSpin);
+    form->addRow("Default spec:",     defChk);
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return false;
+
+    spec.name          = nameEdit->text().trimmed();
+    spec.xferSizeBytes = xferCombo->currentData().toInt();
+    spec.alignBytes    = alignCombo->currentData().toInt();
+    spec.readPercent   = readSpin->value();
+    spec.seqPercent    = seqSpin->value();
+    spec.burstLength   = burstSpin->value();
+    spec.delayMs       = delaySpin->value();
+    spec.iterations    = iterSpin->value();
+    spec.defaultSpec   = defChk->isChecked();
+    return true;
+}
+
+void PageAccess::onNewSpec()
+{
+    AccessSpec s;
+    s.name = QString("New Spec %1").arg(m_engine->accessSpecs().size() + 1);
+    if (!editSpecDialog(s, "New Access Specification")) return;
     auto specs = m_engine->accessSpecs();
-    if (m_currentIndex < 0 || m_currentIndex >= specs.size() - 1) return;
-    specs.swapItemsAt(m_currentIndex, m_currentIndex + 1);
+    specs.append(s);
     m_engine->setAccessSpecs(specs);
     loadSpecList();
-    m_specList->setCurrentRow(m_currentIndex + 1);
-    loadSpecEditor(m_currentIndex + 1);
+    m_global->setCurrentRow(m_global->count() - 1);
+}
+
+void PageAccess::onEditSpec()
+{
+    const int row = m_global->currentRow();
+    if (row < 0) return;
+    auto specs = m_engine->accessSpecs();
+    if (row >= specs.size()) return;
+    AccessSpec s = specs[row];
+    if (!editSpecDialog(s, "Edit Access Specification")) return;
+    specs[row] = s;
+    m_engine->setAccessSpecs(specs);
+    loadSpecList();
+    m_global->setCurrentRow(row);
+}
+
+void PageAccess::onEditCopySpec()
+{
+    const int row = m_global->currentRow();
+    if (row < 0) return;
+    auto specs = m_engine->accessSpecs();
+    if (row >= specs.size()) return;
+    AccessSpec s   = specs[row];
+    s.name        += " (copy)";
+    s.defaultSpec  = false;
+    if (!editSpecDialog(s, "Edit Copy of Access Specification")) return;
+    specs.insert(row + 1, s);
+    m_engine->setAccessSpecs(specs);
+    loadSpecList();
+    m_global->setCurrentRow(row + 1);
+}
+
+void PageAccess::onDeleteSpec()
+{
+    const int row = m_global->currentRow();
+    if (row < 0) return;
+    auto specs = m_engine->accessSpecs();
+    if (row >= specs.size()) return;
+    const auto btn = QMessageBox::question(this, "Delete Spec",
+        QString("Delete \"%1\"?").arg(specs[row].name));
+    if (btn != QMessageBox::Yes) return;
+    specs.removeAt(row);
+    m_engine->setAccessSpecs(specs);
+    loadSpecList();
 }

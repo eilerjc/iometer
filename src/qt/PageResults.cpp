@@ -1,175 +1,220 @@
-// PageResults.cpp
+// PageResults.cpp -- "Test Setup" tab
 #include "PageResults.h"
 #include "IometerEngine.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QTableWidget>
-#include <QHeaderView>
-#include <QPushButton>
-#include <QLabel>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QLineEdit>
+#include <QSpinBox>
 #include <QComboBox>
-#include <QFileDialog>
-#include <QTextStream>
-#include <QFile>
-#include <QMessageBox>
+#include <QRadioButton>
+#include <QLabel>
+#include <QCheckBox>
+#include <QFrame>
 
-static const QStringList COLUMNS = {
-    "Manager", "Worker",
-    "IOps", "Read IOps", "Write IOps",
-    "MBps (Dec)", "Read MBps", "Write MBps",
-    "Avg Lat (ms)", "Max Lat (ms)",
-    "CPU %", "Errors"
-};
-
-static const QString STYLE =
-    "PageResults { background:#111820; color:#ccddff; }"
-    "QTableWidget { background:#0d1520; color:#ccddff; border:1px solid #2a3a4a; "
-    "               gridline-color:#1a2a3a; }"
-    "QTableWidget::item:selected { background:#1a3a6a; }"
-    "QHeaderView::section { background:#162030; color:#8899aa; border:1px solid #2a3a4a; padding:2px; }"
-    "QComboBox { background:#162030; color:#ccddff; border:1px solid #2a3a4a; border-radius:3px; padding:2px; }"
-    "QPushButton { background:#2a3a5e; color:#aaddff; border:1px solid #3a5a8e; border-radius:4px; padding:3px 10px; }"
-    "QPushButton:hover { background:#3a5a8e; }"
-    "QLabel { color:#ccddff; }";
+// =============================================================================
 
 PageResults::PageResults(IometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
-    connect(engine, &IometerEngine::configChanged, this, [this]{ m_table->setRowCount(0); });
+    loadConfig();
+    connect(engine, &IometerEngine::configChanged, this, &PageResults::onConfigChanged);
 }
+
+// =============================================================================
+// UI construction -- matches the original Test Setup tab exactly
+// =============================================================================
 
 void PageResults::setupUi()
 {
-    setStyleSheet(STYLE);
     auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
+    root->setContentsMargins(6, 6, 6, 6);
     root->setSpacing(6);
 
-    auto *topRow = new QHBoxLayout;
-    m_viewCombo = new QComboBox;
-    m_viewCombo->addItems({"Live Results", "Saved Results"});
-    m_statusLbl = new QLabel("Waiting for test data...");
-    m_statusLbl->setStyleSheet("color:#6688aa; font-style:italic;");
-    m_clearBtn  = new QPushButton("Clear Saved");
-    m_exportBtn = new QPushButton("Export CSV…");
-    m_clearBtn->setEnabled(false);
-    topRow->addWidget(new QLabel("View:"));
-    topRow->addWidget(m_viewCombo);
-    topRow->addWidget(m_statusLbl, 1);
-    topRow->addWidget(m_clearBtn);
-    topRow->addWidget(m_exportBtn);
-    root->addLayout(topRow);
+    // ---- Test Description ---------------------------------------------------
+    auto *descGroup = new QGroupBox("Test Description");
+    auto *descLay   = new QHBoxLayout(descGroup);
+    m_description = new QLineEdit;
+    descLay->addWidget(m_description);
+    root->addWidget(descGroup);
 
-    m_table = new QTableWidget(0, COLUMNS.size());
-    m_table->setHorizontalHeaderLabels(COLUMNS);
-    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    m_table->verticalHeader()->setVisible(false);
-    m_table->setAlternatingRowColors(true);
-    m_table->setStyleSheet(
-        "QTableWidget { alternate-background-color:#10181f; }"
-        "QTableWidget::item { padding:2px; }");
-    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    root->addWidget(m_table, 1);
+    // ---- Row: Run Time | Ramp Up Time | Number of Workers -------------------
+    auto *row1 = new QHBoxLayout;
+    row1->setSpacing(8);
 
-    connect(m_clearBtn,   &QPushButton::clicked,
-            this, &PageResults::onClearSaved);
-    connect(m_exportBtn,  &QPushButton::clicked,
-            this, &PageResults::onExportCsv);
-    connect(m_viewCombo,  QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &PageResults::onViewChanged);
+    // Run Time
+    auto *runGroup = new QGroupBox("Run Time");
+    auto *runLay   = new QGridLayout(runGroup);
+    runLay->setSpacing(4);
+    m_runHours   = new QSpinBox; m_runHours->setRange(0, 99);    m_runHours->setFixedWidth(40);
+    m_runMinutes = new QSpinBox; m_runMinutes->setRange(0, 59);  m_runMinutes->setFixedWidth(40);
+    m_runSeconds = new QSpinBox; m_runSeconds->setRange(0, 59);  m_runSeconds->setFixedWidth(40);
+    runLay->addWidget(m_runHours,   0, 0); runLay->addWidget(new QLabel("Hours"),   0, 1);
+    runLay->addWidget(m_runMinutes, 1, 0); runLay->addWidget(new QLabel("Minutes"), 1, 1);
+    runLay->addWidget(m_runSeconds, 2, 0); runLay->addWidget(new QLabel("Seconds"), 2, 1);
+    row1->addWidget(runGroup);
+
+    // Ramp Up Time + Record Results (combined column)
+    auto *rampCol = new QVBoxLayout;
+    rampCol->setSpacing(4);
+    auto *rampGroup = new QGroupBox("Ramp Up Time");
+    auto *rampLay   = new QHBoxLayout(rampGroup);
+    m_rampSeconds = new QSpinBox; m_rampSeconds->setRange(0, 9999); m_rampSeconds->setFixedWidth(50);
+    rampLay->addWidget(m_rampSeconds);
+    rampLay->addWidget(new QLabel("Seconds"));
+    rampLay->addStretch();
+    rampCol->addWidget(rampGroup);
+    auto *recGroup = new QGroupBox("Record Results");
+    auto *recLay   = new QHBoxLayout(recGroup);
+    m_recordResults = new QComboBox;
+    m_recordResults->addItems({"All", "First Run", "Last Run", "None"});
+    recLay->addWidget(m_recordResults);
+    recLay->addStretch();
+    rampCol->addWidget(recGroup);
+    row1->addLayout(rampCol);
+
+    row1->addStretch(1);
+    root->addLayout(row1);
+
+    // ---- Cycling Options ---------------------------------------------------
+    auto *cycGroup = new QGroupBox("Cycling Options");
+    auto *cycLay   = new QVBoxLayout(cycGroup);
+    cycLay->setSpacing(4);
+
+    m_cyclingMode = new QComboBox;
+    m_cyclingMode->addItems({
+        "Normal -- run all selected targets for all workers.",
+        "Cycle worker count",
+        "Cycle target count",
+        "Cycle outstanding I/Os"
+    });
+    cycLay->addWidget(m_cyclingMode);
+
+    // Sub-row: Workers | Targets | # Outstanding I/Os
+    auto *cycRow = new QHBoxLayout;
+    cycRow->setSpacing(12);
+
+    // Workers sub-group
+    auto *wGrp = new QGroupBox("Workers");
+    auto *wLay = new QGridLayout(wGrp);
+    wLay->setSpacing(3);
+    m_workerStart    = new QSpinBox; m_workerStart->setRange(1, 9999);    m_workerStart->setFixedWidth(50);
+    m_workerStep     = new QSpinBox; m_workerStep->setRange(1, 9999);     m_workerStep->setFixedWidth(50);
+    m_workerStepping = new QComboBox; m_workerStepping->addItems({"Linear Stepping", "Exponential Stepping"});
+    wLay->addWidget(new QLabel("Start"), 0, 0);
+    wLay->addWidget(m_workerStart,       0, 1);
+    wLay->addWidget(new QLabel("Step"),  1, 0);
+    wLay->addWidget(m_workerStep,        1, 1);
+    wLay->addWidget(m_workerStepping,    2, 0, 1, 2);
+    cycRow->addWidget(wGrp);
+
+    // Targets sub-group
+    auto *tGrp = new QGroupBox("Targets");
+    auto *tLay = new QGridLayout(tGrp);
+    tLay->setSpacing(3);
+    m_targetStart    = new QSpinBox; m_targetStart->setRange(1, 9999);    m_targetStart->setFixedWidth(50);
+    m_targetStep     = new QSpinBox; m_targetStep->setRange(1, 9999);     m_targetStep->setFixedWidth(50);
+    m_targetStepping = new QComboBox; m_targetStepping->addItems({"Linear Stepping", "Exponential Stepping"});
+    tLay->addWidget(new QLabel("Start"), 0, 0);
+    tLay->addWidget(m_targetStart,       0, 1);
+    tLay->addWidget(new QLabel("Step"),  1, 0);
+    tLay->addWidget(m_targetStep,        1, 1);
+    tLay->addWidget(m_targetStepping,    2, 0, 1, 2);
+    cycRow->addWidget(tGrp);
+
+    // # Outstanding I/Os sub-group
+    auto *iGrp = new QGroupBox("# of Outstanding I/Os");
+    auto *iLay = new QGridLayout(iGrp);
+    iLay->setSpacing(3);
+    m_ioqStart   = new QSpinBox; m_ioqStart->setRange(1, 9999);   m_ioqStart->setFixedWidth(50);
+    m_ioqEnd     = new QSpinBox; m_ioqEnd->setRange(1, 9999);     m_ioqEnd->setFixedWidth(50);
+    m_ioqPower   = new QSpinBox; m_ioqPower->setRange(1, 64);     m_ioqPower->setFixedWidth(50);
+    m_ioqStepping= new QComboBox; m_ioqStepping->addItems({"Linear Stepping", "Exponential Stepping"});
+    iLay->addWidget(new QLabel("Start"), 0, 0); iLay->addWidget(m_ioqStart,   0, 1);
+    iLay->addWidget(new QLabel("End"),   1, 0); iLay->addWidget(m_ioqEnd,     1, 1);
+    iLay->addWidget(new QLabel("Power"), 2, 0); iLay->addWidget(m_ioqPower,   2, 1);
+    iLay->addWidget(m_ioqStepping, 3, 0, 1, 2);
+    cycRow->addWidget(iGrp);
+    cycRow->addStretch();
+
+    cycLay->addLayout(cycRow);
+    root->addWidget(cycGroup);
+
+    root->addStretch();
+
+    // ---- Wire up all controls -----------------------------------------------
+    auto save = [this](){ saveConfig(); };
+    connect(m_description, &QLineEdit::editingFinished, this, save);
+    connect(m_runHours,    QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_runMinutes,  QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_runSeconds,  QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_rampSeconds, QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_recordResults, QOverload<int>::of(&QComboBox::currentIndexChanged), this, save);
+    connect(m_cyclingMode,   QOverload<int>::of(&QComboBox::currentIndexChanged), this, save);
+    connect(m_workerStart,   QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_workerStep,    QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_workerStepping,QOverload<int>::of(&QComboBox::currentIndexChanged), this, save);
+    connect(m_targetStart,   QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_targetStep,    QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_targetStepping,QOverload<int>::of(&QComboBox::currentIndexChanged), this, save);
+    connect(m_ioqStart,  QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_ioqEnd,    QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_ioqPower,  QOverload<int>::of(&QSpinBox::valueChanged), this, save);
+    connect(m_ioqStepping, QOverload<int>::of(&QComboBox::currentIndexChanged), this, save);
 }
 
-void PageResults::updateResults(const QVector<WorkerResult> &results)
+// =============================================================================
+// Config load/save
+// =============================================================================
+
+void PageResults::loadConfig()
 {
-    m_liveResults = results;
-    if (m_showLive) populateTable(results);
-    if (!results.isEmpty())
-        m_statusLbl->setText(QString("Last update: %1 workers").arg(results.size()));
+    m_updating = true;
+    const TestConfig &c = m_engine->testConfig();
+    m_description->setText(c.description);
+    m_runHours->setValue(c.runHours);
+    m_runMinutes->setValue(c.runMinutes);
+    m_runSeconds->setValue(c.runSeconds);
+    m_rampSeconds->setValue(c.rampSeconds);
+    m_recordResults->setCurrentIndex(c.recordResults);
+    m_cyclingMode->setCurrentIndex(c.cyclingMode);
+    m_workerStart->setValue(c.workerStart);
+    m_workerStep->setValue(c.workerStep);
+    m_workerStepping->setCurrentIndex(c.workerStepping);
+    m_targetStart->setValue(c.targetStart);
+    m_targetStep->setValue(c.targetStep);
+    m_targetStepping->setCurrentIndex(c.targetStepping);
+    m_ioqStart->setValue(c.ioqStart);
+    m_ioqEnd->setValue(c.ioqEnd);
+    m_ioqPower->setValue(c.ioqPower);
+    m_ioqStepping->setCurrentIndex(c.ioqStepping);
+    m_updating = false;
 }
 
-void PageResults::onTestStopped()
+void PageResults::saveConfig()
 {
-    if (!m_liveResults.isEmpty()) {
-        m_clearBtn->setEnabled(true);
-        if (!m_showLive) populateTable(m_engine->savedResults());
-    }
+    if (m_updating) return;
+    TestConfig c;
+    c.description   = m_description->text();
+    c.runHours      = m_runHours->value();
+    c.runMinutes    = m_runMinutes->value();
+    c.runSeconds    = m_runSeconds->value();
+    c.rampSeconds   = m_rampSeconds->value();
+    c.recordResults = m_recordResults->currentIndex();
+    c.cyclingMode   = m_cyclingMode->currentIndex();
+    c.workerStart   = m_workerStart->value();
+    c.workerStep    = m_workerStep->value();
+    c.workerStepping= m_workerStepping->currentIndex();
+    c.targetStart   = m_targetStart->value();
+    c.targetStep    = m_targetStep->value();
+    c.targetStepping= m_targetStepping->currentIndex();
+    c.ioqStart      = m_ioqStart->value();
+    c.ioqEnd        = m_ioqEnd->value();
+    c.ioqPower      = m_ioqPower->value();
+    c.ioqStepping   = m_ioqStepping->currentIndex();
+    m_engine->setTestConfig(c);
 }
 
-void PageResults::onViewChanged(int index)
-{
-    m_showLive = (index == 0);
-    populateTable(m_showLive ? m_liveResults : m_engine->savedResults());
-}
-
-void PageResults::populateTable(const QVector<WorkerResult> &results)
-{
-    m_table->setRowCount(0);
-    for (const auto &r : results) {
-        const int row = m_table->rowCount();
-        m_table->insertRow(row);
-        auto mkItem = [&](const QString &txt, bool bold = false) {
-            auto *it = new QTableWidgetItem(txt);
-            if (bold) {
-                QFont f = it->font();
-                f.setBold(true);
-                it->setFont(f);
-                it->setForeground(QColor(0x88, 0xcc, 0xff));
-            }
-            return it;
-        };
-        const bool agg = r.isAggregate;
-        m_table->setItem(row, 0,  mkItem(r.managerName, agg));
-        m_table->setItem(row, 1,  mkItem(r.workerName, agg));
-        m_table->setItem(row, 2,  mkItem(QString::number(r.iops, 'f', 0), agg));
-        m_table->setItem(row, 3,  mkItem(QString::number(r.readIops, 'f', 0)));
-        m_table->setItem(row, 4,  mkItem(QString::number(r.writeIops, 'f', 0)));
-        m_table->setItem(row, 5,  mkItem(QString::number(r.mbpsDec, 'f', 1), agg));
-        m_table->setItem(row, 6,  mkItem(QString::number(r.readMbpsDec, 'f', 1)));
-        m_table->setItem(row, 7,  mkItem(QString::number(r.writeMbpsDec, 'f', 1)));
-        m_table->setItem(row, 8,  mkItem(QString::number(r.avgLatencyMs, 'f', 2)));
-        m_table->setItem(row, 9,  mkItem(QString::number(r.maxLatencyMs, 'f', 2)));
-        m_table->setItem(row, 10, mkItem(QString::number(r.cpuUtil, 'f', 1)));
-        m_table->setItem(row, 11, mkItem(QString::number(r.errors)));
-
-        if (agg) {
-            for (int c = 0; c < m_table->columnCount(); ++c) {
-                auto *it = m_table->item(row, c);
-                if (it) it->setBackground(QColor(0x1a, 0x2a, 0x3a));
-            }
-        }
-    }
-}
-
-void PageResults::onClearSaved()
-{
-    m_engine->clearSavedResults();
-    if (!m_showLive) m_table->setRowCount(0);
-    m_clearBtn->setEnabled(!m_engine->savedResults().isEmpty());
-}
-
-void PageResults::onExportCsv()
-{
-    const QString path = QFileDialog::getSaveFileName(
-        this, "Export Results", "results.csv", "CSV files (*.csv)");
-    if (path.isEmpty()) return;
-
-    QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, "Export Failed", "Could not open file: " + path);
-        return;
-    }
-    QTextStream ts(&f);
-    ts << COLUMNS.join(",") << "\n";
-    const auto &data = m_showLive ? m_liveResults : m_engine->savedResults();
-    for (const auto &r : data) {
-        ts << r.managerName   << "," << r.workerName  << ","
-           << r.iops          << "," << r.readIops    << "," << r.writeIops   << ","
-           << r.mbpsDec       << "," << r.readMbpsDec << "," << r.writeMbpsDec << ","
-           << r.avgLatencyMs  << "," << r.maxLatencyMs << ","
-           << r.cpuUtil       << "," << r.errors       << "\n";
-    }
-    QMessageBox::information(this, "Exported", "Results saved to:\n" + path);
-}
+void PageResults::onConfigChanged() { loadConfig(); }

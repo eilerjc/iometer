@@ -186,6 +186,9 @@ public:
     QList<AccessSpec>   accessSpecs()  const override { return m_specs; }
     void setAccessSpecs(const QList<AccessSpec> &specs) override;
 
+    TestConfig testConfig()                     const override { return m_testConfig; }
+    void setTestConfig(const TestConfig &cfg)         override { m_testConfig = cfg; }
+
     QVector<WorkerResult> currentResults() const override { return m_currentResults; }
     QVector<WorkerResult> savedResults()   const override { return m_savedResults;   }
     void clearSavedResults() override { m_savedResults.clear(); }
@@ -207,6 +210,7 @@ private:
     QList<DySession*>     m_sessions;
     QList<ManagerInfo>    m_managers;
     QList<AccessSpec>     m_specs;
+    TestConfig            m_testConfig;
     QVector<WorkerResult> m_currentResults;
     QVector<WorkerResult> m_savedResults;
     bool                  m_running  = false;

@@ -1,17 +1,23 @@
-// PageSetup.h — "Setup" tab: worker targets and test parameters.
-// Equivalent to CPageSetup in the MFC GUI.
+// PageSetup.h -- "Disk Targets" tab.
+// Equivalent to CPageSetup / CDiskPageDlg in the MFC original.
+//
+// Layout matches the original:
+//   Left:   "Targets" group box with a checkable target list
+//   Right:  Maximum Disk Size, Starting Disk Sector, # Outstanding I/Os,
+//           Use Fixed Seed, Test Connection Rate, Write IO Data Pattern
 #pragma once
 #include "IometerTypes.h"
 #include <QWidget>
 
 class IometerEngine;
-class QTableWidget;
+class QListWidget;
+class QListWidgetItem;
 class QSpinBox;
-class QLabel;
-class QPushButton;
-class QGroupBox;
+class QCheckBox;
 class QComboBox;
-class QTreeWidget;
+class QLabel;
+class QGroupBox;
+class QLineEdit;
 
 class PageSetup : public QWidget
 {
@@ -20,29 +26,47 @@ public:
     explicit PageSetup(IometerEngine *engine, QWidget *parent = nullptr);
 
 public slots:
-    void refreshWorkers();
+    // Called by MainWindow when the Topology tree selection changes
+    void clearSelection();
+    void setSelectedManager(const QString &mgrName);
+    void setSelectedWorker(const QString &mgrName, const QString &workerId);
+
+    // Called when the engine reports new config (e.g. manager connected)
+    void refreshForEngine();
 
 private slots:
-    void onWorkerSelectionChanged();
+    void onTargetItemChanged(QListWidgetItem *item);
     void onQueueDepthChanged(int value);
-    void onAddWorker();
-    void onRemoveWorker();
-    void onTargetToggled(int row, int col);
+    void onMaxDiskSizeChanged(int value);
+    void onStartSectorChanged(int value);
+    void onFixedSeedToggled(bool checked);
+    void onFixedSeedValueChanged();
+    void onConnRateToggled(bool checked);
+    void onTransPerConnChanged(int value);
+    void onDataPatternChanged(int index);
 
 private:
     void setupUi();
-    void populateTargetTable();
-    void populateWorkerDetails(const WorkerInfo &w);
+    void populateTargetList();
+    void loadWorkerParams();
+    void saveWorkerParams();
+    void setParamsEnabled(bool enabled);
 
     IometerEngine  *m_engine         = nullptr;
-    QTreeWidget    *m_workerTree     = nullptr;
-    QTableWidget   *m_targetTable    = nullptr;
-    QSpinBox       *m_queueDepth     = nullptr;
-    QLabel         *m_workerNameLbl  = nullptr;
-    QPushButton    *m_addWorkerBtn   = nullptr;
-    QPushButton    *m_removeWorkerBtn = nullptr;
-    QComboBox      *m_workerTypeCmb  = nullptr;
+    QString         m_selManagerName;
+    QString         m_selWorkerId;
+    bool            m_updating        = false;
 
-    QString m_selManagerName;
-    QString m_selWorkerId;
+    // Left panel
+    QListWidget    *m_targetList      = nullptr;
+
+    // Right panel
+    QSpinBox       *m_maxDiskSize     = nullptr;   // sectors
+    QSpinBox       *m_startSector     = nullptr;   // sectors
+    QSpinBox       *m_queueDepth      = nullptr;   // per target
+    QCheckBox      *m_fixedSeedChk    = nullptr;
+    QLineEdit      *m_fixedSeedEdit   = nullptr;
+    QCheckBox      *m_connRateChk     = nullptr;
+    QSpinBox       *m_transPerConn    = nullptr;
+    QComboBox      *m_dataPattern     = nullptr;
 };

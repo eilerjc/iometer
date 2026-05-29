@@ -14,11 +14,25 @@ DemoEngine::DemoEngine(QObject *parent) : IometerEngine(parent)
 
 void DemoEngine::buildDefaultConfig()
 {
-    // ── Local manager with 4 disk workers ─────────────────────────────────
+    // ---- Local manager with 4 disk workers ----------------------------------
     ManagerInfo local;
     local.name      = "Local System";
     local.address   = "127.0.0.1";
     local.connected = true;
+
+    // Available targets visible to the demo system (matches the Disk Targets tab)
+    local.availableTargets = {
+        "C: \"Windows\"",
+        "W: \"nvme\"",
+        "\\\\.\\PhysicalDrive0",
+        "\\\\.\\PhysicalDrive1"
+    };
+
+    // Network interfaces available on this system
+    local.availableNetInterfaces = {
+        "192.168.1.100",
+        "10.0.0.1"
+    };
 
     const QStringList diskNames = {"W:", "X:", "Y:", "Z:"};
     for (int i = 0; i < 4; ++i) {
@@ -33,47 +47,28 @@ void DemoEngine::buildDefaultConfig()
     }
     m_managers.append(local);
 
-    // ── Default access specs ───────────────────────────────────────────────
-    {
+    // ---- Default access specs (match the original's built-in library) -------
+    auto addSpec = [&](const QString &name, int xferBytes, int readPct, int seqPct, bool isDefault = false) {
         AccessSpec s;
-        s.name          = "64KiB Sequential Read";
-        s.xferSizeBytes = 65536;
-        s.alignBytes    = 65536;
-        s.readPercent   = 100;
-        s.seqPercent    = 100;
-        s.defaultSpec   = true;
+        s.name          = name;
+        s.xferSizeBytes = xferBytes;
+        s.alignBytes    = xferBytes;
+        s.readPercent   = readPct;
+        s.seqPercent    = seqPct;
+        s.defaultSpec   = isDefault;
         m_specs.append(s);
-    }
-    {
-        AccessSpec s;
-        s.name          = "4KiB Random Read";
-        s.xferSizeBytes = 4096;
-        s.alignBytes    = 4096;
-        s.readPercent   = 100;
-        s.seqPercent    = 0;
-        m_specs.append(s);
-    }
-    {
-        AccessSpec s;
-        s.name          = "4KiB Random Write";
-        s.xferSizeBytes = 4096;
-        s.alignBytes    = 4096;
-        s.readPercent   = 0;
-        s.seqPercent    = 0;
-        m_specs.append(s);
-    }
-    {
-        AccessSpec s;
-        s.name          = "4KiB 70/30 RW";
-        s.xferSizeBytes = 4096;
-        s.alignBytes    = 4096;
-        s.readPercent   = 70;
-        s.seqPercent    = 0;
-        m_specs.append(s);
-    }
+    };
+
+    addSpec("64 KiB Sequential Read",  65536,  100, 100, true);
+    addSpec("4 KiB Random Read",        4096,  100,   0);
+    addSpec("4 KiB Random Write",       4096,    0,   0);
+    addSpec("4 KiB 70/30 Read/Write",   4096,   70,   0);
+    addSpec("512 B Sequential Read",     512,  100, 100);
+    addSpec("128 KiB Sequential Read", 131072, 100, 100);
+    addSpec("1 MiB Sequential Read",  1048576, 100, 100);
 }
 
-// ── Test control ──────────────────────────────────────────────────────────────
+// ---- Test control -----------------------------------------------------------
 
 void DemoEngine::startTest()
 {
@@ -91,7 +86,6 @@ void DemoEngine::stopTest()
     m_running = false;
     m_timer.stop();
 
-    // Save a snapshot of the last result
     if (!m_current.isEmpty())
         m_saved.append(m_current.last());
 
@@ -104,34 +98,29 @@ void DemoEngine::stopAll()
     stopTest();
 }
 
-// ── Simulation tick ───────────────────────────────────────────────────────────
+// ---- Simulation tick --------------------------------------------------------
 
 WorkerResult DemoEngine::makeResult(const WorkerInfo &w, const QString &mgrName, double t) const
 {
-    // Each worker gets a unique phase offset so they don't all oscillate in sync
-    // Find the index by id (WorkerInfo has no operator==)
     int idx = 0;
     for (int i = 0; i < m_managers.first().workers.size(); ++i)
         if (m_managers.first().workers[i].id == w.id) { idx = i; break; }
     const double phase = idx * 0.7;
 
-    // Simulate 64 KiB sequential read at ~2 GB/s aggregate (4 workers)
-    const double baseMbps  = 500.0 + 100.0 * idx;     // worker baseline
-    const double waveMbps  = 80.0  * std::sin(t * 0.4 + phase);
-    const double spike     = (std::fmod(t + phase, 15.0) < 0.6) ? 250.0 : 0.0;
-    const double mbps      = std::max(10.0, baseMbps + waveMbps + spike);
+    const double baseMbps = 500.0 + 100.0 * idx;
+    const double waveMbps = 80.0  * std::sin(t * 0.4 + phase);
+    const double spike    = (std::fmod(t + phase, 15.0) < 0.6) ? 250.0 : 0.0;
+    const double mbps     = std::max(10.0, baseMbps + waveMbps + spike);
 
-    const double blockKiB  = w.queueDepth > 0 ? 64.0 : 64.0;
-    const double iops      = (mbps * 1e6) / (blockKiB * 1024.0);
-
-    const double latBase   = 1000.0 / iops * w.queueDepth;
-    const double latJitter = latBase * 0.15 * std::sin(t * 1.3 + phase);
+    const double iops       = (mbps * 1e6) / (64.0 * 1024.0);
+    const double latBase    = 1000.0 / iops * w.queueDepth;
+    const double latJitter  = latBase * 0.15 * std::sin(t * 1.3 + phase);
 
     WorkerResult r;
     r.managerName  = mgrName;
     r.workerName   = w.name;
     r.mbpsDec      = mbps;
-    r.readMbpsDec  = mbps;   // 100 % reads in default spec
+    r.readMbpsDec  = mbps;
     r.mbpsBin      = mbps / 1.048576;
     r.iops         = iops;
     r.readIops     = iops;
@@ -182,7 +171,7 @@ void DemoEngine::tick()
     emit resultsUpdated(m_current);
 }
 
-// ── Config ────────────────────────────────────────────────────────────────────
+// ---- Config -----------------------------------------------------------------
 
 void DemoEngine::newConfig()
 {
@@ -205,7 +194,7 @@ bool DemoEngine::saveConfig(const QString &)
     return false;
 }
 
-// ── Manager / worker management ───────────────────────────────────────────────
+// ---- Manager / worker management --------------------------------------------
 
 void DemoEngine::connectManager(const QString &address, const QString &name)
 {
@@ -240,10 +229,9 @@ void DemoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
 void DemoEngine::removeWorker(const QString &mgrName, const QString &workerId)
 {
     for (auto &m : m_managers)
-        if (m.name == mgrName) {
+        if (m.name == mgrName)
             for (int i = 0; i < m.workers.size(); ++i)
                 if (m.workers[i].id == workerId) { m.workers.removeAt(i); emit configChanged(); return; }
-        }
 }
 
 void DemoEngine::updateWorker(const WorkerInfo &w)

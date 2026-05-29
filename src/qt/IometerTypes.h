@@ -1,10 +1,11 @@
-// IometerTypes.h — Shared data types for the Iometer Qt GUI
+// IometerTypes.h -- Shared data types for the Iometer Qt GUI
 #pragma once
 #include <QString>
 #include <QList>
 #include <QStringList>
 
-// ── Result types (match IDR_POPUP_DISPLAY_LIST order) ────────────────────────
+// ---- Result types (match IDR_POPUP_DISPLAY_LIST order) ----------------------
+
 enum ResultType {
     RESULT_IOPS = 0,
     RESULT_MBPS_DEC,
@@ -40,11 +41,12 @@ inline QStringList resultTypeNames() {
     };
 }
 
-// ── Per-worker live result snapshot ──────────────────────────────────────────
+// ---- Per-worker live result snapshot ----------------------------------------
+
 struct WorkerResult {
     QString managerName;
     QString workerName;
-    bool    isAggregate = false;   // true → "ALL" row
+    bool    isAggregate  = false;
 
     double  iops          = 0.0;
     double  readIops      = 0.0;
@@ -80,34 +82,88 @@ struct WorkerResult {
     }
 };
 
-// ── Access specification ──────────────────────────────────────────────────────
+// ---- Access specification ---------------------------------------------------
+
 struct AccessSpec {
     QString name           = "Untitled";
-    int     xferSizeBytes  = 65536;   // 64 KiB default
+    int     xferSizeBytes  = 65536;
     int     alignBytes     = 65536;
-    int     readPercent    = 100;     // 0=write-only, 100=read-only
-    int     seqPercent     = 100;     // 0=random, 100=sequential
+    int     readPercent    = 100;
+    int     seqPercent     = 100;
     int     burstLength    = 1;
     double  delayMs        = 0.0;
-    int     iterations     = 0;       // 0 = run until stopped
+    int     iterations     = 0;      // 0 = run until stopped
     bool    defaultSpec    = false;
+
+    // Format as the original shows in the Global list:
+    // "64 KiB; 100% Read; 0% random"
+    QString displayLabel() const {
+        // Format size
+        QString sizeStr;
+        if      (xferSizeBytes >= 1048576) sizeStr = QString("%1 MiB").arg(xferSizeBytes / 1048576);
+        else if (xferSizeBytes >= 1024)    sizeStr = QString("%1 KiB").arg(xferSizeBytes / 1024);
+        else                               sizeStr = QString("%1 B").arg(xferSizeBytes);
+        const int randomPct = 100 - seqPercent;
+        return QString("%1; %2% Read; %3% random").arg(sizeStr).arg(readPercent).arg(randomPct);
+    }
 };
 
-// ── Worker descriptor ─────────────────────────────────────────────────────────
+// ---- Worker descriptor ------------------------------------------------------
+
 struct WorkerInfo {
-    QString          id;            // unique within manager
-    QString          name;
-    QString          type;          // "Disk" or "Network"
-    QString          managerName;
-    QStringList      targets;       // assigned disk/network targets
-    int              queueDepth = 1;
-    int              activeSpec  = 0;   // index into access spec list
+    QString     id;
+    QString     name;
+    QString     type;          // "Disk" or "Network"
+    QString     managerName;
+    QStringList targets;       // assigned disk/network targets
+    QStringList assignedSpecs; // access spec names assigned (empty = use default)
+    int         queueDepth     = 1;
+    int         activeSpec     = 0;
+
+    // Disk Targets tab parameters (match original's right-panel fields):
+    qint64      maxDiskSize    = 0;       // sectors; 0 = use entire disk
+    qint64      startingSector = 0;
+    bool        useFixedSeed   = false;
+    qint64      fixedSeedValue = 0;
+    bool        testConnRate   = false;
+    int         transPerConn   = 1;
+    int         dataPattern    = 0;       // 0=Repeating bytes, 1=Pseudo-random, 2=Full random
+
+    // Network Targets tab parameters:
+    QString     networkInterface = "";   // local NIC to use for outgoing connections
+    int         maxOutstandingSends = 1; // "Max # Outstanding Sends" (network queue depth)
 };
 
-// ── Manager descriptor ────────────────────────────────────────────────────────
+// ---- Manager descriptor -----------------------------------------------------
+
 struct ManagerInfo {
     QString           name;
-    QString           address;      // "127.0.0.1" for local
-    bool              connected = false;
+    QString           address;
+    bool              connected     = false;
     QList<WorkerInfo> workers;
+    QStringList       availableTargets;      // disk targets reported by Dynamo
+    QStringList       availableNetInterfaces;// NIC addresses reported by Dynamo
+};
+
+// ---- Test Setup tab configuration -------------------------------------------
+
+struct TestConfig {
+    QString description    = "";
+    int     runHours       = 0;
+    int     runMinutes     = 0;
+    int     runSeconds     = 0;
+    int     rampSeconds    = 0;
+    int     recordResults  = 0;   // 0=All, 1=First Run, 2=Last Run
+    // Cycling options
+    int     cyclingMode    = 0;   // 0=Normal
+    int     workerStart    = 1;
+    int     workerStep     = 1;
+    int     workerStepping = 0;   // 0=Linear Stepping
+    int     targetStart    = 1;
+    int     targetStep     = 1;
+    int     targetStepping = 0;
+    int     ioqStart       = 1;
+    int     ioqEnd         = 32;
+    int     ioqPower       = 2;
+    int     ioqStepping    = 1;   // 1=Exponential Stepping
 };

@@ -1,152 +1,309 @@
-// PageNetwork.cpp
+// PageNetwork.cpp -- "Network Targets" tab
 #include "PageNetwork.h"
 #include "IometerEngine.h"
-#include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QGroupBox>
-#include <QTableWidget>
-#include <QHeaderView>
-#include <QLineEdit>
-#include <QPushButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include <QComboBox>
+#include <QSpinBox>
+#include <QCheckBox>
 #include <QLabel>
-#include <QFrame>
+#include <QApplication>
+#include <QStyle>
 
-static const QString STYLE =
-    "PageNetwork { background:#111820; color:#ccddff; }"
-    "QGroupBox { border:1px solid #2a3a4a; border-radius:4px; margin-top:8px; "
-    "            color:#7799bb; font-weight:bold; }"
-    "QGroupBox::title { subcontrol-origin: margin; padding: 0 4px; }"
-    "QTableWidget { background:#0d1520; color:#ccddff; border:1px solid #2a3a4a; "
-    "               gridline-color:#1a2a3a; }"
-    "QTableWidget::item:selected { background:#1a3a6a; }"
-    "QHeaderView::section { background:#162030; color:#8899aa; border:1px solid #2a3a4a; padding:2px; }"
-    "QLineEdit { background:#162030; color:#ccddff; border:1px solid #2a3a4a; border-radius:3px; padding:2px 4px; }"
-    "QPushButton { background:#2a3a5e; color:#aaddff; border:1px solid #3a5a8e; border-radius:4px; padding:3px 10px; }"
-    "QPushButton:hover { background:#3a5a8e; }"
-    "QPushButton:disabled { background:#1a2a3e; color:#445566; }"
-    "QLabel { color:#ccddff; }";
+// =============================================================================
 
 PageNetwork::PageNetwork(IometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
-    rebuildTable();
+    connect(engine, &IometerEngine::configChanged,       this, &PageNetwork::refreshForEngine);
     connect(engine, &IometerEngine::managerConnected,    this, &PageNetwork::onManagerConnected);
     connect(engine, &IometerEngine::managerDisconnected, this, &PageNetwork::onManagerDisconnected);
 }
 
+// =============================================================================
+// UI construction -- matches the original Network Targets tab layout
+// =============================================================================
+
 void PageNetwork::setupUi()
 {
-    setStyleSheet(STYLE);
-    auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
-    root->setSpacing(8);
+    auto *root = new QHBoxLayout(this);
+    root->setContentsMargins(6, 6, 6, 6);
+    root->setSpacing(6);
 
-    // ── Info text ─────────────────────────────────────────────────────────
-    auto *info = new QLabel(
-        "Iometer (this GUI) listens on TCP port 1066 for incoming Dynamo connections.\n"
-        "Dynamo instances connect automatically when launched with:  "
-        "Dynamo.exe -i <this_machine_ip> -m <hostname>\n\n"
-        "You can also manually specify an address below if Dynamo does not auto-connect.");
-    info->setWordWrap(true);
-    info->setStyleSheet("color:#6688aa; font-size:11px; "
-                        "background:#0d1520; border:1px solid #2a3a4a; "
-                        "border-radius:4px; padding:8px;");
-    root->addWidget(info);
+    // ---- Left: Targets group box --------------------------------------------
+    auto *targGroup = new QGroupBox("Targets");
+    auto *targLay   = new QVBoxLayout(targGroup);
+    targLay->setContentsMargins(4, 8, 4, 4);
+    m_targetTree = new QTreeWidget;
+    m_targetTree->setHeaderHidden(true);
+    m_targetTree->setRootIsDecorated(true);
+    m_targetTree->setUniformRowHeights(true);
+    targLay->addWidget(m_targetTree);
+    root->addWidget(targGroup, 1);
 
-    // ── Connected managers table ─────────────────────────────────────────
-    auto *tGroup = new QGroupBox("Connected Managers");
-    auto *tLay   = new QVBoxLayout(tGroup);
-    m_managerTable = new QTableWidget(0, 4);
-    m_managerTable->setHorizontalHeaderLabels({"Name", "Address", "Workers", "Status"});
-    m_managerTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_managerTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_managerTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_managerTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    m_managerTable->verticalHeader()->setVisible(false);
-    m_managerTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_managerTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    tLay->addWidget(m_managerTable);
+    // ---- Right: network parameters (stacked group boxes) --------------------
+    auto *rightLay = new QVBoxLayout;
+    rightLay->setSpacing(4);
 
-    auto *tBtnRow = new QHBoxLayout;
-    m_disconnectBtn = new QPushButton("Disconnect Selected");
-    m_refreshBtn    = new QPushButton("⟳ Refresh");
-    m_disconnectBtn->setEnabled(false);
-    tBtnRow->addStretch();
-    tBtnRow->addWidget(m_disconnectBtn);
-    tBtnRow->addWidget(m_refreshBtn);
-    tLay->addLayout(tBtnRow);
-    root->addWidget(tGroup, 1);
+    // Network Interface to Use for Connection
+    auto *nicGroup = new QGroupBox("Network Interface to Use for Connection");
+    auto *nicLay   = new QHBoxLayout(nicGroup);
+    nicLay->setContentsMargins(6, 8, 6, 4);
+    m_nicCombo = new QComboBox;
+    m_nicCombo->setMinimumWidth(160);
+    nicLay->addWidget(m_nicCombo);
+    nicLay->addStretch();
+    rightLay->addWidget(nicGroup);
 
-    // ── Manual connect ────────────────────────────────────────────────────
-    auto *cGroup = new QGroupBox("Manual Connect");
-    auto *cLay   = new QHBoxLayout(cGroup);
-    cLay->addWidget(new QLabel("Address:"));
-    m_addrEdit = new QLineEdit("127.0.0.1");
-    m_addrEdit->setPlaceholderText("hostname or IP");
-    m_addrEdit->setFixedWidth(160);
-    cLay->addWidget(m_addrEdit);
-    cLay->addWidget(new QLabel("Name:"));
-    m_nameEdit = new QLineEdit;
-    m_nameEdit->setPlaceholderText("(optional, auto-detected)");
-    m_nameEdit->setFixedWidth(160);
-    cLay->addWidget(m_nameEdit);
-    m_connectBtn = new QPushButton("Connect");
-    cLay->addWidget(m_connectBtn);
-    cLay->addStretch();
-    root->addWidget(cGroup);
+    // Max # Outstanding Sends
+    auto *sendsGroup = new QGroupBox("Max # Outstanding Sends");
+    auto *sendsLay   = new QHBoxLayout(sendsGroup);
+    sendsLay->setContentsMargins(6, 8, 6, 4);
+    m_maxSends = new QSpinBox;
+    m_maxSends->setRange(1, 256);
+    m_maxSends->setValue(1);
+    m_maxSends->setFixedWidth(60);
+    sendsLay->addWidget(m_maxSends);
+    sendsLay->addWidget(new QLabel("per VI target"));
+    sendsLay->addStretch();
+    rightLay->addWidget(sendsGroup);
 
-    // ── Status ─────────────────────────────────────────────────────────────
-    m_statusLabel = new QLabel("Listening on port 1066...");
-    m_statusLabel->setStyleSheet("color:#44aa88; font-style:italic;");
-    root->addWidget(m_statusLabel);
+    rightLay->addStretch(1);
 
-    connect(m_connectBtn,    &QPushButton::clicked, this, &PageNetwork::onConnect);
-    connect(m_disconnectBtn, &QPushButton::clicked, this, &PageNetwork::onDisconnect);
-    connect(m_refreshBtn,    &QPushButton::clicked, this, &PageNetwork::onRefresh);
-    connect(m_managerTable,  &QTableWidget::itemSelectionChanged, this, [this]{
-        m_disconnectBtn->setEnabled(!m_managerTable->selectedItems().isEmpty());
-    });
+    // Test Connection Rate
+    auto *connGroup = new QGroupBox("Test Connection Rate");
+    auto *connLay   = new QHBoxLayout(connGroup);
+    connLay->setContentsMargins(6, 8, 6, 4);
+    m_testConnRateChk = new QCheckBox;
+    m_transPerConn    = new QSpinBox;
+    m_transPerConn->setRange(1, 100000);
+    m_transPerConn->setValue(1);
+    m_transPerConn->setFixedWidth(60);
+    m_transPerConn->setEnabled(false);
+    connLay->addWidget(m_testConnRateChk);
+    connLay->addWidget(m_transPerConn);
+    connLay->addWidget(new QLabel("Transactions per connection"));
+    connLay->addStretch();
+    rightLay->addWidget(connGroup);
+
+    root->addLayout(rightLay, 1);
+
+    // ---- Connections --------------------------------------------------------
+    connect(m_targetTree, &QTreeWidget::itemChanged,
+            this, &PageNetwork::onTargetItemChanged);
+    connect(m_nicCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &PageNetwork::onNicComboChanged);
+    connect(m_maxSends, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &PageNetwork::onMaxSendsChanged);
+    connect(m_testConnRateChk, &QCheckBox::toggled,
+            this, &PageNetwork::onTestConnRateToggled);
+    connect(m_transPerConn, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &PageNetwork::onTransPerConnChanged);
+
+    setParamsEnabled(false);
 }
 
-void PageNetwork::rebuildTable()
+// =============================================================================
+// Selection control (called by MainWindow::onWorkerTreeSelectionChanged)
+// =============================================================================
+
+void PageNetwork::clearSelection()
 {
-    m_managerTable->setRowCount(0);
+    m_selManagerName.clear();
+    m_selWorkerId.clear();
+    m_targetTree->clear();
+    setParamsEnabled(false);
+}
+
+void PageNetwork::setSelectedManager(const QString &mgrName)
+{
+    m_selManagerName = mgrName;
+    m_selWorkerId.clear();
+    populateTargetTree();
+    rebuildNicCombo();
+    setParamsEnabled(false);
+}
+
+void PageNetwork::setSelectedWorker(const QString &mgrName, const QString &workerId)
+{
+    m_selManagerName = mgrName;
+    m_selWorkerId    = workerId;
+    populateTargetTree();
+    rebuildNicCombo();
+    loadWorkerParams();
+    setParamsEnabled(true);
+}
+
+void PageNetwork::refreshForEngine()
+{
+    if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty())
+        setSelectedWorker(m_selManagerName, m_selWorkerId);
+    else if (!m_selManagerName.isEmpty())
+        setSelectedManager(m_selManagerName);
+    else
+        clearSelection();
+}
+
+void PageNetwork::onManagerConnected(const ManagerInfo &)    { refreshForEngine(); }
+void PageNetwork::onManagerDisconnected(const QString &)     { refreshForEngine(); }
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+void PageNetwork::populateTargetTree()
+{
+    m_updating = true;
+    m_targetTree->clear();
+
+    // Build the set of network targets assigned to the selected worker
+    QStringList assigned;
+    if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty()) {
+        for (const auto &mgr : m_engine->managers()) {
+            if (mgr.name != m_selManagerName) continue;
+            for (const auto &w : mgr.workers) {
+                if (w.id == m_selWorkerId && w.type == "Network") {
+                    assigned = w.targets;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    const QIcon mgrIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
+    const QIcon nicIcon = QApplication::style()->standardIcon(QStyle::SP_DriveNetIcon);
+
+    // Populate tree: one top-level item per manager, NIC children with checkboxes
     for (const auto &mgr : m_engine->managers()) {
-        const int row = m_managerTable->rowCount();
-        m_managerTable->insertRow(row);
-        m_managerTable->setItem(row, 0, new QTableWidgetItem(mgr.name));
-        m_managerTable->setItem(row, 1, new QTableWidgetItem(mgr.address));
-        m_managerTable->setItem(row, 2, new QTableWidgetItem(QString::number(mgr.workers.size())));
-        auto *stItem = new QTableWidgetItem(mgr.connected ? "● Connected" : "○ Disconnected");
-        stItem->setForeground(mgr.connected ? QColor(0x44, 0xff, 0x88) : QColor(0xaa, 0x44, 0x44));
-        m_managerTable->setItem(row, 3, stItem);
+        if (!mgr.connected) continue;
+
+        auto *mgrItem = new QTreeWidgetItem(m_targetTree);
+        mgrItem->setText(0, mgr.name);
+        mgrItem->setIcon(0, mgrIcon);
+        mgrItem->setFlags(mgrItem->flags() & ~Qt::ItemIsUserCheckable);
+
+        for (const QString &nic : mgr.availableNetInterfaces) {
+            auto *nicItem = new QTreeWidgetItem(mgrItem);
+            nicItem->setText(0, nic);
+            nicItem->setIcon(0, nicIcon);
+            nicItem->setFlags(nicItem->flags() | Qt::ItemIsUserCheckable);
+            // Key: "managerName/nic"
+            const QString key = mgr.name + "/" + nic;
+            nicItem->setCheckState(0, assigned.contains(key) ? Qt::Checked : Qt::Unchecked);
+            nicItem->setData(0, Qt::UserRole, key);
+        }
+
+        mgrItem->setExpanded(true);
+    }
+    m_updating = false;
+}
+
+void PageNetwork::rebuildNicCombo()
+{
+    m_updating = true;
+    m_nicCombo->clear();
+
+    // Show NICs on the selected manager as candidates for outgoing connections
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (const QString &nic : mgr.availableNetInterfaces)
+            m_nicCombo->addItem(nic);
+        break;
+    }
+    m_updating = false;
+}
+
+void PageNetwork::loadWorkerParams()
+{
+    if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    m_updating = true;
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (const auto &w : mgr.workers) {
+            if (w.id != m_selWorkerId) continue;
+            // Set NIC combo to match worker's networkInterface
+            const int idx = m_nicCombo->findText(w.networkInterface);
+            if (idx >= 0) m_nicCombo->setCurrentIndex(idx);
+
+            m_maxSends->setValue(w.maxOutstandingSends);
+            m_testConnRateChk->setChecked(w.testConnRate);
+            m_transPerConn->setValue(w.transPerConn);
+            m_transPerConn->setEnabled(w.testConnRate);
+            break;
+        }
+        break;
+    }
+    m_updating = false;
+}
+
+void PageNetwork::saveWorkerParams()
+{
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (auto w : mgr.workers) {
+            if (w.id != m_selWorkerId) continue;
+            w.networkInterface    = m_nicCombo->currentText();
+            w.maxOutstandingSends = m_maxSends->value();
+            w.testConnRate        = m_testConnRateChk->isChecked();
+            w.transPerConn        = m_transPerConn->value();
+            m_engine->updateWorker(w);
+            return;
+        }
     }
 }
 
-void PageNetwork::onManagerConnected(const ManagerInfo &)    { rebuildTable(); }
-void PageNetwork::onManagerDisconnected(const QString &)     { rebuildTable(); }
-
-void PageNetwork::onConnect()
+void PageNetwork::setParamsEnabled(bool enabled)
 {
-    const QString addr = m_addrEdit->text().trimmed();
-    const QString name = m_nameEdit->text().trimmed();
-    if (addr.isEmpty()) return;
-    m_engine->connectManager(addr, name);
-    m_statusLabel->setText("Connecting to " + addr + "...");
+    m_nicCombo->setEnabled(enabled);
+    m_maxSends->setEnabled(enabled);
+    m_testConnRateChk->setEnabled(enabled);
+    m_transPerConn->setEnabled(enabled && m_testConnRateChk->isChecked());
 }
 
-void PageNetwork::onDisconnect()
+// =============================================================================
+// Slots
+// =============================================================================
+
+void PageNetwork::onTargetItemChanged(QTreeWidgetItem *item, int /*column*/)
 {
-    const auto rows = m_managerTable->selectionModel()->selectedRows();
-    for (const auto &idx : rows) {
-        const QString name = m_managerTable->item(idx.row(), 0)->text();
-        m_engine->disconnectManager(name);
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    if (!item || !(item->flags() & Qt::ItemIsUserCheckable)) return;
+
+    // Rebuild the assigned network targets from all check states
+    QStringList assigned;
+    QTreeWidgetItemIterator it(m_targetTree);
+    while (*it) {
+        if (((*it)->flags() & Qt::ItemIsUserCheckable) &&
+            (*it)->checkState(0) == Qt::Checked) {
+            assigned.append((*it)->data(0, Qt::UserRole).toString());
+        }
+        ++it;
+    }
+
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (auto w : mgr.workers) {
+            if (w.id != m_selWorkerId) continue;
+            w.targets = assigned;
+            m_engine->updateWorker(w);
+            return;
+        }
     }
 }
 
-void PageNetwork::onRefresh()
+void PageNetwork::onNicComboChanged(int)       { saveWorkerParams(); }
+void PageNetwork::onMaxSendsChanged(int)       { saveWorkerParams(); }
+
+void PageNetwork::onTestConnRateToggled(bool checked)
 {
-    rebuildTable();
-    m_statusLabel->setText(QString("%1 manager(s) connected").arg(m_engine->managers().size()));
+    m_transPerConn->setEnabled(checked);
+    saveWorkerParams();
 }
+
+void PageNetwork::onTransPerConnChanged(int)   { saveWorkerParams(); }

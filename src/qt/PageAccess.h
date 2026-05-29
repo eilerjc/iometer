@@ -1,19 +1,16 @@
-// PageAccess.h — "Access Specifications" tab.
-// Equivalent to CPageAccess in the MFC GUI.
+// PageAccess.h -- "Access Specifications" tab.
+// Layout matches the original:
+//   Left:   "Assigned Access Specifications" list + Move Up/Down
+//   Center: << Add / Remove >> transfer buttons
+//   Right:  "Global Access Specifications" list + New/Edit/Edit Copy/Delete
 #pragma once
 #include "IometerTypes.h"
 #include <QWidget>
+
 class IometerEngine;
 class QListWidget;
-class QListWidgetItem;
-class QLineEdit;
-class QComboBox;
-class QSpinBox;
-class QDoubleSpinBox;
-class QCheckBox;
 class QPushButton;
-class QLabel;
-class QGroupBox;
+class QDialog;
 
 class PageAccess : public QWidget
 {
@@ -21,42 +18,36 @@ class PageAccess : public QWidget
 public:
     explicit PageAccess(IometerEngine *engine, QWidget *parent = nullptr);
 
+public slots:
+    void loadSpecList();   // rebuild both panels from engine state
+
 private slots:
-    void onSpecSelected(QListWidgetItem *item);
-    void onAddSpec();
-    void onRemoveSpec();
-    void onDuplicateSpec();
-    void onSpecEdited();
+    void onAddToAssigned();
+    void onRemoveFromAssigned();
     void onMoveUp();
     void onMoveDown();
+    void onNewSpec();
+    void onEditSpec();
+    void onEditCopySpec();
+    void onDeleteSpec();
+    void onGlobalSelectionChanged();
+    void onAssignedSelectionChanged();
 
 private:
     void setupUi();
-    void loadSpecList();
-    void saveCurrentSpec();
-    void loadSpecEditor(int index);
-    void populateXferSizes(QComboBox *cb);
+    void rebuildGlobalList();
+    void rebuildAssignedList();
+    bool editSpecDialog(AccessSpec &spec, const QString &title);
 
-    IometerEngine  *m_engine      = nullptr;
-    QListWidget    *m_specList    = nullptr;
-    QPushButton    *m_addBtn      = nullptr;
-    QPushButton    *m_removeBtn   = nullptr;
-    QPushButton    *m_dupBtn      = nullptr;
-    QPushButton    *m_upBtn       = nullptr;
-    QPushButton    *m_downBtn     = nullptr;
-
-    // Editor controls
-    QLineEdit      *m_nameEdit    = nullptr;
-    QComboBox      *m_xferSize    = nullptr;
-    QComboBox      *m_alignSize   = nullptr;
-    QSpinBox       *m_readPct     = nullptr;
-    QSpinBox       *m_seqPct      = nullptr;
-    QSpinBox       *m_burstLen    = nullptr;
-    QDoubleSpinBox *m_delayMs     = nullptr;
-    QSpinBox       *m_iterations  = nullptr;
-    QCheckBox      *m_defaultSpec = nullptr;
-    QLabel         *m_descLabel   = nullptr;
-
-    int  m_currentIndex = -1;
-    bool m_updating     = false;
+    IometerEngine *m_engine    = nullptr;
+    QListWidget   *m_assigned  = nullptr;   // left column
+    QListWidget   *m_global    = nullptr;   // right column
+    QPushButton   *m_addBtn    = nullptr;   // << Add
+    QPushButton   *m_removeBtn = nullptr;   // Remove >>
+    QPushButton   *m_upBtn     = nullptr;
+    QPushButton   *m_downBtn   = nullptr;
+    QPushButton   *m_newBtn    = nullptr;
+    QPushButton   *m_editBtn   = nullptr;
+    QPushButton   *m_copyBtn   = nullptr;
+    QPushButton   *m_delBtn    = nullptr;
 };

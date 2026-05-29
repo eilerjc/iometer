@@ -1,5 +1,5 @@
-// MainWindow.h — Top-level application window for the Iometer Qt GUI.
-// Equivalent to CMainFrame + CGalileoView in the MFC GUI.
+// MainWindow.h -- Top-level application window for the Iometer Qt GUI.
+// Equivalent to CMainFrame + CGalileoView in the MFC original.
 #pragma once
 
 #include "IometerTypes.h"
@@ -18,7 +18,7 @@ class QTreeWidgetItem;
 class QSplitter;
 class QLabel;
 class QAction;
-class QToolBar;
+class QGroupBox;
 
 class MainWindow : public QMainWindow
 {
@@ -52,39 +52,48 @@ private slots:
 
 private:
     void setupToolBar();
-    void setupWorkerTree();
+    void setupTopologyPanel();
     void setupTabs();
     void setupStatusBar();
     void rebuildWorkerTree();
     void setRunningState(bool running);
 
-    // ── Engine ──────────────────────────────────────────────────────────
+    // Icon helpers
+    static QIcon makeOpenIcon();
+    static QIcon makeSaveIcon();
+    static QIcon makeNewIcon();
+    static QIcon makeStartIcon();
+    static QIcon makeStopIcon(bool all);
+    static QIcon makeMeterIcon();
+
+    // ---- Engine --------------------------------------------------------------
     IometerEngine *m_engine = nullptr;
 
-    // ── Central area: splitter → worker-tree + tabs ──────────────────────
-    QSplitter   *m_splitter   = nullptr;
-    QTreeWidget *m_workerTree = nullptr;
-    QTabWidget  *m_tabs       = nullptr;
+    // ---- Central area: topology panel (left) + tabs (right) -----------------
+    QSplitter   *m_splitter      = nullptr;
+    QGroupBox   *m_topoGroup     = nullptr;   // "Topology" group box
+    QTreeWidget *m_workerTree    = nullptr;
+    QTabWidget  *m_tabs          = nullptr;
 
-    // ── Tab pages ─────────────────────────────────────────────────────────
-    PageSetup   *m_pageSetup    = nullptr;
-    PageAccess  *m_pageAccess   = nullptr;
-    PageDisplay *m_pageDisplay  = nullptr;
-    PageResults *m_pageResults  = nullptr;
-    PageNetwork *m_pageNetwork  = nullptr;
+    // ---- Tab pages ----------------------------------------------------------
+    PageSetup   *m_pageSetup     = nullptr;   // tab 0: Disk Targets
+    PageNetwork *m_pageNetwork   = nullptr;   // tab 1: Network Targets
+    PageAccess  *m_pageAccess    = nullptr;   // tab 2: Access Specifications
+    PageDisplay *m_pageDisplay   = nullptr;   // tab 3: Results Display
+    PageResults *m_pageResults   = nullptr;   // tab 4: Test Setup
 
-    // ── Toolbar actions ───────────────────────────────────────────────────
-    QAction *m_actNew     = nullptr;
-    QAction *m_actOpen    = nullptr;
-    QAction *m_actSave    = nullptr;
-    QAction *m_actStart   = nullptr;
-    QAction *m_actStop    = nullptr;
-    QAction *m_actStopAll = nullptr;
+    // ---- Toolbar actions ----------------------------------------------------
+    QAction *m_actNew      = nullptr;
+    QAction *m_actOpen     = nullptr;
+    QAction *m_actSave     = nullptr;
+    QAction *m_actStart    = nullptr;
+    QAction *m_actStop     = nullptr;
+    QAction *m_actStopAll  = nullptr;
     QAction *m_actBigMeter = nullptr;
 
-    // ── Status bar ─────────────────────────────────────────────────────────
-    QLabel *m_statusLeft  = nullptr;
-    QLabel *m_statusRight = nullptr;
+    // ---- Status bar ---------------------------------------------------------
+    QLabel *m_statusLeft   = nullptr;
+    QLabel *m_statusRight  = nullptr;
 
     bool m_running = false;
 };

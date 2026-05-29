@@ -1,286 +1,343 @@
-// PageSetup.cpp
+// PageSetup.cpp -- "Disk Targets" tab
 #include "PageSetup.h"
 #include "IometerEngine.h"
-#include <QSplitter>
-#include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QGridLayout>
+#include <QVBoxLayout>
 #include <QGroupBox>
-#include <QTreeWidget>
-#include <QTableWidget>
-#include <QHeaderView>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QSpinBox>
-#include <QLabel>
-#include <QPushButton>
-#include <QComboBox>
 #include <QCheckBox>
-#include <QMessageBox>
-#include <QInputDialog>
-#include <QStringList>
-#include <QRandomGenerator>
+#include <QComboBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QFrame>
+#include <QApplication>
+#include <QStyle>
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-static const QString STYLE_DARK =
-    "background:#111820; color:#ccddff;"
-    "QGroupBox { border:1px solid #2a3a4a; border-radius:4px; "
-    "            margin-top:8px; color:#7799bb; font-weight:bold; }"
-    "QGroupBox::title { subcontrol-origin: margin; padding: 0 4px; }"
-    "QTreeWidget, QTableWidget { background:#0d1520; color:#ccddff; "
-    "    border:1px solid #2a3a4a; gridline-color:#1a2a3a; }"
-    "QTreeWidget::item:selected, QTableWidget::item:selected "
-    "    { background:#1a3a6a; }"
-    "QHeaderView::section { background:#162030; color:#8899aa; "
-    "    border:1px solid #2a3a4a; padding:2px 4px; }"
-    "QSpinBox, QComboBox { background:#162030; color:#ccddff; "
-    "    border:1px solid #2a3a4a; border-radius:3px; padding:2px 4px; }"
-    "QPushButton { background:#2a3a5e; color:#aaddff; "
-    "    border:1px solid #3a5a8e; border-radius:4px; padding:3px 10px; }"
-    "QPushButton:hover { background:#3a5a8e; }"
-    "QPushButton:disabled { background:#1a2a3e; color:#445566; }";
-
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
 
 PageSetup::PageSetup(IometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
-    refreshWorkers();
-    connect(engine, &IometerEngine::configChanged, this, &PageSetup::refreshWorkers);
+    connect(engine, &IometerEngine::configChanged,       this, &PageSetup::refreshForEngine);
+    connect(engine, &IometerEngine::managerConnected,    this, [this](const ManagerInfo&){ refreshForEngine(); });
+    connect(engine, &IometerEngine::managerDisconnected, this, [this](const QString&){ refreshForEngine(); });
 }
+
+// =============================================================================
+// UI construction -- matches the original Disk Targets tab layout
+// =============================================================================
 
 void PageSetup::setupUi()
 {
-    setStyleSheet(STYLE_DARK);
-
-    auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 8, 8, 8);
+    auto *root = new QHBoxLayout(this);
+    root->setContentsMargins(6, 6, 6, 6);
     root->setSpacing(6);
 
-    auto *splitter = new QSplitter(Qt::Horizontal);
-    splitter->setStyleSheet("QSplitter::handle { background:#2a3a4a; width:4px; }");
+    // ---- Left: Targets group box -------------------------------------------
+    auto *targGroup = new QGroupBox("Targets");
+    auto *targLay   = new QVBoxLayout(targGroup);
+    targLay->setContentsMargins(4, 8, 4, 4);
+    m_targetList = new QListWidget;
+    m_targetList->setUniformItemSizes(true);
+    targLay->addWidget(m_targetList);
+    root->addWidget(targGroup, 1);
 
-    // ── Left: worker tree + add/remove buttons ────────────────────────────
-    auto *leftPanel = new QWidget;
-    auto *leftLay   = new QVBoxLayout(leftPanel);
-    leftLay->setContentsMargins(0, 0, 0, 0);
-    leftLay->setSpacing(4);
+    // ---- Right: disk parameters (stacked group boxes) -----------------------
+    auto *rightLay = new QVBoxLayout;
+    rightLay->setSpacing(4);
 
-    m_workerTree = new QTreeWidget;
-    m_workerTree->setHeaderLabels({"Worker", "Type", "Queue"});
-    m_workerTree->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_workerTree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_workerTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_workerTree->setIndentation(16);
-    leftLay->addWidget(m_workerTree, 1);
+    // Maximum Disk Size
+    auto *maxGroup = new QGroupBox("Maximum Disk Size");
+    auto *maxLay   = new QHBoxLayout(maxGroup);
+    maxLay->setContentsMargins(6, 8, 6, 4);
+    m_maxDiskSize = new QSpinBox;
+    m_maxDiskSize->setRange(0, 2147483647);
+    m_maxDiskSize->setValue(0);
+    m_maxDiskSize->setFixedWidth(80);
+    maxLay->addWidget(m_maxDiskSize);
+    maxLay->addWidget(new QLabel("Sectors"));
+    maxLay->addStretch();
+    rightLay->addWidget(maxGroup);
 
-    auto *btnRow = new QHBoxLayout;
-    m_addWorkerBtn    = new QPushButton("+ Add Worker");
-    m_removeWorkerBtn = new QPushButton("− Remove");
-    m_removeWorkerBtn->setEnabled(false);
-    btnRow->addWidget(m_addWorkerBtn);
-    btnRow->addWidget(m_removeWorkerBtn);
-    leftLay->addLayout(btnRow);
-    splitter->addWidget(leftPanel);
+    // Starting Disk Sector
+    auto *startGroup = new QGroupBox("Starting Disk Sector");
+    auto *startLay   = new QHBoxLayout(startGroup);
+    startLay->setContentsMargins(6, 8, 6, 4);
+    m_startSector = new QSpinBox;
+    m_startSector->setRange(0, 2147483647);
+    m_startSector->setValue(0);
+    m_startSector->setFixedWidth(80);
+    startLay->addWidget(m_startSector);
+    startLay->addStretch();
+    rightLay->addWidget(startGroup);
 
-    // ── Right: worker detail panel ────────────────────────────────────────
-    auto *rightPanel  = new QWidget;
-    auto *rightLay    = new QVBoxLayout(rightPanel);
-    rightLay->setContentsMargins(0, 0, 0, 0);
-    rightLay->setSpacing(6);
-
-    // Worker info header
-    m_workerNameLbl = new QLabel("(select a worker)");
-    m_workerNameLbl->setStyleSheet("color:#5599ff; font-size:13px; font-weight:bold; padding:2px;");
-    rightLay->addWidget(m_workerNameLbl);
-
-    // Queue depth
-    auto *qGroup = new QGroupBox("Outstanding I/Os");
+    // # of Outstanding I/Os
+    auto *qGroup = new QGroupBox("# of Outstanding I/Os");
     auto *qLay   = new QHBoxLayout(qGroup);
-    qLay->addWidget(new QLabel("Queue depth:"));
+    qLay->setContentsMargins(6, 8, 6, 4);
     m_queueDepth = new QSpinBox;
     m_queueDepth->setRange(1, 256);
     m_queueDepth->setValue(1);
-    m_queueDepth->setEnabled(false);
+    m_queueDepth->setFixedWidth(80);
     qLay->addWidget(m_queueDepth);
-    m_workerTypeCmb = new QComboBox;
-    m_workerTypeCmb->addItems({"Disk", "Network (TCP)"});
-    m_workerTypeCmb->setEnabled(false);
-    qLay->addWidget(new QLabel("Type:"));
-    qLay->addWidget(m_workerTypeCmb);
+    qLay->addWidget(new QLabel("per target"));
     qLay->addStretch();
     rightLay->addWidget(qGroup);
 
-    // Target table
-    auto *tGroup = new QGroupBox("Assigned Targets");
-    auto *tLay   = new QVBoxLayout(tGroup);
-    m_targetTable = new QTableWidget(0, 3);
-    m_targetTable->setHorizontalHeaderLabels({"Target", "Type", "Active"});
-    m_targetTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_targetTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_targetTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_targetTable->verticalHeader()->setVisible(false);
-    tLay->addWidget(m_targetTable);
-    rightLay->addWidget(tGroup, 1);
+    // Use Fixed Seed
+    auto *seedGroup = new QGroupBox("Use Fixed Seed");
+    auto *seedLay   = new QHBoxLayout(seedGroup);
+    seedLay->setContentsMargins(6, 8, 6, 4);
+    m_fixedSeedChk  = new QCheckBox;
+    m_fixedSeedEdit = new QLineEdit("0");
+    m_fixedSeedEdit->setFixedWidth(80);
+    m_fixedSeedEdit->setEnabled(false);
+    seedLay->addWidget(m_fixedSeedChk);
+    seedLay->addWidget(m_fixedSeedEdit);
+    seedLay->addWidget(new QLabel("Fixed Seed Value"));
+    seedLay->addStretch();
+    rightLay->addWidget(seedGroup);
 
-    splitter->addWidget(rightPanel);
-    splitter->setSizes({200, 400});
+    // Test Connection Rate
+    auto *connGroup = new QGroupBox("Test Connection Rate");
+    auto *connLay   = new QHBoxLayout(connGroup);
+    connLay->setContentsMargins(6, 8, 6, 4);
+    m_connRateChk  = new QCheckBox;
+    m_transPerConn = new QSpinBox;
+    m_transPerConn->setRange(1, 100000);
+    m_transPerConn->setValue(1);
+    m_transPerConn->setFixedWidth(80);
+    m_transPerConn->setEnabled(false);
+    connLay->addWidget(m_connRateChk);
+    connLay->addWidget(m_transPerConn);
+    connLay->addWidget(new QLabel("Transactions per connection"));
+    connLay->addStretch();
+    rightLay->addWidget(connGroup);
 
-    root->addWidget(splitter);
+    // Write IO Data Pattern
+    auto *patGroup = new QGroupBox("Write IO Data Pattern");
+    auto *patLay   = new QHBoxLayout(patGroup);
+    patLay->setContentsMargins(6, 8, 6, 4);
+    m_dataPattern = new QComboBox;
+    m_dataPattern->addItems({"Repeating bytes", "Pseudo-random", "Full random"});
+    patLay->addWidget(m_dataPattern);
+    patLay->addStretch();
+    rightLay->addWidget(patGroup);
 
-    // ── Wire up ────────────────────────────────────────────────────────────
-    connect(m_workerTree, &QTreeWidget::currentItemChanged,
-            this, [this](QTreeWidgetItem *, QTreeWidgetItem *) { onWorkerSelectionChanged(); });
-    connect(m_queueDepth, QOverload<int>::of(&QSpinBox::valueChanged),
+    rightLay->addStretch();
+    root->addLayout(rightLay, 1);
+
+    // ---- Connections --------------------------------------------------------
+    connect(m_targetList,   &QListWidget::itemChanged,
+            this, &PageSetup::onTargetItemChanged);
+    connect(m_queueDepth,   QOverload<int>::of(&QSpinBox::valueChanged),
             this, &PageSetup::onQueueDepthChanged);
-    connect(m_addWorkerBtn,    &QPushButton::clicked, this, &PageSetup::onAddWorker);
-    connect(m_removeWorkerBtn, &QPushButton::clicked, this, &PageSetup::onRemoveWorker);
-    connect(m_targetTable, &QTableWidget::cellClicked,
-            this, &PageSetup::onTargetToggled);
+    connect(m_maxDiskSize,  QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &PageSetup::onMaxDiskSizeChanged);
+    connect(m_startSector,  QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &PageSetup::onStartSectorChanged);
+    connect(m_fixedSeedChk, &QCheckBox::toggled,
+            this, &PageSetup::onFixedSeedToggled);
+    connect(m_fixedSeedEdit, &QLineEdit::editingFinished,
+            this, &PageSetup::onFixedSeedValueChanged);
+    connect(m_connRateChk,  &QCheckBox::toggled,
+            this, &PageSetup::onConnRateToggled);
+    connect(m_transPerConn, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &PageSetup::onTransPerConnChanged);
+    connect(m_dataPattern,  QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &PageSetup::onDataPatternChanged);
+
+    setParamsEnabled(false);
 }
 
-void PageSetup::refreshWorkers()
+// =============================================================================
+// Selection control (called by MainWindow::onWorkerTreeSelectionChanged)
+// =============================================================================
+
+void PageSetup::clearSelection()
 {
-    m_workerTree->clear();
-    if (!m_engine) return;
-
-    for (const auto &mgr : m_engine->managers()) {
-        auto *mgrItem = new QTreeWidgetItem(m_workerTree);
-        mgrItem->setText(0, mgr.name + (mgr.connected ? "" : " (disconnected)"));
-        mgrItem->setText(1, mgr.address);
-        mgrItem->setData(0, Qt::UserRole, "manager:" + mgr.name);
-        mgrItem->setExpanded(true);
-
-        for (const auto &w : mgr.workers) {
-            auto *wItem = new QTreeWidgetItem(mgrItem);
-            wItem->setText(0, w.name);
-            wItem->setText(1, w.type);
-            wItem->setText(2, QString::number(w.queueDepth));
-            wItem->setData(0, Qt::UserRole, "worker:" + mgr.name + ":" + w.id);
-        }
-    }
-}
-
-void PageSetup::onWorkerSelectionChanged()
-{
-    auto *item = m_workerTree->currentItem();
-    if (!item) {
-        m_removeWorkerBtn->setEnabled(false);
-        m_queueDepth->setEnabled(false);
-        m_workerTypeCmb->setEnabled(false);
-        m_workerNameLbl->setText("(select a worker)");
-        m_targetTable->setRowCount(0);
-        return;
-    }
-
-    const QString key = item->data(0, Qt::UserRole).toString();
-    if (key.startsWith("worker:")) {
-        QStringList parts = key.mid(7).split(':');
-        if (parts.size() < 2) return;
-        m_selManagerName = parts[0];
-        m_selWorkerId    = parts[1];
-
-        // Find the worker
-        for (const auto &mgr : m_engine->managers()) {
-            if (mgr.name != m_selManagerName) continue;
-            for (const auto &w : mgr.workers) {
-                if (w.id != m_selWorkerId) continue;
-                m_workerNameLbl->setText(mgr.name + " → " + w.name);
-                m_queueDepth->setEnabled(true);
-                m_workerTypeCmb->setEnabled(true);
-                {
-                    QSignalBlocker b(m_queueDepth);
-                    m_queueDepth->setValue(w.queueDepth);
-                }
-                populateWorkerDetails(w);
-                m_removeWorkerBtn->setEnabled(true);
-                return;
-            }
-        }
-    } else {
-        m_removeWorkerBtn->setEnabled(false);
-        m_queueDepth->setEnabled(false);
-        m_workerTypeCmb->setEnabled(false);
-        m_workerNameLbl->setText(item->text(0));
-        m_targetTable->setRowCount(0);
-    }
-}
-
-void PageSetup::populateWorkerDetails(const WorkerInfo &w)
-{
-    m_targetTable->setRowCount(0);
-    const QStringList allTargets = {"C:", "D:", "W:", "X:", "Y:", "Z:",
-                                    "\\Device\\Harddisk0\\DR0",
-                                    "\\Device\\Harddisk1\\DR1"};
-    for (const auto &t : allTargets) {
-        const int row = m_targetTable->rowCount();
-        m_targetTable->insertRow(row);
-        m_targetTable->setItem(row, 0, new QTableWidgetItem(t));
-        m_targetTable->setItem(row, 1, new QTableWidgetItem(t.startsWith('\\') ? "Raw" : "Drive"));
-        auto *chk = new QTableWidgetItem;
-        chk->setCheckState(w.targets.contains(t) ? Qt::Checked : Qt::Unchecked);
-        chk->setTextAlignment(Qt::AlignCenter);
-        m_targetTable->setItem(row, 2, chk);
-    }
-}
-
-void PageSetup::onQueueDepthChanged(int value)
-{
-    if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
-    for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
-        for (auto w : mgr.workers) {
-            if (w.id != m_selWorkerId) continue;
-            w.queueDepth = value;
-            m_engine->updateWorker(w);
-            return;
-        }
-    }
-}
-
-void PageSetup::onAddWorker()
-{
-    if (m_engine->managers().isEmpty()) return;
-    bool ok;
-    QString name = QInputDialog::getText(this, "Add Worker", "Worker name:",
-                                         QLineEdit::Normal, "Worker", &ok);
-    if (!ok || name.trimmed().isEmpty()) return;
-
-    const QString mgrName = m_engine->managers().first().name;
-    WorkerInfo w;
-    w.id          = mgrName + "-" + QString::number(QRandomGenerator::global()->bounded(100000));
-    w.name        = name.trimmed();
-    w.type        = "Disk";
-    w.managerName = mgrName;
-    w.queueDepth  = 1;
-    m_engine->addWorker(mgrName, w);
-}
-
-void PageSetup::onRemoveWorker()
-{
-    if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
-    m_engine->removeWorker(m_selManagerName, m_selWorkerId);
     m_selManagerName.clear();
     m_selWorkerId.clear();
+    m_targetList->clear();
+    setParamsEnabled(false);
 }
 
-void PageSetup::onTargetToggled(int row, int col)
+void PageSetup::setSelectedManager(const QString &mgrName)
 {
-    if (col != 2) return;   // only the "Active" column
-    // Update worker targets based on check states
-    if (m_selManagerName.isEmpty()) return;
+    m_selManagerName = mgrName;
+    m_selWorkerId.clear();
+    populateTargetList();   // show available disks, none checked
+    setParamsEnabled(false);
+}
+
+void PageSetup::setSelectedWorker(const QString &mgrName, const QString &workerId)
+{
+    m_selManagerName = mgrName;
+    m_selWorkerId    = workerId;
+    populateTargetList();
+    loadWorkerParams();
+    setParamsEnabled(true);
+}
+
+void PageSetup::refreshForEngine()
+{
+    // Re-populate with the current selection intact (e.g. after manager connects)
+    if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty())
+        setSelectedWorker(m_selManagerName, m_selWorkerId);
+    else if (!m_selManagerName.isEmpty())
+        setSelectedManager(m_selManagerName);
+    else
+        clearSelection();
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+void PageSetup::populateTargetList()
+{
+    m_updating = true;
+    m_targetList->clear();
+
+    // Find the manager to get its availableTargets list
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+
+        QStringList avail = mgr.availableTargets;
+        if (avail.isEmpty()) {
+            // Fallback: derive from workers' existing targets
+            for (const auto &w : mgr.workers)
+                for (const auto &t : w.targets)
+                    if (!avail.contains(t)) avail.append(t);
+        }
+
+        // Build the set of targets assigned to the selected worker
+        QStringList assigned;
+        if (!m_selWorkerId.isEmpty()) {
+            for (const auto &w : mgr.workers)
+                if (w.id == m_selWorkerId) { assigned = w.targets; break; }
+        }
+
+        const QIcon diskIcon  = QApplication::style()->standardIcon(QStyle::SP_DriveHDIcon);
+        for (const auto &t : avail) {
+            auto *item = new QListWidgetItem(diskIcon, t);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(assigned.contains(t.section(':', 0, 0) + ":")
+                                    || assigned.contains(t)
+                                ? Qt::Checked : Qt::Unchecked);
+            m_targetList->addItem(item);
+        }
+        break;
+    }
+    m_updating = false;
+}
+
+void PageSetup::loadWorkerParams()
+{
+    if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    m_updating = true;
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (const auto &w : mgr.workers) {
+            if (w.id != m_selWorkerId) continue;
+            m_queueDepth->setValue(w.queueDepth);
+            m_maxDiskSize->setValue((int)qMin(w.maxDiskSize, (qint64)2147483647));
+            m_startSector->setValue((int)qMin(w.startingSector, (qint64)2147483647));
+            m_fixedSeedChk->setChecked(w.useFixedSeed);
+            m_fixedSeedEdit->setText(QString::number(w.fixedSeedValue));
+            m_fixedSeedEdit->setEnabled(w.useFixedSeed);
+            m_connRateChk->setChecked(w.testConnRate);
+            m_transPerConn->setValue(w.transPerConn);
+            m_transPerConn->setEnabled(w.testConnRate);
+            m_dataPattern->setCurrentIndex(w.dataPattern);
+            break;
+        }
+        break;
+    }
+    m_updating = false;
+}
+
+void PageSetup::saveWorkerParams()
+{
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     for (const auto &mgr : m_engine->managers()) {
         if (mgr.name != m_selManagerName) continue;
         for (auto w : mgr.workers) {
             if (w.id != m_selWorkerId) continue;
-            w.targets.clear();
-            for (int r = 0; r < m_targetTable->rowCount(); ++r) {
-                auto *chkItem = m_targetTable->item(r, 2);
-                if (chkItem && chkItem->checkState() == Qt::Checked)
-                    w.targets.append(m_targetTable->item(r, 0)->text());
-            }
+            w.queueDepth    = m_queueDepth->value();
+            w.maxDiskSize   = m_maxDiskSize->value();
+            w.startingSector= m_startSector->value();
+            w.useFixedSeed  = m_fixedSeedChk->isChecked();
+            w.fixedSeedValue= m_fixedSeedEdit->text().toLongLong();
+            w.testConnRate  = m_connRateChk->isChecked();
+            w.transPerConn  = m_transPerConn->value();
+            w.dataPattern   = m_dataPattern->currentIndex();
             m_engine->updateWorker(w);
             return;
         }
     }
 }
+
+void PageSetup::setParamsEnabled(bool enabled)
+{
+    m_maxDiskSize->setEnabled(enabled);
+    m_startSector->setEnabled(enabled);
+    m_queueDepth->setEnabled(enabled);
+    m_fixedSeedChk->setEnabled(enabled);
+    m_fixedSeedEdit->setEnabled(enabled && m_fixedSeedChk->isChecked());
+    m_connRateChk->setEnabled(enabled);
+    m_transPerConn->setEnabled(enabled && m_connRateChk->isChecked());
+    m_dataPattern->setEnabled(enabled);
+}
+
+// =============================================================================
+// Slots
+// =============================================================================
+
+void PageSetup::onTargetItemChanged(QListWidgetItem *item)
+{
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    if (!item) return;
+
+    // Rebuild the assigned targets from all check states
+    QStringList assigned;
+    for (int r = 0; r < m_targetList->count(); ++r) {
+        auto *it = m_targetList->item(r);
+        if (it && it->checkState() == Qt::Checked)
+            assigned.append(it->text());
+    }
+
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (auto w : mgr.workers) {
+            if (w.id != m_selWorkerId) continue;
+            w.targets = assigned;
+            m_engine->updateWorker(w);
+            return;
+        }
+    }
+}
+
+void PageSetup::onQueueDepthChanged(int)    { saveWorkerParams(); }
+void PageSetup::onMaxDiskSizeChanged(int)   { saveWorkerParams(); }
+void PageSetup::onStartSectorChanged(int)   { saveWorkerParams(); }
+
+void PageSetup::onFixedSeedToggled(bool checked)
+{
+    m_fixedSeedEdit->setEnabled(checked);
+    saveWorkerParams();
+}
+
+void PageSetup::onFixedSeedValueChanged()   { saveWorkerParams(); }
+
+void PageSetup::onConnRateToggled(bool checked)
+{
+    m_transPerConn->setEnabled(checked);
+    saveWorkerParams();
+}
+
+void PageSetup::onTransPerConnChanged(int)  { saveWorkerParams(); }
+void PageSetup::onDataPatternChanged(int)   { saveWorkerParams(); }

@@ -1,8 +1,7 @@
-// DemoEngine.h — Simulated Iometer engine for UI testing.
+// DemoEngine.h -- Simulated Iometer engine for UI testing.
 //
 // Generates realistic-looking I/O statistics for multiple fake workers
-// without requiring a real Dynamo instance.  Used as the default engine
-// until a real Dynamo connection is established.
+// without requiring a real Dynamo instance.
 #pragma once
 
 #include "IometerEngine.h"
@@ -15,14 +14,14 @@ class DemoEngine : public IometerEngine
 public:
     explicit DemoEngine(QObject *parent = nullptr);
 
-    void startTest()   override;
-    void stopTest()    override;
-    void stopAll()     override;
-    bool isRunning()   const override { return m_running; }
+    void startTest()            override;
+    void stopTest()             override;
+    void stopAll()              override;
+    bool isRunning()    const   override { return m_running; }
 
     bool loadConfig(const QString &filepath) override;
     bool saveConfig(const QString &filepath) override;
-    void newConfig()   override;
+    void newConfig()            override;
 
     QList<ManagerInfo>  managers()      const override { return m_managers; }
     void connectManager(const QString &address, const QString &name) override;
@@ -33,6 +32,9 @@ public:
 
     QList<AccessSpec>   accessSpecs()   const override { return m_specs; }
     void setAccessSpecs(const QList<AccessSpec> &specs) override { m_specs = specs; }
+
+    TestConfig testConfig()             const override { return m_testConfig; }
+    void setTestConfig(const TestConfig &cfg) override { m_testConfig = cfg; }
 
     QVector<WorkerResult> currentResults() const override { return m_current; }
     QVector<WorkerResult> savedResults()   const override { return m_saved;   }
@@ -49,9 +51,9 @@ private:
     QList<AccessSpec>     m_specs;
     QVector<WorkerResult> m_current;
     QVector<WorkerResult> m_saved;
+    TestConfig            m_testConfig;
 
     QTimer  m_timer;
-    bool    m_running = false;
-    double  m_t       = 0.0;   // simulation time (seconds)
-    int     m_workerCount = 0;
+    bool    m_running    = false;
+    double  m_t          = 0.0;
 };
