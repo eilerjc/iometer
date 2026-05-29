@@ -41,6 +41,21 @@ inline QStringList resultTypeNames() {
     };
 }
 
+// ---- Disk target descriptor (for the Disk Targets tab target list) ----------
+
+enum class TargetKind {
+    PhysicalDisk,   // raw device (\\.\PhysicalDriveN) — always directly testable
+    LogicalDisk,    // mounted volume — needs iobw.tst to be "prepared"
+    TcpServer,
+    TcpClient
+};
+
+struct TargetInfo {
+    QString    name;                          // display name sent by Dynamo
+    TargetKind kind  = TargetKind::LogicalDisk;
+    bool       ready = false;                 // logical only: iobw.tst present
+};
+
 // ---- Per-worker live result snapshot ----------------------------------------
 
 struct WorkerResult {
@@ -142,7 +157,7 @@ struct ManagerInfo {
     bool              connected        = false;
     int               processorCount   = 1;  // CPU count reported by Dynamo
     QList<WorkerInfo> workers;
-    QStringList       availableTargets;      // disk targets reported by Dynamo
+    QList<TargetInfo> availableTargets;      // disk targets reported by Dynamo
     QStringList       availableNetInterfaces;// NIC addresses reported by Dynamo
 };
 

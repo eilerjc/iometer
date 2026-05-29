@@ -60,12 +60,22 @@ public:
     const QList<WorkerInfo>& workers() const { return m_workers; }
     const QList<DyTargetSpec>& discoveredTargets() const { return m_diskTargets; }
 
-    // Returns the names of all discovered disk targets (for ManagerInfo.availableTargets)
-    QStringList diskTargetNames() const {
-        QStringList names;
-        for (const auto &t : m_diskTargets)
-            names.append(QString::fromLocal8Bit(t.name));
-        return names;
+    // Returns typed descriptors for all discovered disk targets
+    QList<TargetInfo> diskTargetInfos() const {
+        QList<TargetInfo> infos;
+        for (const auto &t : m_diskTargets) {
+            TargetInfo ti;
+            ti.name = QString::fromLocal8Bit(t.name);
+            if (t.type == DY_PHYSICAL_DISK) {
+                ti.kind  = TargetKind::PhysicalDisk;
+                ti.ready = true;   // physical disks are always directly testable
+            } else {
+                ti.kind  = TargetKind::LogicalDisk;
+                ti.ready = (t.disk_info.ready != 0);
+            }
+            infos.append(ti);
+        }
+        return infos;
     }
 
     // ── Test control (called by DynamoEngine after state==Ready) ─────────────

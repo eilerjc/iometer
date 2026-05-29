@@ -14,6 +14,34 @@
 #include <QFrame>
 #include <QApplication>
 #include <QStyle>
+#include <QPainter>
+#include <QPen>
+#include <QPixmap>
+
+// =============================================================================
+// Icon helpers
+// =============================================================================
+
+// Build the "unprepared logical disk" icon: take a standard HD icon and
+// paint a red diagonal slash across it — matches the original MFC red-slash.
+static QIcon makeUnpreparedDiskIcon()
+{
+    const int sz = 16;
+    QPixmap px = QApplication::style()
+                     ->standardIcon(QStyle::SP_DriveHDIcon)
+                     .pixmap(sz, sz);
+    if (px.isNull()) {
+        px = QPixmap(sz, sz);
+        px.fill(Qt::transparent);
+    }
+    QPainter p(&px);
+    p.setRenderHint(QPainter::Antialiasing);
+    // Red slash from bottom-left to top-right (the "not ready" indicator)
+    p.setPen(QPen(QColor(220, 0, 0), 2.5, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(2, sz - 3, sz - 3, 2);
+    p.end();
+    return QIcon(px);
+}
 
 // =============================================================================
 
@@ -206,28 +234,51 @@ void PageSetup::populateTargetList()
     for (const auto &mgr : m_engine->managers()) {
         if (mgr.name != m_selManagerName) continue;
 
-        QStringList avail = mgr.availableTargets;
+        // Collect available targets, falling back to worker assignments if needed
+        QList<TargetInfo> avail = mgr.availableTargets;
         if (avail.isEmpty()) {
-            // Fallback: derive from workers' existing targets
-            for (const auto &w : mgr.workers)
-                for (const auto &t : w.targets)
-                    if (!avail.contains(t)) avail.append(t);
+            QStringList seen;
+            for (const auto &w : mgr.workers) {
+                for (const auto &t : w.targets) {
+                    if (!seen.contains(t)) {
+                        seen.append(t);
+                        // Infer type from name: PhysicalDrive → physical, else logical
+                        const bool isPhys = t.contains("PhysicalDrive", Qt::CaseInsensitive)
+                                         || t.startsWith("\\\\.\\");
+                        avail.append(TargetInfo{
+                            t,
+                            isPhys ? TargetKind::PhysicalDisk : TargetKind::LogicalDisk,
+                            !isPhys   // assume logical disks from existing assignments are prepared
+                        });
+                    }
+                }
+            }
         }
 
-        // Build the set of targets assigned to the selected worker
+        // Build the set of targets currently assigned to the selected worker
         QStringList assigned;
         if (!m_selWorkerId.isEmpty()) {
             for (const auto &w : mgr.workers)
                 if (w.id == m_selWorkerId) { assigned = w.targets; break; }
         }
 
-        const QIcon diskIcon  = QApplication::style()->standardIcon(QStyle::SP_DriveHDIcon);
-        for (const auto &t : avail) {
-            auto *item = new QListWidgetItem(diskIcon, t);
+        // Prepare the three possible icons
+        const QIcon physDiskIcon    = QApplication::style()->standardIcon(QStyle::SP_DriveHDIcon);
+        const QIcon logReadyIcon    = QApplication::style()->standardIcon(QStyle::SP_DriveHDIcon);
+        static const QIcon logUnreadyIcon = makeUnpreparedDiskIcon();
+
+        for (const auto &ti : avail) {
+            QIcon icon;
+            if (ti.kind == TargetKind::PhysicalDisk)
+                icon = physDiskIcon;
+            else if (ti.ready)
+                icon = logReadyIcon;
+            else
+                icon = logUnreadyIcon;
+
+            auto *item = new QListWidgetItem(icon, ti.name);
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(assigned.contains(t.section(':', 0, 0) + ":")
-                                    || assigned.contains(t)
-                                ? Qt::Checked : Qt::Unchecked);
+            item->setCheckState(assigned.contains(ti.name) ? Qt::Checked : Qt::Unchecked);
             m_targetList->addItem(item);
         }
         break;

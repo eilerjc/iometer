@@ -22,11 +22,14 @@ void DemoEngine::buildDefaultConfig()
     local.processorCount = 4;   // simulated quad-core
 
     // Available targets visible to the demo system (matches the Disk Targets tab)
+    // C: has a filesystem but no iobw.tst → unprepared (red slash)
+    // W: has a filesystem and iobw.tst   → prepared (normal icon)
+    // PhysicalDriveN are raw devices     → always testable (normal icon)
     local.availableTargets = {
-        "C: \"Windows\"",
-        "W: \"nvme\"",
-        "\\\\.\\PhysicalDrive0",
-        "\\\\.\\PhysicalDrive1"
+        TargetInfo{"C: \"Windows\"",         TargetKind::LogicalDisk,  false},
+        TargetInfo{"W: \"nvme\"",            TargetKind::LogicalDisk,  true},
+        TargetInfo{"\\\\.\\PhysicalDrive0",  TargetKind::PhysicalDisk, true},
+        TargetInfo{"\\\\.\\PhysicalDrive1",  TargetKind::PhysicalDisk, true}
     };
 
     // Network interfaces available on this system

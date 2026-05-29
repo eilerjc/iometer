@@ -551,6 +551,13 @@ void MainWindow::setupStatusBar()
 
 void MainWindow::rebuildWorkerTree()
 {
+    // Save current selection so we can restore it after the rebuild.
+    // m_workerTree->clear() fires currentItemChanged with no item, which would
+    // call clearSelection() on all tab pages — we suppress that with blockSignals.
+    const QString savedMgr    = m_selManagerName;
+    const QString savedWorker = m_selWorkerId;
+
+    m_workerTree->blockSignals(true);
     m_workerTree->clear();
 
     auto *style = QApplication::style();
@@ -587,6 +594,38 @@ void MainWindow::rebuildWorkerTree()
 
     m_statusRight->setText(QString("%1 worker(s) | %2 manager(s)")
         .arg(workerCount).arg(m_engine->managers().size()));
+
+    m_workerTree->blockSignals(false);
+
+    // Restore the previous selection (or notify pages if nothing to restore)
+    QTreeWidgetItem *toSelect = nullptr;
+    if (!savedMgr.isEmpty()) {
+        if (QTreeWidgetItem *rootItem = m_workerTree->topLevelItem(0)) {
+            for (int i = 0; i < rootItem->childCount() && !toSelect; ++i) {
+                auto *mgrItem = rootItem->child(i);
+                if (mgrItem->data(0, Qt::UserRole).toString() != "mgr:" + savedMgr)
+                    continue;
+                if (savedWorker.isEmpty()) {
+                    toSelect = mgrItem;
+                } else {
+                    for (int j = 0; j < mgrItem->childCount(); ++j) {
+                        auto *wItem = mgrItem->child(j);
+                        if (wItem->data(0, Qt::UserRole).toString()
+                                == "worker:" + savedMgr + ":" + savedWorker) {
+                            toSelect = wItem;
+                            break;
+                        }
+                    }
+                    if (!toSelect) toSelect = mgrItem; // worker gone, fall back to manager
+                }
+            }
+        }
+    }
+
+    if (toSelect)
+        m_workerTree->setCurrentItem(toSelect);   // fires onWorkerTreeSelectionChanged
+    else
+        onWorkerTreeSelectionChanged();            // nothing to restore — notify pages
 }
 
 void MainWindow::onWorkerTreeSelectionChanged()

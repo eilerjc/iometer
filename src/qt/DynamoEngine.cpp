@@ -844,7 +844,7 @@ void DynamoEngine::onSessionConnected(DySession *s)
     mgr.connected        = true;
     mgr.processorCount   = s->processorCount();
     mgr.workers          = s->workers();
-    mgr.availableTargets = s->diskTargetNames();
+    mgr.availableTargets = s->diskTargetInfos();
 
     emit managerConnected(mgr);
     emit statusMessage(QString("Dynamo manager '%1' connected (%2 targets)")
@@ -1037,7 +1037,7 @@ void DynamoEngine::rebuildManagers()
             mgr.connected        = true;
             mgr.processorCount   = s->processorCount();
             mgr.workers          = s->workers();
-            mgr.availableTargets = s->diskTargetNames();
+            mgr.availableTargets = s->diskTargetInfos();
             m_managers.append(mgr);
         }
     }
