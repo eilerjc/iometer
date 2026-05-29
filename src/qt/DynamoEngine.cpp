@@ -338,20 +338,20 @@ void DySession::processTargetList(int phase)
         for (int i = 0; i < count; ++i)
             m_viTargets.append(dm->data.targets[i]);
 
-        // All targets discovered — build default workers
+        // All targets discovered — create ONE default disk worker per manager.
+        // All disk targets go into availableTargets; none are pre-assigned.
+        // This matches the original Iometer behavior: the user selects targets
+        // in the Disk Targets tab by checking the desired drives.
         m_workers.clear();
         {
-            int idx = 0;
-            for (const auto &t : m_diskTargets) {
-                WorkerInfo w;
-                w.id          = m_managerName + "-disk-" + QString::number(idx++);
-                w.name        = QString::fromLocal8Bit(t.name);
-                w.type        = "Disk";
-                w.managerName = m_managerName;
-                w.queueDepth  = 1;
-                w.targets     = { QString::fromLocal8Bit(t.name) };
-                m_workers.append(w);
-            }
+            WorkerInfo w;
+            w.id          = m_managerName + "-disk-0";
+            w.name        = "Worker 1";
+            w.type        = "Disk";
+            w.managerName = m_managerName;
+            w.queueDepth  = 1;
+            w.targets     = {};   // no targets pre-assigned
+            m_workers.append(w);
         }
         m_state = State::Ready;
         qDebug() << "DySession: ready —" << m_diskTargets.size() << "disks,"
@@ -607,19 +607,15 @@ void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSp
     }
 
     if (m_workers.isEmpty()) {
-        qWarning() << "DySession: no workers for" << m_managerName << "— using discovered disks";
-        // fall back to auto-discovered
-        int idx = 0;
-        for (const auto &t : m_diskTargets) {
-            WorkerInfo w;
-            w.id          = m_managerName + "-disk-" + QString::number(idx++);
-            w.name        = QString::fromLocal8Bit(t.name);
-            w.type        = "Disk";
-            w.managerName = m_managerName;
-            w.queueDepth  = 1;
-            w.targets     = { QString::fromLocal8Bit(t.name) };
-            m_workers.append(w);
-        }
+        qWarning() << "DySession: no workers for" << m_managerName << "— adding default worker";
+        WorkerInfo w;
+        w.id          = m_managerName + "-disk-0";
+        w.name        = "Worker 1";
+        w.type        = "Disk";
+        w.managerName = m_managerName;
+        w.queueDepth  = 1;
+        w.targets     = {};
+        m_workers.append(w);
     }
 
     if (m_workers.isEmpty()) {
@@ -838,10 +834,11 @@ void DynamoEngine::onSessionConnected(DySession *s)
     rebuildManagers();
 
     ManagerInfo mgr;
-    mgr.name      = s->managerName();
-    mgr.address   = s->address();
-    mgr.connected = true;
-    mgr.workers   = s->workers();
+    mgr.name             = s->managerName();
+    mgr.address          = s->address();
+    mgr.connected        = true;
+    mgr.workers          = s->workers();
+    mgr.availableTargets = s->diskTargetNames();
 
     emit managerConnected(mgr);
     emit statusMessage(QString("Dynamo manager '%1' connected (%2 targets)")
@@ -1029,10 +1026,11 @@ void DynamoEngine::rebuildManagers()
             s->state() == DySession::State::Running ||
             s->isRunning()) {
             ManagerInfo mgr;
-            mgr.name      = s->managerName();
-            mgr.address   = s->address();
-            mgr.connected = true;
-            mgr.workers   = s->workers();
+            mgr.name             = s->managerName();
+            mgr.address          = s->address();
+            mgr.connected        = true;
+            mgr.workers          = s->workers();
+            mgr.availableTargets = s->diskTargetNames();
             m_managers.append(mgr);
         }
     }

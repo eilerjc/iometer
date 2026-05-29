@@ -59,6 +59,14 @@ public:
     const QList<WorkerInfo>& workers() const { return m_workers; }
     const QList<DyTargetSpec>& discoveredTargets() const { return m_diskTargets; }
 
+    // Returns the names of all discovered disk targets (for ManagerInfo.availableTargets)
+    QStringList diskTargetNames() const {
+        QStringList names;
+        for (const auto &t : m_diskTargets)
+            names.append(QString::fromLocal8Bit(t.name));
+        return names;
+    }
+
     // ── Test control (called by DynamoEngine after state==Ready) ─────────────
     void startTest(const QList<WorkerInfo> &workers, const QList<AccessSpec> &specs);
     void stopTest();

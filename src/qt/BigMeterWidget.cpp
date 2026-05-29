@@ -29,22 +29,7 @@ BigMeterWidget::BigMeterWidget(QWidget *parent)
 
 void BigMeterWidget::setupUi()
 {
-    // Dark background to match the speedometer aesthetic
-    setStyleSheet(
-        "BigMeterWidget { background: #1a1a2e; }"
-        "QLabel { color: #ccddff; }"
-        "QPushButton { background: #2a3a5e; color: #ccddff; border: 1px solid #4a6a8e;"
-        "              border-radius: 4px; padding: 4px 12px; min-width: 70px; }"
-        "QPushButton:hover    { background: #3a5a8e; }"
-        "QPushButton:disabled { background: #1a2a3e; color: #556677; }"
-        "QComboBox { background: #2a3a5e; color: #ccddff; border: 1px solid #4a6a8e;"
-        "            border-radius: 4px; padding: 2px 6px; }"
-        "QComboBox QAbstractItemView { background: #2a3a5e; color: #ccddff; }"
-        "QSpinBox  { background: #2a3a5e; color: #ccddff; border: 1px solid #4a6a8e;"
-        "            border-radius: 4px; padding: 2px 6px; min-width: 70px; }"
-        "QCheckBox { color: #ccddff; spacing: 6px; }"
-        "QCheckBox::indicator { width: 14px; height: 14px; }"
-    );
+    // No custom stylesheet — use native Windows look to match the rest of the UI.
 
     auto *root = new QVBoxLayout(this);
     root->setSpacing(6);
@@ -54,7 +39,6 @@ void BigMeterWidget::setupUi()
     m_titleLabel = new QLabel("(No test running)");
     QFont tf("Arial", 14, QFont::Bold);
     m_titleLabel->setFont(tf);
-    m_titleLabel->setStyleSheet("color: #5599ff; padding: 2px 0;");
     m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     root->addWidget(m_titleLabel);
 
@@ -62,7 +46,6 @@ void BigMeterWidget::setupUi()
     m_workerLabel = new QLabel;
     QFont wf("Arial", 11);
     m_workerLabel->setFont(wf);
-    m_workerLabel->setStyleSheet("color: #88aadd;");
     m_workerLabel->setAlignment(Qt::AlignCenter);
     root->addWidget(m_workerLabel);
 
@@ -76,13 +59,12 @@ void BigMeterWidget::setupUi()
     QFont vf("Arial", 22, QFont::Bold);
     m_valueLabel->setFont(vf);
     m_valueLabel->setAlignment(Qt::AlignCenter);
-    m_valueLabel->setStyleSheet("color: #ffffff; padding: 2px 0;");
     root->addWidget(m_valueLabel);
 
     // ── Separator ────────────────────────────────────────────────────────
     auto *sep = new QFrame;
     sep->setFrameShape(QFrame::HLine);
-    sep->setStyleSheet("color: #334455;");
+    sep->setFrameShadow(QFrame::Sunken);
     root->addWidget(sep);
 
     // ── Metric selector ──────────────────────────────────────────────────
