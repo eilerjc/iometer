@@ -56,6 +56,7 @@ public:
                                         || m_state == State::WaitUpdateWorker; }
     double   timerRes()    const { return m_timerResolution; }
 
+    int      processorCount() const { return m_processorCount; }
     const QList<WorkerInfo>& workers() const { return m_workers; }
     const QList<DyTargetSpec>& discoveredTargets() const { return m_diskTargets; }
 
@@ -136,8 +137,9 @@ private:
     // Manager info from login
     QString  m_managerName;
     QString  m_address;           // names[1] = main-port host
-    uint16_t m_mainPort    = 0;
+    uint16_t m_mainPort      = 0;
     double   m_timerResolution = 1.0;
+    int      m_processorCount = 1;   // CPU count sent by Dynamo at login
 
     // Discovered targets
     QList<DyTargetSpec> m_diskTargets;

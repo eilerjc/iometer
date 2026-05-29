@@ -139,7 +139,8 @@ struct WorkerInfo {
 struct ManagerInfo {
     QString           name;
     QString           address;
-    bool              connected     = false;
+    bool              connected        = false;
+    int               processorCount   = 1;  // CPU count reported by Dynamo
     QList<WorkerInfo> workers;
     QStringList       availableTargets;      // disk targets reported by Dynamo
     QStringList       availableNetInterfaces;// NIC addresses reported by Dynamo

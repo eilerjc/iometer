@@ -163,9 +163,11 @@ void DySession::processLoginData()
     m_address         = QString::fromLocal8Bit(mi.names[1]);
     m_mainPort        = mi.port_number;
     m_timerResolution = mi.timer_resolution > 0.0 ? mi.timer_resolution : 1.0;
+    m_processorCount  = mi.processors > 0 ? mi.processors : 1;
 
     qDebug() << "DySession: login from" << m_managerName
              << "main port" << m_address << ":" << m_mainPort
+             << "processors" << m_processorCount
              << "timer_res" << m_timerResolution;
 
     // Reply LOGIN_OK on the login socket
@@ -338,15 +340,15 @@ void DySession::processTargetList(int phase)
         for (int i = 0; i < count; ++i)
             m_viTargets.append(dm->data.targets[i]);
 
-        // All targets discovered — create ONE default disk worker per manager.
-        // All disk targets go into availableTargets; none are pre-assigned.
-        // This matches the original Iometer behavior: the user selects targets
-        // in the Disk Targets tab by checking the desired drives.
+        // All targets discovered — create one disk worker per CPU core, matching
+        // the original Iometer AddDefaultWorkers() behaviour (disk_worker_count=-1
+        // → use manager->processors).  Workers are named "Worker 1", "Worker 2", …
+        // None have targets pre-assigned; the user assigns them via Disk Targets tab.
         m_workers.clear();
-        {
+        for (int i = 0; i < m_processorCount; ++i) {
             WorkerInfo w;
-            w.id          = m_managerName + "-disk-0";
-            w.name        = "Worker 1";
+            w.id          = QString("%1-disk-%2").arg(m_managerName).arg(i);
+            w.name        = QString("Worker %1").arg(i + 1);
             w.type        = "Disk";
             w.managerName = m_managerName;
             w.queueDepth  = 1;
@@ -607,15 +609,18 @@ void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSp
     }
 
     if (m_workers.isEmpty()) {
-        qWarning() << "DySession: no workers for" << m_managerName << "— adding default worker";
-        WorkerInfo w;
-        w.id          = m_managerName + "-disk-0";
-        w.name        = "Worker 1";
-        w.type        = "Disk";
-        w.managerName = m_managerName;
-        w.queueDepth  = 1;
-        w.targets     = {};
-        m_workers.append(w);
+        qWarning() << "DySession: no workers for" << m_managerName
+                   << "— creating" << m_processorCount << "default workers";
+        for (int i = 0; i < m_processorCount; ++i) {
+            WorkerInfo w;
+            w.id          = QString("%1-disk-%2").arg(m_managerName).arg(i);
+            w.name        = QString("Worker %1").arg(i + 1);
+            w.type        = "Disk";
+            w.managerName = m_managerName;
+            w.queueDepth  = 1;
+            w.targets     = {};
+            m_workers.append(w);
+        }
     }
 
     if (m_workers.isEmpty()) {
@@ -837,6 +842,7 @@ void DynamoEngine::onSessionConnected(DySession *s)
     mgr.name             = s->managerName();
     mgr.address          = s->address();
     mgr.connected        = true;
+    mgr.processorCount   = s->processorCount();
     mgr.workers          = s->workers();
     mgr.availableTargets = s->diskTargetNames();
 
@@ -1029,6 +1035,7 @@ void DynamoEngine::rebuildManagers()
             mgr.name             = s->managerName();
             mgr.address          = s->address();
             mgr.connected        = true;
+            mgr.processorCount   = s->processorCount();
             mgr.workers          = s->workers();
             mgr.availableTargets = s->diskTargetNames();
             m_managers.append(mgr);

@@ -16,9 +16,10 @@ void DemoEngine::buildDefaultConfig()
 {
     // ---- Local manager with 4 disk workers ----------------------------------
     ManagerInfo local;
-    local.name      = "Local System";
-    local.address   = "127.0.0.1";
-    local.connected = true;
+    local.name           = "Local System";
+    local.address        = "127.0.0.1";
+    local.connected      = true;
+    local.processorCount = 4;   // simulated quad-core
 
     // Available targets visible to the demo system (matches the Disk Targets tab)
     local.availableTargets = {
