@@ -32,14 +32,27 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private slots:
+    // File
     void onNew();
     void onOpen();
     void onSave();
+
+    // Topology operations (map to original BNewDynamo, BNewDiskWorker, etc.)
+    void onNewDynamo();
+    void onNewDiskWorker();
+    void onNewNetWorker();
+    void onCopyWorker();
+    void onExitOne();
+
+    // Test control
     void onStart();
     void onStop();
     void onStopAll();
+
+    // Help
     void onAbout();
 
+    // Engine signals
     void onTestStarted();
     void onTestStopped();
     void onResultsUpdated(QVector<WorkerResult> results);
@@ -57,43 +70,60 @@ private:
     void setupStatusBar();
     void rebuildWorkerTree();
     void setRunningState(bool running);
+    void updateTopologyButtons();   // enable/disable per-selection buttons
 
-    // Icon helpers
+    // Icon helpers (static, paint raised-3D bitmaps matching original)
     static QIcon makeOpenIcon();
     static QIcon makeSaveIcon();
-    static QIcon makeNewIcon();
+    static QIcon makeNewIcon();          // Reset / new config
     static QIcon makeStartIcon();
     static QIcon makeStopIcon(bool all);
     static QIcon makeMeterIcon();
+    static QIcon makeNewDynamoIcon();
+    static QIcon makeNewDiskWorkerIcon();
+    static QIcon makeNewNetWorkerIcon();
+    static QIcon makeCopyWorkerIcon();
+    static QIcon makeExitOneIcon();
+    static QIcon makeHelpIcon();
 
-    // ---- Engine --------------------------------------------------------------
+    // ---- Engine ---------------------------------------------------------------
     IometerEngine *m_engine = nullptr;
 
-    // ---- Central area: topology panel (left) + tabs (right) -----------------
+    // ---- Central area: topology panel (left) + tabs (right) ------------------
     QSplitter   *m_splitter      = nullptr;
     QGroupBox   *m_topoGroup     = nullptr;   // "Topology" group box
     QTreeWidget *m_workerTree    = nullptr;
     QTabWidget  *m_tabs          = nullptr;
 
-    // ---- Tab pages ----------------------------------------------------------
+    // ---- Tab pages -----------------------------------------------------------
     PageSetup   *m_pageSetup     = nullptr;   // tab 0: Disk Targets
     PageNetwork *m_pageNetwork   = nullptr;   // tab 1: Network Targets
     PageAccess  *m_pageAccess    = nullptr;   // tab 2: Access Specifications
     PageDisplay *m_pageDisplay   = nullptr;   // tab 3: Results Display
     PageResults *m_pageResults   = nullptr;   // tab 4: Test Setup
 
-    // ---- Toolbar actions ----------------------------------------------------
-    QAction *m_actNew      = nullptr;
-    QAction *m_actOpen     = nullptr;
-    QAction *m_actSave     = nullptr;
-    QAction *m_actStart    = nullptr;
-    QAction *m_actStop     = nullptr;
-    QAction *m_actStopAll  = nullptr;
-    QAction *m_actBigMeter = nullptr;
+    // ---- Toolbar actions (in original toolbar order) -------------------------
+    QAction *m_actOpen           = nullptr;   // ID_FILE_OPEN
+    QAction *m_actSave           = nullptr;   // ID_FILE_SAVE
+    QAction *m_actNewDynamo      = nullptr;   // BNewDynamo
+    QAction *m_actNewDiskWorker  = nullptr;   // BNewDiskWorker
+    QAction *m_actNewNetWorker   = nullptr;   // BNewNetWorker
+    QAction *m_actCopyWorker     = nullptr;   // BCopyWorker
+    QAction *m_actStart          = nullptr;   // BStart
+    QAction *m_actStop           = nullptr;   // BStop
+    QAction *m_actStopAll        = nullptr;   // BStopAll
+    QAction *m_actNew            = nullptr;   // BReset
+    QAction *m_actExitOne        = nullptr;   // BExitOne
+    QAction *m_actBigMeter       = nullptr;   // (Qt addition)
+    QAction *m_actHelp           = nullptr;   // ID_APP_ABOUT
 
-    // ---- Status bar ---------------------------------------------------------
-    QLabel *m_statusLeft   = nullptr;
-    QLabel *m_statusRight  = nullptr;
+    // ---- Status bar ----------------------------------------------------------
+    QLabel *m_statusLeft         = nullptr;
+    QLabel *m_statusRight        = nullptr;
+
+    // ---- Current topology selection (drives button enable/disable) -----------
+    QString m_selManagerName;
+    QString m_selWorkerId;
 
     bool m_running = false;
 };

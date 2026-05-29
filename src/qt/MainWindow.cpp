@@ -29,6 +29,8 @@
 #include <QGroupBox>
 #include <QVBoxLayout>
 #include <QStyle>
+#include <QProcess>
+#include <QCoreApplication>
 
 // =============================================================================
 // Icon helpers -- draw classic raised-3D bitmaps matching the original toolbar
@@ -187,6 +189,164 @@ QIcon MainWindow::makeMeterIcon()
     return QIcon(pm);
 }
 
+QIcon MainWindow::makeNewDynamoIcon()
+{
+    // Gray computer monitor (CRT) — represents "spawn a new Dynamo/manager"
+    QPixmap pm(24, 24);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    paintRaisedBox(p, 24, 24);
+    // Monitor body
+    p.setBrush(QColor(0x80, 0x80, 0x80));
+    p.setPen(QColor(0x40, 0x40, 0x40));
+    p.drawRect(3, 3, 16, 12);
+    // Screen (dark)
+    p.setBrush(QColor(0x00, 0x44, 0x88));
+    p.setPen(Qt::NoPen);
+    p.drawRect(5, 5, 12, 8);
+    // Base/stand
+    p.setBrush(QColor(0x80, 0x80, 0x80));
+    p.setPen(QColor(0x40, 0x40, 0x40));
+    p.drawRect(9, 15, 4, 3);
+    p.drawRect(6, 18, 10, 2);
+    // Green "+" to indicate "new"
+    p.setPen(QPen(QColor(0x00, 0xcc, 0x00), 2));
+    p.drawLine(18, 3, 18, 9);
+    p.drawLine(15, 6, 21, 6);
+    return QIcon(pm);
+}
+
+QIcon MainWindow::makeNewDiskWorkerIcon()
+{
+    // Stick figure (worker) + disk — "new disk worker"
+    QPixmap pm(24, 24);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    paintRaisedBox(p, 24, 24);
+    p.setRenderHint(QPainter::Antialiasing);
+    // Head
+    p.setBrush(QColor(0xf0, 0xc8, 0x80));
+    p.setPen(QColor(0x60, 0x40, 0x00));
+    p.drawEllipse(3, 2, 6, 6);
+    // Body
+    p.setPen(QPen(QColor(0x20, 0x60, 0xa0), 2));
+    p.drawLine(6, 8, 6, 14);
+    // Arms
+    p.drawLine(2, 10, 10, 10);
+    // Legs
+    p.drawLine(6, 14, 3, 19);
+    p.drawLine(6, 14, 9, 19);
+    // Disk (right side)
+    p.setBrush(QColor(0xcc, 0xcc, 0xcc));
+    p.setPen(QColor(0x60, 0x60, 0x60));
+    p.drawEllipse(13, 8, 8, 8);
+    p.setBrush(QColor(0x88, 0x88, 0x88));
+    p.drawEllipse(16, 11, 2, 2);
+    return QIcon(pm);
+}
+
+QIcon MainWindow::makeNewNetWorkerIcon()
+{
+    // Stick figure + network nodes — "new network worker"
+    QPixmap pm(24, 24);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    paintRaisedBox(p, 24, 24);
+    p.setRenderHint(QPainter::Antialiasing);
+    // Head
+    p.setBrush(QColor(0xf0, 0xc8, 0x80));
+    p.setPen(QColor(0x60, 0x40, 0x00));
+    p.drawEllipse(3, 2, 6, 6);
+    // Body
+    p.setPen(QPen(QColor(0x20, 0x60, 0xa0), 2));
+    p.drawLine(6, 8, 6, 14);
+    p.drawLine(2, 10, 10, 10);
+    p.drawLine(6, 14, 3, 19);
+    p.drawLine(6, 14, 9, 19);
+    // Network nodes (right side): three circles connected
+    p.setPen(QPen(QColor(0x00, 0x80, 0x00), 1));
+    p.setBrush(QColor(0x00, 0xcc, 0x44));
+    p.drawEllipse(13, 5, 5, 5);   // top
+    p.drawEllipse(17, 11, 5, 5);  // right
+    p.drawEllipse(13, 17, 5, 5);  // bottom
+    p.setPen(QPen(QColor(0x00, 0x80, 0x00), 1));
+    p.drawLine(16, 9, 19, 11);
+    p.drawLine(19, 15, 16, 17);
+    return QIcon(pm);
+}
+
+QIcon MainWindow::makeCopyWorkerIcon()
+{
+    // Two overlapping stick figures — "copy worker"
+    QPixmap pm(24, 24);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    paintRaisedBox(p, 24, 24);
+    p.setRenderHint(QPainter::Antialiasing);
+    // Shadow figure (back, offset)
+    p.setBrush(QColor(0xc0, 0xc0, 0xc0));
+    p.setPen(QColor(0x80, 0x80, 0x80));
+    p.drawEllipse(9, 3, 6, 6);
+    p.setPen(QPen(QColor(0x80, 0x80, 0x80), 2));
+    p.drawLine(12, 9, 12, 15);
+    p.drawLine(8, 11, 16, 11);
+    p.drawLine(12, 15, 9, 20);
+    p.drawLine(12, 15, 15, 20);
+    // Front figure
+    p.setBrush(QColor(0xf0, 0xc8, 0x80));
+    p.setPen(QColor(0x60, 0x40, 0x00));
+    p.drawEllipse(3, 5, 6, 6);
+    p.setPen(QPen(QColor(0x20, 0x60, 0xa0), 2));
+    p.drawLine(6, 11, 6, 17);
+    p.drawLine(2, 13, 10, 13);
+    p.drawLine(6, 17, 3, 22);
+    p.drawLine(6, 17, 9, 22);
+    return QIcon(pm);
+}
+
+QIcon MainWindow::makeExitOneIcon()
+{
+    // Stick figure with a red X — "delete/remove selected"
+    QPixmap pm(24, 24);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    paintRaisedBox(p, 24, 24);
+    p.setRenderHint(QPainter::Antialiasing);
+    // Figure (grayed out)
+    p.setBrush(QColor(0xc0, 0xc0, 0xc0));
+    p.setPen(QColor(0x80, 0x80, 0x80));
+    p.drawEllipse(4, 2, 7, 7);
+    p.setPen(QPen(QColor(0x80, 0x80, 0x80), 2));
+    p.drawLine(7, 9, 7, 15);
+    p.drawLine(3, 11, 11, 11);
+    p.drawLine(7, 15, 4, 20);
+    p.drawLine(7, 15, 10, 20);
+    // Red X (top-right)
+    p.setPen(QPen(Qt::red, 2));
+    p.drawLine(15, 4, 21, 10);
+    p.drawLine(21, 4, 15, 10);
+    return QIcon(pm);
+}
+
+QIcon MainWindow::makeHelpIcon()
+{
+    // Blue "?" circle — Help/About
+    QPixmap pm(24, 24);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    paintRaisedBox(p, 24, 24);
+    p.setRenderHint(QPainter::Antialiasing);
+    // Circle
+    p.setBrush(QColor(0x22, 0x66, 0xcc));
+    p.setPen(QColor(0x11, 0x44, 0x99));
+    p.drawEllipse(3, 3, 18, 18);
+    // "?"
+    p.setPen(Qt::white);
+    p.setFont(QFont("Arial", 11, QFont::Bold));
+    p.drawText(QRect(3, 2, 18, 18), Qt::AlignCenter, "?");
+    return QIcon(pm);
+}
+
 // =============================================================================
 // MainWindow
 // =============================================================================
@@ -225,42 +385,71 @@ void MainWindow::setupToolBar()
     tb->setIconSize(QSize(24, 24));
     tb->setToolButtonStyle(Qt::ToolButtonIconOnly);
 
-    m_actNew      = tb->addAction(makeNewIcon(),       "New");
-    m_actOpen     = tb->addAction(makeOpenIcon(),      "Open");
-    m_actSave     = tb->addAction(makeSaveIcon(),      "Save");
+    // ── Group 1: File operations (Open / Save) ────────────────────────────────
+    m_actOpen            = tb->addAction(makeOpenIcon(),           "Open");
+    m_actSave            = tb->addAction(makeSaveIcon(),           "Save");
     tb->addSeparator();
-    m_actStart    = tb->addAction(makeStartIcon(),     "Start");
-    m_actStop     = tb->addAction(makeStopIcon(false), "Stop");
-    m_actStopAll  = tb->addAction(makeStopIcon(true),  "Stop All");
-    tb->addSeparator();
-    m_actBigMeter = tb->addAction(makeMeterIcon(),     "Presentation Meter");
 
-    m_actNew->setToolTip("New configuration (Ctrl+N)");
-    m_actOpen->setToolTip("Open .icf file (Ctrl+O)");
-    m_actSave->setToolTip("Save .icf file (Ctrl+S)");
+    // ── Group 2: Topology operations (matches original BNew*/BCopyWorker) ─────
+    m_actNewDynamo       = tb->addAction(makeNewDynamoIcon(),      "New Manager");
+    m_actNewDiskWorker   = tb->addAction(makeNewDiskWorkerIcon(),  "New Disk Worker");
+    m_actNewNetWorker    = tb->addAction(makeNewNetWorkerIcon(),   "New Net Worker");
+    m_actCopyWorker      = tb->addAction(makeCopyWorkerIcon(),     "Copy Worker");
+    tb->addSeparator();
+
+    // ── Group 3: Test control (BStart / BStop / BStopAll) ─────────────────────
+    m_actStart           = tb->addAction(makeStartIcon(),          "Start");
+    m_actStop            = tb->addAction(makeStopIcon(false),      "Stop");
+    m_actStopAll         = tb->addAction(makeStopIcon(true),       "Stop All");
+    tb->addSeparator();
+
+    // ── Group 4: Config reset / remove item / meter / help ───────────────────
+    m_actNew             = tb->addAction(makeNewIcon(),            "Reset");
+    m_actExitOne         = tb->addAction(makeExitOneIcon(),        "Delete Selected");
+    m_actBigMeter        = tb->addAction(makeMeterIcon(),          "Presentation Meter");
+    m_actHelp            = tb->addAction(makeHelpIcon(),           "About");
+
+    // ── Tooltips ──────────────────────────────────────────────────────────────
+    m_actOpen->setToolTip("Open .icf configuration file (Ctrl+O)");
+    m_actSave->setToolTip("Save .icf configuration file (Ctrl+S)");
+    m_actNewDynamo->setToolTip("Launch a new local Dynamo manager");
+    m_actNewDiskWorker->setToolTip("Add a disk worker to selected manager");
+    m_actNewNetWorker->setToolTip("Add a network worker to selected manager");
+    m_actCopyWorker->setToolTip("Copy selected worker");
     m_actStart->setToolTip("Start test (F5)");
     m_actStop->setToolTip("Stop current test (F6)");
-    m_actStopAll->setToolTip("Stop all tests");
+    m_actStopAll->setToolTip("Stop all tests and reset");
+    m_actNew->setToolTip("Reset — clear all workers and start over (Ctrl+N)");
+    m_actExitOne->setToolTip("Delete selected worker or disconnect selected manager");
     m_actBigMeter->setToolTip("Open Presentation Meter");
+    m_actHelp->setToolTip("About Iometer");
 
-    m_actNew->setShortcut(QKeySequence::New);
+    // ── Keyboard shortcuts ────────────────────────────────────────────────────
     m_actOpen->setShortcut(QKeySequence::Open);
     m_actSave->setShortcut(QKeySequence::Save);
     m_actStart->setShortcut(Qt::Key_F5);
     m_actStop->setShortcut(Qt::Key_F6);
+    m_actNew->setShortcut(QKeySequence::New);
 
-    connect(m_actNew,      &QAction::triggered, this, &MainWindow::onNew);
-    connect(m_actOpen,     &QAction::triggered, this, &MainWindow::onOpen);
-    connect(m_actSave,     &QAction::triggered, this, &MainWindow::onSave);
-    connect(m_actStart,    &QAction::triggered, this, &MainWindow::onStart);
-    connect(m_actStop,     &QAction::triggered, this, &MainWindow::onStop);
-    connect(m_actStopAll,  &QAction::triggered, this, &MainWindow::onStopAll);
-    connect(m_actBigMeter, &QAction::triggered, this, [this]{
-        m_tabs->setCurrentIndex(3);   // Results Display tab
+    // ── Connections ───────────────────────────────────────────────────────────
+    connect(m_actOpen,          &QAction::triggered, this, &MainWindow::onOpen);
+    connect(m_actSave,          &QAction::triggered, this, &MainWindow::onSave);
+    connect(m_actNewDynamo,     &QAction::triggered, this, &MainWindow::onNewDynamo);
+    connect(m_actNewDiskWorker, &QAction::triggered, this, &MainWindow::onNewDiskWorker);
+    connect(m_actNewNetWorker,  &QAction::triggered, this, &MainWindow::onNewNetWorker);
+    connect(m_actCopyWorker,    &QAction::triggered, this, &MainWindow::onCopyWorker);
+    connect(m_actStart,         &QAction::triggered, this, &MainWindow::onStart);
+    connect(m_actStop,          &QAction::triggered, this, &MainWindow::onStop);
+    connect(m_actStopAll,       &QAction::triggered, this, &MainWindow::onStopAll);
+    connect(m_actNew,           &QAction::triggered, this, &MainWindow::onNew);
+    connect(m_actExitOne,       &QAction::triggered, this, &MainWindow::onExitOne);
+    connect(m_actBigMeter,      &QAction::triggered, this, [this]{
+        m_tabs->setCurrentIndex(3);
         m_pageDisplay->onBigMeterClicked();
     });
+    connect(m_actHelp,          &QAction::triggered, this, &MainWindow::onAbout);
 
-    // Menu bar
+    // ── Menu bar ─────────────────────────────────────────────────────────────
     auto *fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(m_actNew);
     fileMenu->addAction(m_actOpen);
@@ -268,6 +457,15 @@ void MainWindow::setupToolBar()
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", QApplication::instance(), &QApplication::quit,
                         QKeySequence::Quit);
+
+    auto *workerMenu = menuBar()->addMenu("&Worker");
+    workerMenu->addAction(m_actNewDynamo);
+    workerMenu->addSeparator();
+    workerMenu->addAction(m_actNewDiskWorker);
+    workerMenu->addAction(m_actNewNetWorker);
+    workerMenu->addAction(m_actCopyWorker);
+    workerMenu->addSeparator();
+    workerMenu->addAction(m_actExitOne);
 
     auto *testMenu = menuBar()->addMenu("&Test");
     testMenu->addAction(m_actStart);
@@ -278,7 +476,7 @@ void MainWindow::setupToolBar()
     viewMenu->addAction(m_actBigMeter);
 
     auto *helpMenu = menuBar()->addMenu("&Help");
-    helpMenu->addAction("&About Iometer", this, &MainWindow::onAbout);
+    helpMenu->addAction(m_actHelp);
 }
 
 void MainWindow::setupTopologyPanel()
@@ -395,26 +593,57 @@ void MainWindow::onWorkerTreeSelectionChanged()
 {
     auto *item = m_workerTree->currentItem();
     if (!item) {
+        m_selManagerName.clear();
+        m_selWorkerId.clear();
         m_pageSetup->clearSelection();
+        m_pageNetwork->clearSelection();
+        updateTopologyButtons();
         return;
     }
 
     const QString key = item->data(0, Qt::UserRole).toString();
 
     if (key == "all") {
+        m_selManagerName.clear();
+        m_selWorkerId.clear();
         m_pageSetup->clearSelection();
         m_pageNetwork->clearSelection();
     } else if (key.startsWith("mgr:")) {
-        const QString mgrName = key.mid(4);
-        m_pageSetup->setSelectedManager(mgrName);
-        m_pageNetwork->setSelectedManager(mgrName);
+        m_selManagerName = key.mid(4);
+        m_selWorkerId.clear();
+        m_pageSetup->setSelectedManager(m_selManagerName);
+        m_pageNetwork->setSelectedManager(m_selManagerName);
     } else if (key.startsWith("worker:")) {
         const QStringList parts = key.mid(7).split(':');
         if (parts.size() >= 2) {
-            m_pageSetup->setSelectedWorker(parts[0], parts[1]);
-            m_pageNetwork->setSelectedWorker(parts[0], parts[1]);
+            m_selManagerName = parts[0];
+            m_selWorkerId    = parts[1];
+            m_pageSetup->setSelectedWorker(m_selManagerName, m_selWorkerId);
+            m_pageNetwork->setSelectedWorker(m_selManagerName, m_selWorkerId);
         }
     }
+    updateTopologyButtons();
+}
+
+void MainWindow::updateTopologyButtons()
+{
+    if (m_running) return;   // all topology buttons disabled while running
+
+    const bool hasMgr    = !m_selManagerName.isEmpty();
+    const bool hasWorker = hasMgr && !m_selWorkerId.isEmpty();
+
+    // NewDynamo always available when not running
+    m_actNewDynamo->setEnabled(true);
+
+    // Worker creation requires a manager to be selected
+    m_actNewDiskWorker->setEnabled(hasMgr);
+    m_actNewNetWorker->setEnabled(hasMgr);
+
+    // Copy only when a worker is selected
+    m_actCopyWorker->setEnabled(hasWorker);
+
+    // Exit one: a worker or manager must be selected (not "All Managers")
+    m_actExitOne->setEnabled(hasMgr);
 }
 
 // -----------------------------------------------------------------------------
@@ -462,6 +691,99 @@ void MainWindow::onSave()
 void MainWindow::onStart()    { if (!m_running) m_engine->startTest(); }
 void MainWindow::onStop()     { m_engine->stopTest(); }
 void MainWindow::onStopAll()  { m_engine->stopAll(); }
+
+void MainWindow::onNewDynamo()
+{
+    // Launch Dynamo.exe from the same directory.
+    // With no arguments Dynamo connects back to localhost:1066.
+    const QString dynamo = QCoreApplication::applicationDirPath() + "/Dynamo.exe";
+    if (!QProcess::startDetached(dynamo, {})) {
+        QMessageBox::information(this, "Launch Dynamo",
+            "Could not auto-launch Dynamo.exe.\n\n"
+            "To connect a remote manager, run on the target machine:\n"
+            "  Dynamo.exe -i <this_machine_ip> -m <hostname>");
+    } else {
+        m_statusLeft->setText("Launching local Dynamo — waiting for connection...");
+    }
+}
+
+void MainWindow::onNewDiskWorker()
+{
+    if (m_selManagerName.isEmpty()) return;
+
+    // Count existing workers to pick next number
+    int workerNum = 1;
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name == m_selManagerName) {
+            workerNum = mgr.workers.size() + 1;
+            break;
+        }
+    }
+    WorkerInfo w;
+    w.id          = QString("%1-disk-%2").arg(m_selManagerName).arg(workerNum);
+    w.name        = QString("Worker %1").arg(workerNum);
+    w.type        = "Disk";
+    w.managerName = m_selManagerName;
+    w.queueDepth  = 1;
+    m_engine->addWorker(m_selManagerName, w);
+}
+
+void MainWindow::onNewNetWorker()
+{
+    if (m_selManagerName.isEmpty()) return;
+
+    int workerNum = 1;
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name == m_selManagerName) {
+            workerNum = mgr.workers.size() + 1;
+            break;
+        }
+    }
+    WorkerInfo w;
+    w.id          = QString("%1-net-%2").arg(m_selManagerName).arg(workerNum);
+    w.name        = QString("Net Worker %1").arg(workerNum);
+    w.type        = "Network";
+    w.managerName = m_selManagerName;
+    w.queueDepth  = 1;
+    m_engine->addWorker(m_selManagerName, w);
+}
+
+void MainWindow::onCopyWorker()
+{
+    if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+
+    for (const auto &mgr : m_engine->managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (const auto &src : mgr.workers) {
+            if (src.id != m_selWorkerId) continue;
+            WorkerInfo w  = src;
+            const int  n  = mgr.workers.size() + 1;
+            w.id          = QString("%1-%2-copy").arg(m_selManagerName).arg(n);
+            w.name        = src.name + " (copy)";
+            m_engine->addWorker(m_selManagerName, w);
+            return;
+        }
+    }
+}
+
+void MainWindow::onExitOne()
+{
+    if (m_selManagerName.isEmpty()) return;
+
+    if (!m_selWorkerId.isEmpty()) {
+        // Remove selected worker
+        m_engine->removeWorker(m_selManagerName, m_selWorkerId);
+        m_selWorkerId.clear();
+    } else {
+        // Disconnect the selected manager
+        const auto btn = QMessageBox::question(this, "Disconnect Manager",
+            QString("Disconnect manager \"%1\" and remove all its workers?")
+                .arg(m_selManagerName));
+        if (btn != QMessageBox::Yes) return;
+        m_engine->disconnectManager(m_selManagerName);
+        m_selManagerName.clear();
+    }
+}
 
 void MainWindow::onAbout()
 {
@@ -519,16 +841,35 @@ void MainWindow::onConfigChanged()
 {
     rebuildWorkerTree();
     m_pageAccess->loadSpecList();
+    updateTopologyButtons();
 }
 
 void MainWindow::setRunningState(bool running)
 {
     m_running = running;
+
+    // File operations disabled while running
+    m_actOpen->setEnabled(!running);
+    m_actSave->setEnabled(true);      // can save config at any time
+
+    // Topology operations disabled while running
+    m_actNewDynamo->setEnabled(!running);
+    m_actNewDiskWorker->setEnabled(false);   // re-evaluated by updateTopologyButtons
+    m_actNewNetWorker->setEnabled(false);
+    m_actCopyWorker->setEnabled(false);
+    m_actExitOne->setEnabled(false);
+
+    // Test control
     m_actStart->setEnabled(!running);
     m_actStop->setEnabled(running);
     m_actStopAll->setEnabled(running);
+
+    // Reset disabled while running
     m_actNew->setEnabled(!running);
-    m_actOpen->setEnabled(!running);
+
+    // Restore per-selection enable states when not running
+    if (!running)
+        updateTopologyButtons();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
