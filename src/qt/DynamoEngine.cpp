@@ -1,5 +1,6 @@
 // DynamoEngine.cpp
 #include "DynamoEngine.h"
+#include "IometerEngine.h"
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QHostAddress>
@@ -244,6 +245,13 @@ void DySession::dispatchMainData()
             }
             break;
 
+        // ── ADD_WORKERS confirmation ──────────────────────────────────────────
+        case State::WaitAddWorkers:
+            if (m_buf.size() >= DY_MSG_SIZE) {
+                processAddWorkersReply(); progress = true;
+            }
+            break;
+
         // ── Worker setup ──────────────────────────────────────────────────────
         case State::SetupAccess:
             // Waiting for 8-byte reply to SET_ACCESS
@@ -355,12 +363,30 @@ void DySession::processTargetList(int phase)
             w.targets     = {};   // no targets pre-assigned
             m_workers.append(w);
         }
-        m_state = State::Ready;
-        qDebug() << "DySession: ready —" << m_diskTargets.size() << "disks,"
-                 << m_tcpTargets.size() << "TCP targets";
-        emit managerConnected(this);
+        // Tell Dynamo to create the worker threads.
+        // DY_ADD_WORKERS data = number of disk workers to create.
+        sendMsg(DY_ADD_WORKERS, static_cast<int32_t>(m_workers.size()));
+        m_state = State::WaitAddWorkers;
+        qDebug() << "DySession: sent ADD_WORKERS(" << m_workers.size() << ") to"
+                 << m_managerName;
         break;
     }
+}
+
+// ── ADD_WORKERS reply ─────────────────────────────────────────────────────────
+
+void DySession::processAddWorkersReply()
+{
+    QByteArray chunk = take(DY_MSG_SIZE);
+    const DyMsg *msg = reinterpret_cast<const DyMsg*>(chunk.constData());
+    const int32_t actualCount = msg->data;
+    if (actualCount <= 0) {
+        qWarning() << "DySession: ADD_WORKERS reply says 0 workers on" << m_managerName;
+    }
+    qDebug() << "DySession: ADD_WORKERS confirmed," << actualCount
+             << "workers on" << m_managerName;
+    m_state = State::Ready;
+    emit managerConnected(this);
 }
 
 // ── Worker setup handlers ─────────────────────────────────────────────────────
@@ -723,26 +749,29 @@ void DySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &spec)
 {
     dm->count = 1;
     DyTestSpec &ts = dm->data.spec;
-    std::strncpy(ts.name, "IometerQt", sizeof(ts.name) - 1);
-    ts.default_assignment = 0;
-
-    // Build a simple access spec array:
-    // 100% of the entries are the same spec; mark end with of_size=0
+    std::strncpy(ts.name, spec.name.toLocal8Bit().constData(), sizeof(ts.name) - 1);
+    ts.default_assignment = spec.defaultSpec ? 1 : 0;
     std::memset(ts.access, 0, sizeof(ts.access));
 
-    // Convert AccessSpec (bytes) to wire format
-    DyAccessSpec &a = ts.access[0];
-    a.of_size = 100;
-    a.reads   = spec.readPercent;
-    a.random  = 100 - spec.seqPercent;  // seqPercent → random = (100 - seqPercent)
-    a.delay   = static_cast<int32_t>(spec.delayMs);
-    a.burst   = spec.burstLength;
-    a.align   = static_cast<uint32_t>(spec.alignBytes > 0 ? spec.alignBytes : 512);
-    a.reply   = 0;
-    a.size    = static_cast<uint32_t>(spec.xferSizeBytes > 0 ? spec.xferSizeBytes : 65536);
-
+    const int n = qMin(spec.lines.size(), DY_MAX_ACCESS_SPECS - 1);
+    for (int i = 0; i < n; ++i) {
+        const AccessSpecLine &line = spec.lines[i];
+        DyAccessSpec &a = ts.access[i];
+        a.of_size = line.ofSize;
+        a.reads   = line.readPercent;
+        a.random  = 100 - line.seqPercent;
+        a.delay   = static_cast<int32_t>(line.delayMs);
+        a.burst   = line.burstLength;
+        a.reply   = static_cast<uint32_t>(line.replyBytes);
+        a.size    = static_cast<uint32_t>(line.sizeBytes > 0 ? line.sizeBytes : 65536);
+        // Alignment: -1 = request-size (use transfer size), 0 = sector (512), >0 = explicit
+        if      (line.alignBytes < 0)  a.align = a.size;   // request-size boundaries
+        else if (line.alignBytes == 0) a.align = 512;       // sector boundaries
+        else                           a.align = static_cast<uint32_t>(line.alignBytes);
+    }
     // Terminator
-    ts.access[1].of_size = 0;
+    if (n < DY_MAX_ACCESS_SPECS)
+        ts.access[n].of_size = 0;
 }
 
 void DySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
@@ -779,16 +808,8 @@ void DySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
 DynamoEngine::DynamoEngine(QObject *parent)
     : IometerEngine(parent)
 {
-    // Default access spec
-    AccessSpec def;
-    def.name         = "Default (64KB Sequential Reads)";
-    def.xferSizeBytes = 65536;
-    def.alignBytes    = 65536;
-    def.readPercent   = 100;
-    def.seqPercent    = 100;
-    def.burstLength   = 1;
-    def.defaultSpec   = true;
-    m_specs.append(def);
+    // Full built-in access spec library (Idle, Default, 512B–32KiB at 5 read levels)
+    m_specs = IometerEngine::builtinAccessSpecs();
 
     // Start the TCP server
     m_server = new QTcpServer(this);
@@ -926,9 +947,15 @@ void DynamoEngine::startTest()
     for (const auto &mgr : m_managers)
         allWorkers += mgr.workers;
 
-    for (auto *s : m_sessions)
-        s->startTest(allWorkers, m_specs);
+    // Use the override spec if set (cycling), otherwise the global list
+    const QList<AccessSpec> specs = m_hasCurrentTestSpec
+        ? QList<AccessSpec>{m_currentTestSpec}
+        : m_specs;
 
+    for (auto *s : m_sessions)
+        s->startTest(allWorkers, specs);
+
+    m_hasCurrentTestSpec = false;   // consumed
     emit testStarted();
     emit statusMessage("Test started");
 }
@@ -946,10 +973,13 @@ void DynamoEngine::stopTest()
 
 void DynamoEngine::stopAll()
 {
+    // Stop tests only — do NOT exit Dynamo workers; managers stay connected
     for (auto *s : m_sessions)
-        s->stopAll();
+        s->stopTest();
     m_running = false;
+    m_savedResults = m_currentResults;
     emit testStopped();
+    emit statusMessage("All tests stopped");
 }
 
 bool DynamoEngine::loadConfig(const QString &) { return false; }

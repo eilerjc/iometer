@@ -27,6 +27,7 @@ public:
         WaitTargetsDisk,    // sent REPORT_TARGETS, awaiting disk Data_Message
         WaitTargetsTcp,     // awaiting TCP targets Data_Message
         WaitTargetsVi,      // awaiting VI targets Data_Message
+        WaitAddWorkers,     // sent ADD_WORKERS, awaiting 8-byte confirmation
         Ready,              // connected, idle — test not started
         SetupAccess,        // sending SET_ACCESS for workers, awaiting reply
         SetupTargetsReply,  // sent SET_TARGETS, awaiting 8-byte reply
@@ -111,6 +112,7 @@ private:
     void processLoginMsg();
     void processLoginData();
     void processTargetList(int phase);   // disk=0, tcp=1, vi=2
+    void processAddWorkersReply();
     void processSetAccessReply();
     void processSetTargetsReply();
     void processSetTargetsData();
@@ -205,6 +207,9 @@ public:
 
     QList<AccessSpec>   accessSpecs()  const override { return m_specs; }
     void setAccessSpecs(const QList<AccessSpec> &specs) override;
+    void setCurrentTestSpec(const AccessSpec &spec) override {
+        m_currentTestSpec = spec; m_hasCurrentTestSpec = true;
+    }
 
     TestConfig testConfig()                     const override { return m_testConfig; }
     void setTestConfig(const TestConfig &cfg)         override { m_testConfig = cfg; }
@@ -230,6 +235,8 @@ private:
     QList<DySession*>     m_sessions;
     QList<ManagerInfo>    m_managers;
     QList<AccessSpec>     m_specs;
+    AccessSpec            m_currentTestSpec;
+    bool                  m_hasCurrentTestSpec = false;
     TestConfig            m_testConfig;
     QVector<WorkerResult> m_currentResults;
     QVector<WorkerResult> m_savedResults;

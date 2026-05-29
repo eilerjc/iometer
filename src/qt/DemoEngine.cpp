@@ -1,5 +1,6 @@
 // DemoEngine.cpp
 #include "DemoEngine.h"
+#include "IometerEngine.h"
 #include <cmath>
 #include <QRandomGenerator>
 
@@ -51,25 +52,8 @@ void DemoEngine::buildDefaultConfig()
     }
     m_managers.append(local);
 
-    // ---- Default access specs (match the original's built-in library) -------
-    auto addSpec = [&](const QString &name, int xferBytes, int readPct, int seqPct, bool isDefault = false) {
-        AccessSpec s;
-        s.name          = name;
-        s.xferSizeBytes = xferBytes;
-        s.alignBytes    = xferBytes;
-        s.readPercent   = readPct;
-        s.seqPercent    = seqPct;
-        s.defaultSpec   = isDefault;
-        m_specs.append(s);
-    };
-
-    addSpec("64 KiB Sequential Read",  65536,  100, 100, true);
-    addSpec("4 KiB Random Read",        4096,  100,   0);
-    addSpec("4 KiB Random Write",       4096,    0,   0);
-    addSpec("4 KiB 70/30 Read/Write",   4096,   70,   0);
-    addSpec("512 B Sequential Read",     512,  100, 100);
-    addSpec("128 KiB Sequential Read", 131072, 100, 100);
-    addSpec("1 MiB Sequential Read",  1048576, 100, 100);
+    // ---- Access specs: use shared built-in library -------
+    m_specs = IometerEngine::builtinAccessSpecs();
 }
 
 // ---- Test control -----------------------------------------------------------

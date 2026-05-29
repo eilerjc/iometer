@@ -3,8 +3,11 @@
 #include "IometerEngine.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QListWidget>
+#include <QTableWidget>
+#include <QHeaderView>
 #include <QPushButton>
 #include <QLabel>
 #include <QDialog>
@@ -15,17 +18,14 @@
 #include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QRadioButton>
+#include <QSlider>
+#include <QButtonGroup>
 #include <QMessageBox>
-#include <QRandomGenerator>
+#include <QStyleFactory>
+#include <QPainter>
+#include <QPixmap>
 
-static const QList<QPair<QString,int>> XFER_SIZES = {
-    {"512 B",     512},   {"1 KiB",    1024},  {"2 KiB",    2048},
-    {"4 KiB",    4096},   {"8 KiB",   8192},   {"16 KiB", 16384},
-    {"32 KiB",  32768},   {"64 KiB", 65536},   {"128 KiB",131072},
-    {"256 KiB", 262144},  {"512 KiB",524288},  {"1 MiB", 1048576},
-    {"2 MiB", 2097152},   {"4 MiB", 4194304},  {"8 MiB", 8388608},
-    {"16 MiB",16777216},  {"32 MiB",33554432}, {"64 MiB",67108864}
-};
 
 // =============================================================================
 
@@ -84,6 +84,7 @@ void PageAccess::setupUi()
     auto *rightLay   = new QVBoxLayout(rightGroup);
     rightLay->setContentsMargins(4, 8, 4, 4);
     m_global = new QListWidget;
+    m_global->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     rightLay->addWidget(m_global, 1);
     rightOuter->addWidget(rightGroup, 1);
 
@@ -125,8 +126,7 @@ void PageAccess::setupUi()
 // =============================================================================
 
 static QString specLabel(const AccessSpec &s) {
-    if (s.name == "Idle" || s.name == "Default") return s.name;
-    return s.displayLabel();
+    return s.name;   // all built-in specs carry their full original name
 }
 
 void PageAccess::rebuildGlobalList()
@@ -160,6 +160,43 @@ void PageAccess::loadSpecList()
     rebuildAssignedList();
     onGlobalSelectionChanged();
     onAssignedSelectionChanged();
+}
+
+void PageAccess::setActiveSpecIndex(int idx)
+{
+    // Build a small green right-arrow icon for the running spec
+    static QIcon runIcon, blankIcon;
+    if (runIcon.isNull()) {
+        QPixmap pm(12, 12);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setBrush(QColor(0x00, 0xaa, 0x00));
+        p.setPen(Qt::NoPen);
+        // Solid green right-pointing triangle
+        p.drawPolygon(QPolygon({ QPoint(2,2), QPoint(2,10), QPoint(10,6) }));
+        runIcon = QIcon(pm);
+
+        QPixmap blank(12, 12);
+        blank.fill(Qt::transparent);
+        blankIcon = QIcon(blank);
+    }
+
+    for (int i = 0; i < m_assigned->count(); ++i)
+        m_assigned->item(i)->setIcon(i == idx ? runIcon : blankIcon);
+}
+
+QList<AccessSpec> PageAccess::currentAssignedSpecs() const
+{
+    QList<AccessSpec> result;
+    const auto &allSpecs = m_engine->accessSpecs();
+    for (int i = 0; i < m_assigned->count(); ++i) {
+        const QString name = m_assigned->item(i)->data(Qt::UserRole).toString();
+        for (const auto &s : allSpecs) {
+            if (s.name == name) { result.append(s); break; }
+        }
+    }
+    return result;
 }
 
 // =============================================================================
@@ -229,61 +266,378 @@ void PageAccess::onMoveDown()
 // Spec editor dialog
 // =============================================================================
 
+// ── Helper ────────────────────────────────────────────────────────────────────
+// Build three spinners (Megabytes / Kilobytes / Bytes) packed into an HBox.
+// *mbSpin, *kbSpin, *bSpin are set to the created spinners.
+static QHBoxLayout *makeSizeSpinners(QSpinBox **mbSpin, QSpinBox **kbSpin,
+                                     QSpinBox **bSpin)
+{
+    *mbSpin = new QSpinBox; (*mbSpin)->setRange(0, 8192); (*mbSpin)->setSuffix("");
+    *kbSpin = new QSpinBox; (*kbSpin)->setRange(0, 65535);
+    *bSpin  = new QSpinBox; (*bSpin)->setRange(0, 65535);
+    auto *lay = new QHBoxLayout;
+    lay->setSpacing(4);
+    lay->addWidget(*mbSpin); lay->addWidget(new QLabel("Megabytes"));
+    lay->addWidget(*kbSpin); lay->addWidget(new QLabel("Kilobytes"));
+    lay->addWidget(*bSpin);  lay->addWidget(new QLabel("Bytes"));
+    return lay;
+}
+static void setSizeSpinners(QSpinBox *mb, QSpinBox *kb, QSpinBox *b, int bytes)
+{
+    mb->setValue(bytes / 1048576);
+    kb->setValue((bytes % 1048576) / 1024);
+    b ->setValue(bytes % 1024);
+}
+static int readSizeSpinners(QSpinBox *mb, QSpinBox *kb, QSpinBox *b)
+{
+    return mb->value() * 1048576 + kb->value() * 1024 + b->value();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 bool PageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
 {
     QDialog dlg(this);
     dlg.setWindowTitle(title);
-    dlg.setMinimumWidth(360);
+    dlg.setMinimumSize(730, 560);
 
-    auto *form = new QFormLayout(&dlg);
-    form->setSpacing(6);
-
-    auto *nameEdit   = new QLineEdit(spec.name);
-    auto *xferCombo  = new QComboBox;
-    auto *alignCombo = new QComboBox;
-    for (const auto &p : XFER_SIZES) {
-        xferCombo->addItem(p.first, p.second);
-        alignCombo->addItem(p.first, p.second);
+    // Working copy of lines — edited locally until OK
+    QList<AccessSpecLine> lines = spec.lines;
+    if (lines.isEmpty()) {
+        AccessSpecLine l; l.sizeBytes = 65536; l.ofSize = 100;
+        lines.append(l);
     }
-    for (int i = 0; i < XFER_SIZES.size(); ++i)
-        if (XFER_SIZES[i].second == spec.xferSizeBytes) { xferCombo->setCurrentIndex(i); break; }
-    for (int i = 0; i < XFER_SIZES.size(); ++i)
-        if (XFER_SIZES[i].second == spec.alignBytes)    { alignCombo->setCurrentIndex(i); break; }
 
-    auto *readSpin  = new QSpinBox;  readSpin->setRange(0,100);  readSpin->setValue(spec.readPercent); readSpin->setSuffix(" %");
-    auto *seqSpin   = new QSpinBox;  seqSpin->setRange(0,100);   seqSpin->setValue(spec.seqPercent);  seqSpin->setSuffix(" %");
-    auto *burstSpin = new QSpinBox;  burstSpin->setRange(1,1024); burstSpin->setValue(spec.burstLength);
-    auto *delaySpin = new QDoubleSpinBox; delaySpin->setRange(0,60000); delaySpin->setValue(spec.delayMs); delaySpin->setSuffix(" ms");
-    auto *iterSpin  = new QSpinBox;  iterSpin->setRange(0,1000000); iterSpin->setValue(spec.iterations);
-    iterSpin->setSpecialValueText("Unlimited");
-    auto *defChk    = new QCheckBox; defChk->setChecked(spec.defaultSpec);
+    bool updating = false;
 
-    form->addRow("Name:",             nameEdit);
-    form->addRow("Transfer size:",    xferCombo);
-    form->addRow("Alignment:",        alignCombo);
-    form->addRow("Read %:",           readSpin);
-    form->addRow("Sequential %:",     seqSpin);
-    form->addRow("Burst length:",     burstSpin);
-    form->addRow("Delay:",            delaySpin);
-    form->addRow("Iterations:",       iterSpin);
-    form->addRow("Default spec:",     defChk);
+    // ── Top row: Name + Default Assignment ──────────────────────────────────
+    auto *nameEdit    = new QLineEdit(spec.name);
+    auto *defCombo    = new QComboBox;
+    defCombo->addItems({"None", "All Managers"});
+    defCombo->setCurrentIndex(spec.defaultSpec ? 1 : 0);
 
+    // ── Access-line table ────────────────────────────────────────────────────
+    auto *table = new QTableWidget(0, 8);
+    table->setHorizontalHeaderLabels({"Size", "% Access", "% Read", "% Random",
+                                      "Delay", "Burst", "Alignment", "Reply"});
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setStretchLastSection(true);
+    // Compact row height: the original Windows list control uses ~14px rows.
+    // Qt's default is ~28-30px because of cell padding; override both the
+    // section size AND the item padding via stylesheet.
+    table->verticalHeader()->hide();
+    table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    table->verticalHeader()->setMinimumSectionSize(1);  // remove font-height floor
+    table->verticalHeader()->setDefaultSectionSize(14);
+    table->setStyleSheet("QTableWidget::item { padding: 0px 3px; }");
+    table->setStyle(QStyleFactory::create("Fusion"));
+    table->setFixedHeight(175);
+
+    auto *insBefBtn = new QPushButton("Insert Before");
+    auto *insAftBtn = new QPushButton("Insert After");
+    auto *delBtn    = new QPushButton("Delete");
+
+    // ── Transfer Request Size ─────────────────────────────────────────────
+    QSpinBox *szMb, *szKb, *szB;
+    auto *szLay = makeSizeSpinners(&szMb, &szKb, &szB);
+
+    // ── % of Access Specification ─────────────────────────────────────────
+    auto *ofSzSlider = new QSlider(Qt::Horizontal); ofSzSlider->setRange(0,100);
+    auto *ofSzLbl    = new QLabel("100 Percent");
+
+    // ── % Read/Write ──────────────────────────────────────────────────────
+    auto *rdSlider = new QSlider(Qt::Horizontal); rdSlider->setRange(0,100);
+
+    // ── % Random/Sequential ───────────────────────────────────────────────
+    auto *rndSlider = new QSlider(Qt::Horizontal); rndSlider->setRange(0,100);
+
+    // ── Burstiness ────────────────────────────────────────────────────────
+    auto *delaySpin = new QDoubleSpinBox;
+    delaySpin->setRange(0, 60000); delaySpin->setSuffix(" ms"); delaySpin->setFixedWidth(80);
+    auto *burstSpin = new QSpinBox;
+    burstSpin->setRange(1, 65536); burstSpin->setSuffix(" I/Os"); burstSpin->setFixedWidth(80);
+
+    // ── Align I/Os on ─────────────────────────────────────────────────────
+    auto *alReqRad  = new QRadioButton("Request Size Boundaries");
+    auto *alSectRad = new QRadioButton("Sector Boundaries");
+    auto *alCustRad = new QRadioButton;
+    auto *alBtnGrp  = new QButtonGroup(&dlg);
+    alBtnGrp->addButton(alReqRad, 0);
+    alBtnGrp->addButton(alSectRad, 1);
+    alBtnGrp->addButton(alCustRad, 2);
+    alSectRad->setChecked(true);
+    QSpinBox *alMb, *alKb, *alB;
+    auto *alLay = makeSizeSpinners(&alMb, &alKb, &alB);
+
+    // ── Reply Size ────────────────────────────────────────────────────────
+    auto *rpNoneRad = new QRadioButton("No Reply");
+    auto *rpCustRad = new QRadioButton;
+    auto *rpBtnGrp  = new QButtonGroup(&dlg);
+    rpBtnGrp->addButton(rpNoneRad, 0);
+    rpBtnGrp->addButton(rpCustRad, 1);
+    rpNoneRad->setChecked(true);
+    QSpinBox *rpMb, *rpKb, *rpB;
+    auto *rpLay = makeSizeSpinners(&rpMb, &rpKb, &rpB);
+
+    // ── Helpers: populate table & sync controls ───────────────────────────
+    auto populateTable = [&]() {
+        bool wasBlocked = table->blockSignals(true);
+        int cur = table->currentRow();
+        table->setRowCount(lines.size());
+        for (int r = 0; r < lines.size(); ++r) {
+            const auto &l = lines[r];
+            QString align;
+            if      (l.alignBytes < 0) align = "req size";
+            else if (l.alignBytes == 0) align = "sector";
+            else    align = formatSizeCompact(l.alignBytes);
+            table->setItem(r, 0, new QTableWidgetItem(formatSizeCompact(l.sizeBytes)));
+            table->setItem(r, 1, new QTableWidgetItem(QString::number(l.ofSize)));
+            table->setItem(r, 2, new QTableWidgetItem(QString::number(l.readPercent)));
+            table->setItem(r, 3, new QTableWidgetItem(QString::number(100 - l.seqPercent)));
+            table->setItem(r, 4, new QTableWidgetItem(QString::number(l.delayMs, 'f', 0)));
+            table->setItem(r, 5, new QTableWidgetItem(QString::number(l.burstLength)));
+            table->setItem(r, 6, new QTableWidgetItem(align));
+            table->setItem(r, 7, new QTableWidgetItem(l.replyBytes == 0 ? "none"
+                                     : formatSizeCompact(l.replyBytes)));
+            table->setRowHeight(r, 14);
+        }
+        table->blockSignals(wasBlocked);
+        if (cur >= 0 && cur < lines.size()) table->selectRow(cur);
+    };
+
+    auto loadControls = [&](int row) {
+        if (updating || row < 0 || row >= lines.size()) return;
+        updating = true;
+        const auto &l = lines[row];
+        setSizeSpinners(szMb, szKb, szB, l.sizeBytes);
+        ofSzSlider->setValue(l.ofSize);
+        ofSzLbl->setText(QString("%1 Percent").arg(l.ofSize));
+        rdSlider->setValue(l.readPercent);
+        rndSlider->setValue(100 - l.seqPercent);
+        delaySpin->setValue(l.delayMs);
+        burstSpin->setValue(l.burstLength);
+        if      (l.alignBytes < 0)  alReqRad->setChecked(true);
+        else if (l.alignBytes == 0) alSectRad->setChecked(true);
+        else {
+            alCustRad->setChecked(true);
+            setSizeSpinners(alMb, alKb, alB, l.alignBytes);
+        }
+        rpNoneRad->setChecked(l.replyBytes == 0);
+        rpCustRad->setChecked(l.replyBytes > 0);
+        if (l.replyBytes > 0) setSizeSpinners(rpMb, rpKb, rpB, l.replyBytes);
+        updating = false;
+    };
+
+    auto saveControls = [&](int row) {
+        if (updating || row < 0 || row >= lines.size()) return;
+        auto &l = lines[row];
+        l.sizeBytes   = readSizeSpinners(szMb, szKb, szB);
+        l.ofSize      = ofSzSlider->value();
+        l.readPercent = rdSlider->value();
+        l.seqPercent  = 100 - rndSlider->value();
+        l.delayMs     = delaySpin->value();
+        l.burstLength = burstSpin->value();
+        if      (alReqRad->isChecked())  l.alignBytes = -1;
+        else if (alSectRad->isChecked()) l.alignBytes =  0;
+        else    l.alignBytes = readSizeSpinners(alMb, alKb, alB);
+        if (rpNoneRad->isChecked()) l.replyBytes = 0;
+        else    l.replyBytes = readSizeSpinners(rpMb, rpKb, rpB);
+        populateTable();
+    };
+
+    // ── Connections ───────────────────────────────────────────────────────
+    QObject::connect(table, &QTableWidget::currentCellChanged,
+        [&](int newRow, int, int oldRow, int) {
+            if (!updating) saveControls(oldRow);
+            loadControls(newRow);
+        });
+
+    // Any control change → save back to selected line
+    auto onCtrlChanged = [&]() { saveControls(table->currentRow()); };
+    QObject::connect(szMb,  QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(szKb,  QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(szB,   QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(ofSzSlider, &QSlider::valueChanged, &dlg, [&](int v) {
+        ofSzLbl->setText(QString("%1 Percent").arg(v));
+        onCtrlChanged();
+    });
+    QObject::connect(rdSlider,  &QSlider::valueChanged,  &dlg, onCtrlChanged);
+    QObject::connect(rndSlider, &QSlider::valueChanged,  &dlg, onCtrlChanged);
+    QObject::connect(delaySpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(burstSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(alReqRad,  &QRadioButton::toggled, &dlg, onCtrlChanged);
+    QObject::connect(alSectRad, &QRadioButton::toggled, &dlg, onCtrlChanged);
+    QObject::connect(alCustRad, &QRadioButton::toggled, &dlg, onCtrlChanged);
+    QObject::connect(alMb, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(alKb, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(alB,  QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(rpNoneRad, &QRadioButton::toggled, &dlg, onCtrlChanged);
+    QObject::connect(rpCustRad, &QRadioButton::toggled, &dlg, onCtrlChanged);
+    QObject::connect(rpMb, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(rpKb, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+    QObject::connect(rpB,  QOverload<int>::of(&QSpinBox::valueChanged), &dlg, onCtrlChanged);
+
+    // Insert / Delete row buttons
+    QObject::connect(insBefBtn, &QPushButton::clicked, &dlg, [&]() {
+        int r = table->currentRow();
+        if (r < 0) r = 0;
+        AccessSpecLine l; l.ofSize = 100;
+        lines.insert(r, l);
+        populateTable();
+        table->selectRow(r);
+    });
+    QObject::connect(insAftBtn, &QPushButton::clicked, &dlg, [&]() {
+        int r = table->currentRow();
+        int ins = (r < 0) ? lines.size() : r + 1;
+        AccessSpecLine l; l.ofSize = 100;
+        lines.insert(ins, l);
+        populateTable();
+        table->selectRow(ins);
+    });
+    QObject::connect(delBtn, &QPushButton::clicked, &dlg, [&]() {
+        int r = table->currentRow();
+        if (r < 0 || lines.size() <= 1) return;  // keep at least one line
+        lines.removeAt(r);
+        populateTable();
+        table->selectRow(qMin(r, lines.size() - 1));
+    });
+
+    // ── Layout ───────────────────────────────────────────────────────────
+    auto *root = new QVBoxLayout(&dlg);
+    root->setSpacing(6);
+
+    // Top: Name + Default Assignment
+    {
+        auto *row = new QHBoxLayout;
+        row->addWidget(new QLabel("Name:"));
+        row->addWidget(nameEdit, 1);
+        row->addSpacing(12);
+        row->addWidget(new QLabel("Default Assignment:"));
+        row->addWidget(defCombo);
+        root->addLayout(row);
+    }
+
+    // Table + buttons
+    {
+        auto *row = new QHBoxLayout;
+        row->addWidget(table, 1);
+        auto *btnCol = new QVBoxLayout;
+        btnCol->addWidget(insBefBtn);
+        btnCol->addWidget(insAftBtn);
+        btnCol->addWidget(delBtn);
+        btnCol->addStretch();
+        row->addLayout(btnCol);
+        root->addLayout(row);
+    }
+
+    // Editing controls — 3×2 grid of group boxes
+    {
+        auto *grid = new QGridLayout;
+        grid->setSpacing(6);
+
+        // ── Transfer Request Size ────────────────────────────────────────
+        auto *szGrp = new QGroupBox("Transfer Request Size");
+        auto *szGL  = new QVBoxLayout(szGrp);
+        szGL->addLayout(szLay);
+        grid->addWidget(szGrp, 0, 0);
+
+        // ── % of Access Specification ─────────────────────────────────
+        auto *ofGrp = new QGroupBox("Percent of Access Specification");
+        auto *ofGL  = new QVBoxLayout(ofGrp);
+        ofGL->addWidget(ofSzSlider);
+        ofGL->addWidget(ofSzLbl, 0, Qt::AlignCenter);
+        grid->addWidget(ofGrp, 0, 1);
+
+        // ── % Read/Write Distribution ─────────────────────────────────
+        auto *rdGrp = new QGroupBox("Percent Read/Write Distribution");
+        auto *rdGL  = new QVBoxLayout(rdGrp);
+        rdGL->addWidget(rdSlider);
+        {
+            auto *rl = new QHBoxLayout;
+            rl->addWidget(new QLabel("0%\nWrite"));
+            rl->addStretch();
+            rl->addWidget(new QLabel("100%\nRead"));
+            rdGL->addLayout(rl);
+        }
+        grid->addWidget(rdGrp, 0, 2);
+
+        // ── % Random/Sequential ───────────────────────────────────────
+        auto *rndGrp = new QGroupBox("Percent Random/Sequential Distribution");
+        auto *rndGL  = new QVBoxLayout(rndGrp);
+        rndGL->addWidget(rndSlider);
+        {
+            auto *rl = new QHBoxLayout;
+            rl->addWidget(new QLabel("100%\nSequential"));
+            rl->addStretch();
+            rl->addWidget(new QLabel("0%\nRandom"));
+            rndGL->addLayout(rl);
+        }
+        grid->addWidget(rndGrp, 1, 0);
+
+        // ── Burstiness ───────────────────────────────────────────────
+        auto *bstGrp = new QGroupBox("Burstiness");
+        auto *bstGL  = new QFormLayout(bstGrp);
+        bstGL->addRow("Transfer Delay:", delaySpin);
+        bstGL->addRow("Burst Length:",   burstSpin);
+        grid->addWidget(bstGrp, 1, 1);
+
+        // ── Align I/Os on ────────────────────────────────────────────
+        auto *alGrp = new QGroupBox("Align I/Os on");
+        auto *alGL  = new QVBoxLayout(alGrp);
+        alGL->addWidget(alReqRad);
+        alGL->addWidget(alSectRad);
+        {
+            auto *cr = new QHBoxLayout;
+            cr->addWidget(alCustRad);
+            cr->addLayout(alLay);
+            alGL->addLayout(cr);
+        }
+        grid->addWidget(alGrp, 1, 2);
+
+        root->addLayout(grid);
+    }
+
+    // Reply Size (below grid, left-aligned)
+    {
+        auto *rpGrp = new QGroupBox("Reply Size");
+        auto *rpGL  = new QVBoxLayout(rpGrp);
+        rpGL->addWidget(rpNoneRad);
+        {
+            auto *cr = new QHBoxLayout;
+            cr->addWidget(rpCustRad);
+            cr->addLayout(rpLay);
+            rpGL->addLayout(cr);
+        }
+        auto *row = new QHBoxLayout;
+        row->addWidget(rpGrp);
+        row->addStretch(1);
+        root->addLayout(row);
+    }
+
+    // OK / Cancel
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    root->addWidget(buttons);
+
+    // ── Initialise ───────────────────────────────────────────────────────
+    populateTable();
+    if (!lines.isEmpty()) {
+        table->selectRow(0);
+        loadControls(0);
+    }
 
     if (dlg.exec() != QDialog::Accepted) return false;
 
-    spec.name          = nameEdit->text().trimmed();
-    spec.xferSizeBytes = xferCombo->currentData().toInt();
-    spec.alignBytes    = alignCombo->currentData().toInt();
-    spec.readPercent   = readSpin->value();
-    spec.seqPercent    = seqSpin->value();
-    spec.burstLength   = burstSpin->value();
-    spec.delayMs       = delaySpin->value();
-    spec.iterations    = iterSpin->value();
-    spec.defaultSpec   = defChk->isChecked();
+    // Save the currently selected row before accepting
+    saveControls(table->currentRow());
+
+    spec.name        = nameEdit->text().trimmed();
+    spec.defaultSpec = (defCombo->currentIndex() > 0);
+    spec.lines       = lines;
     return true;
 }
 
@@ -291,6 +645,8 @@ void PageAccess::onNewSpec()
 {
     AccessSpec s;
     s.name = QString("New Spec %1").arg(m_engine->accessSpecs().size() + 1);
+    AccessSpecLine l; l.sizeBytes = 4096; l.ofSize = 100;
+    s.lines.append(l);
     if (!editSpecDialog(s, "New Access Specification")) return;
     auto specs = m_engine->accessSpecs();
     specs.append(s);

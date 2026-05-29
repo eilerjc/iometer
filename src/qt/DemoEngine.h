@@ -32,6 +32,7 @@ public:
 
     QList<AccessSpec>   accessSpecs()   const override { return m_specs; }
     void setAccessSpecs(const QList<AccessSpec> &specs) override { m_specs = specs; }
+    void setCurrentTestSpec(const AccessSpec &spec) override { m_currentTestSpec = spec; }
 
     TestConfig testConfig()             const override { return m_testConfig; }
     void setTestConfig(const TestConfig &cfg) override { m_testConfig = cfg; }
@@ -49,6 +50,7 @@ private:
 
     QList<ManagerInfo>    m_managers;
     QList<AccessSpec>     m_specs;
+    AccessSpec            m_currentTestSpec;
     QVector<WorkerResult> m_current;
     QVector<WorkerResult> m_saved;
     TestConfig            m_testConfig;

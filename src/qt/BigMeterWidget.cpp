@@ -1,5 +1,12 @@
 // BigMeterWidget.cpp
 // Qt port of CBigMeter — Iometer "Presentation Meter" window.
+//
+// Layout (top to bottom) matches the original:
+//   1. Speedometer gauge — fills most of the window
+//   2. Large numeric value with units  (blue, ~22pt bold)
+//   3. Subtitle "All Managers — <metric name>"  (plain, smaller)
+//   4. Separator
+//   5. Two side-by-side groups: [Settings] | [Test Controls]
 
 #include "BigMeterWidget.h"
 #include "MeterWidget.h"
@@ -11,9 +18,11 @@
 #include <QCheckBox>
 #include <QSpinBox>
 #include <QComboBox>
+#include <QGroupBox>
 #include <QFont>
 #include <QSizePolicy>
 #include <QFrame>
+#include <QPalette>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Construction
@@ -24,53 +33,55 @@ BigMeterWidget::BigMeterWidget(QWidget *parent)
 {
     setupUi();
     setWindowTitle("Iometer — Presentation Meter");
-    resize(440, 520);
+    resize(600, 580);
 }
 
 void BigMeterWidget::setupUi()
 {
-    // No custom stylesheet — use native Windows look to match the rest of the UI.
-
     auto *root = new QVBoxLayout(this);
-    root->setSpacing(6);
-    root->setContentsMargins(10, 10, 10, 10);
+    root->setSpacing(4);
+    root->setContentsMargins(8, 8, 8, 8);
 
-    // ── Test title ──────────────────────────────────────────────────────
-    m_titleLabel = new QLabel("(No test running)");
-    QFont tf("Arial", 14, QFont::Bold);
-    m_titleLabel->setFont(tf);
-    m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    root->addWidget(m_titleLabel);
-
-    // ── Worker / result name ─────────────────────────────────────────────
-    m_workerLabel = new QLabel;
-    QFont wf("Arial", 11);
-    m_workerLabel->setFont(wf);
-    m_workerLabel->setAlignment(Qt::AlignCenter);
-    root->addWidget(m_workerLabel);
-
-    // ── Speedometer (takes up most of the space) ─────────────────────────
+    // ── 1. Speedometer (takes up most of the space) ──────────────────────
     m_meter = new MeterWidget;
     m_meter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     root->addWidget(m_meter, 1);
 
-    // ── Large numeric readout ────────────────────────────────────────────
+    // ── 2. Large numeric readout with units ──────────────────────────────
     m_valueLabel = new QLabel("0");
     QFont vf("Arial", 22, QFont::Bold);
     m_valueLabel->setFont(vf);
     m_valueLabel->setAlignment(Qt::AlignCenter);
+    // Use palette for colour — avoids a global stylesheet
+    QPalette vp = m_valueLabel->palette();
+    vp.setColor(QPalette::WindowText, QColor(0x44, 0x88, 0xbb));
+    m_valueLabel->setPalette(vp);
     root->addWidget(m_valueLabel);
 
-    // ── Separator ────────────────────────────────────────────────────────
+    // ── 3. Subtitle: "All Managers — <metric>" ───────────────────────────
+    // m_titleLabel kept as a (hidden) member for setTitle() back-compat;
+    // setTitle() now routes to setWindowTitle() so we don't add it to the layout.
+    m_titleLabel  = new QLabel;
+    m_workerLabel = new QLabel;
+    QFont wf("Arial", 10);
+    m_workerLabel->setFont(wf);
+    m_workerLabel->setAlignment(Qt::AlignCenter);
+    root->addWidget(m_workerLabel);
+
+    // ── 4. Separator ─────────────────────────────────────────────────────
     auto *sep = new QFrame;
     sep->setFrameShape(QFrame::HLine);
     sep->setFrameShadow(QFrame::Sunken);
     root->addWidget(sep);
 
-    // ── Metric selector ──────────────────────────────────────────────────
-    auto *metricRow = new QHBoxLayout;
-    auto *metricLbl = new QLabel("Metric:");
-    metricLbl->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    // ── 5. Bottom: [Settings] | [Test Controls] ──────────────────────────
+    auto *bottomRow = new QHBoxLayout;
+
+    // Settings group
+    auto *settingsGroup = new QGroupBox("Settings");
+    auto *settingsLay   = new QVBoxLayout(settingsGroup);
+    settingsLay->setSpacing(4);
+
     m_resultType = new QComboBox;
     m_resultType->addItems({
         "IOps",
@@ -86,35 +97,35 @@ void BigMeterWidget::setupUi()
         "CPU User (%)",
         "CPU Kernel (%)",
     });
-    metricRow->addWidget(metricLbl);
-    metricRow->addWidget(m_resultType, 1);
-    root->addLayout(metricRow);
+    settingsLay->addWidget(m_resultType);
 
-    // ── Max range + watermark ─────────────────────────────────────────────
-    auto *optRow = new QHBoxLayout;
-    auto *maxLbl = new QLabel("Max:");
-    maxLbl->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    auto *rangeRow = new QHBoxLayout;
+    auto *rangeLbl = new QLabel("Range");
     m_maxRangeSpin = new QSpinBox;
     m_maxRangeSpin->setRange(0, 10000000);
     m_maxRangeSpin->setValue(0);
-    m_maxRangeSpin->setSpecialValueText("Auto");
-    m_maxRangeSpin->setSingleStep(1000);
-    m_watermarkChk = new QCheckBox("Show Watermark");
-    optRow->addWidget(maxLbl);
-    optRow->addWidget(m_maxRangeSpin);
-    optRow->addSpacing(12);
-    optRow->addWidget(m_watermarkChk);
-    optRow->addStretch();
-    root->addLayout(optRow);
+    m_maxRangeSpin->setFixedWidth(80);
+    m_watermarkChk = new QCheckBox("Show Trace");
+    rangeRow->addWidget(rangeLbl);
+    rangeRow->addWidget(m_maxRangeSpin);
+    rangeRow->addSpacing(8);
+    rangeRow->addWidget(m_watermarkChk);
+    rangeRow->addStretch();
+    settingsLay->addLayout(rangeRow);
 
-    // ── Buttons ───────────────────────────────────────────────────────────
-    auto *btnRow = new QHBoxLayout;
+    bottomRow->addWidget(settingsGroup, 1);
+
+    // Test Controls group
+    auto *ctrlGroup = new QGroupBox("Test Controls");
+    auto *ctrlLay   = new QHBoxLayout(ctrlGroup);
     m_startNextBtn = new QPushButton("Start");
     m_stopBtn      = new QPushButton("Stop");
-    btnRow->addStretch();
-    btnRow->addWidget(m_startNextBtn);
-    btnRow->addWidget(m_stopBtn);
-    root->addLayout(btnRow);
+    ctrlLay->addStretch();
+    ctrlLay->addWidget(m_startNextBtn);
+    ctrlLay->addWidget(m_stopBtn);
+    bottomRow->addWidget(ctrlGroup);
+
+    root->addLayout(bottomRow);
 
     // ── Wire up signals ───────────────────────────────────────────────────
     connect(m_startNextBtn, &QPushButton::clicked,
@@ -125,8 +136,8 @@ void BigMeterWidget::setupUi()
             this,           &BigMeterWidget::onWatermarkToggled);
     connect(m_maxRangeSpin, QOverload<int>::of(&QSpinBox::valueChanged),
             this,           &BigMeterWidget::onMaxRangeChanged);
-    connect(m_resultType, &QComboBox::currentTextChanged,
-            this,         &BigMeterWidget::onResultTypeChanged);
+    connect(m_resultType,   &QComboBox::currentTextChanged,
+            this,           &BigMeterWidget::onResultTypeChanged);
 
     // Initialise the meter and button states
     m_meter->setRange(0, 100, true);
@@ -139,7 +150,8 @@ void BigMeterWidget::setupUi()
 
 void BigMeterWidget::setTitle(const QString &testTitle)
 {
-    m_titleLabel->setText(testTitle.isEmpty() ? "(No test running)" : testTitle);
+    // Route to the OS window title bar — no separate in-window title label.
+    setWindowTitle(testTitle.isEmpty() ? "Iometer — Presentation Meter" : testTitle);
 }
 
 void BigMeterWidget::setWorkerResult(const QString &workerName,
@@ -246,6 +258,6 @@ void BigMeterWidget::onMaxRangeChanged(int value)
 void BigMeterWidget::onResultTypeChanged(const QString &text)
 {
     m_resultName = text;
-    setWorkerResult(m_workerName, text);   // update the label
+    setWorkerResult(m_workerName, text);   // update the subtitle label
     emit resultTypeChanged(text);
 }

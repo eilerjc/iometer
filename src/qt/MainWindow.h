@@ -5,6 +5,7 @@
 #include "IometerTypes.h"
 #include <QMainWindow>
 #include <QVector>
+#include <QFile>
 
 class IometerEngine;
 class PageDisplay;
@@ -72,19 +73,19 @@ private:
     void setRunningState(bool running);
     void updateTopologyButtons();   // enable/disable per-selection buttons
 
-    // Icon helpers (static, paint raised-3D bitmaps matching original)
+    // Icon helpers — pixel-faithful replicas of the original toolbar bitmaps
     static QIcon makeOpenIcon();
     static QIcon makeSaveIcon();
-    static QIcon makeNewIcon();          // Reset / new config
-    static QIcon makeStartIcon();
-    static QIcon makeStopIcon(bool all);
-    static QIcon makeMeterIcon();
     static QIcon makeNewDynamoIcon();
     static QIcon makeNewDiskWorkerIcon();
     static QIcon makeNewNetWorkerIcon();
     static QIcon makeCopyWorkerIcon();
-    static QIcon makeExitOneIcon();
-    static QIcon makeHelpIcon();
+    static QIcon makeStartIcon();
+    static QIcon makeStopIcon(bool all);
+    static QIcon makeResetIcon();        // tlb10 — curved yellow arrow
+    static QIcon makeExitOneIcon();      // tlb11 — inward red arrows
+    static QIcon makeExitIcon();         // tlb12 — green door
+    static QIcon makeHelpIcon();         // tlb13 — yellow "?"
 
     // ---- Engine ---------------------------------------------------------------
     IometerEngine *m_engine = nullptr;
@@ -114,8 +115,9 @@ private:
     QAction *m_actStopAll        = nullptr;   // BStopAll
     QAction *m_actNew            = nullptr;   // BReset
     QAction *m_actExitOne        = nullptr;   // BExitOne
-    QAction *m_actBigMeter       = nullptr;   // (Qt addition)
+    QAction *m_actExit           = nullptr;   // Exit Iometer
     QAction *m_actHelp           = nullptr;   // ID_APP_ABOUT
+    QAction *m_actBigMeter       = nullptr;   // Presentation Meter (menu only)
 
     // ---- Status bar ----------------------------------------------------------
     QLabel *m_statusLeft         = nullptr;
@@ -124,6 +126,13 @@ private:
     // ---- Current topology selection (drives button enable/disable) -----------
     QString m_selManagerName;
     QString m_selWorkerId;
+    int     m_deletedWorkerPos = -1;
 
-    bool m_running = false;
+    bool    m_running      = false;
+    QFile  *m_resultsFile  = nullptr;
+
+    // Spec cycling state
+    QList<AccessSpec> m_runQueue;        // specs to run in order this test session
+    int               m_runQueueIdx  = 0;
+    bool              m_specAdvancing = false;  // true = Stop was "advance", false = abort
 };

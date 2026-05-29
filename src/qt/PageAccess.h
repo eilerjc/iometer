@@ -20,6 +20,10 @@ public:
 
 public slots:
     void loadSpecList();   // rebuild both panels from engine state
+    void setActiveSpecIndex(int idx);  // highlight the currently-running assigned spec (-1 = none)
+
+    // Returns the AccessSpec objects currently in the Assigned list, in order.
+    QList<AccessSpec> currentAssignedSpecs() const;
 
 private slots:
     void onAddToAssigned();

@@ -57,8 +57,12 @@ set(HEADERS
     MainWindow.h
 )
 
+# ── Qt resources (toolbar bitmap etc.) ───────────────────────────────────────
+set(CMAKE_AUTORCC ON)
+set(RESOURCES resources.qrc)
+
 # ── Executable ────────────────────────────────────────────────────────────────
-add_executable(IometerQt ${SOURCES} ${HEADERS})
+add_executable(IometerQt ${SOURCES} ${HEADERS} ${RESOURCES})
 target_link_libraries(IometerQt PRIVATE ${_QT}::Widgets ${_QT}::Network)
 
 # On Windows: GUI subsystem (no console window)

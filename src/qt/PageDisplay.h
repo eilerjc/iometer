@@ -5,6 +5,7 @@
 #include "IometerTypes.h"
 #include <QWidget>
 #include <QVector>
+#include <QProgressBar>
 
 class BigMeterWidget;
 class IometerEngine;
@@ -29,19 +30,25 @@ public slots:
     void onBigMeterClicked();
     void refreshWorkerAssignments();
 
+signals:
+    void nextSpecRequested();   // BigMeter "Next >>" button — advance to next spec
+
 private slots:
-    void onMetricRowClicked(int row);
+    void onMetricButtonClicked(int row);  // popup menu to switch metric
+    void onMetricRowClicked(int row);     // ">" button — open BigMeter
 
 private:
     // One display row (matches original "Total I/Os per Second" row etc.)
     struct DisplayRow {
-        int         resultType;     // RESULT_* constant
+        int          resultType;    // RESULT_* constant
         QPushButton *metricBtn;     // left button with metric name
         QLabel      *workerLbl;     // "All Managers"
-        QLabel      *valueLbl;      // live value
-        QLabel      *refLbl;        // reference (start-of-test) value
+        QLabel      *valueLbl;      // live numeric value (separate from the bar)
+        QProgressBar*bar;           // proportional fill indicator (no text)
+        QLabel      *refLbl;        // scale ceiling (power of 10)
         QPushButton *expandBtn;     // ">" -- opens BigMeter
         double       refValue = 0.0;
+        double       maxSeen  = 0.0; // 0 = not yet set; updated to pow-of-10 ceiling
     };
 
     void setupUi();

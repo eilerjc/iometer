@@ -7,19 +7,48 @@
 // ---- Result types (match IDR_POPUP_DISPLAY_LIST order) ----------------------
 
 enum ResultType {
+    // Operations per Second submenu
     RESULT_IOPS = 0,
-    RESULT_MBPS_DEC,
-    RESULT_MBPS_BIN,
     RESULT_READ_IOPS,
     RESULT_WRITE_IOPS,
+    RESULT_TRANS_PS,            // Transactions per Second (network)
+    RESULT_CONN_PS,             // Connections per Second (network)
+    // Megabytes per Second submenu
+    RESULT_MBPS_DEC,
     RESULT_READ_MBPS_DEC,
     RESULT_WRITE_MBPS_DEC,
+    RESULT_MBPS_BIN,
+    RESULT_READ_MBPS_BIN,
+    RESULT_WRITE_MBPS_BIN,
+    // Average Latency submenu
     RESULT_AVG_LATENCY_MS,
+    RESULT_AVG_READ_LATENCY_MS,
+    RESULT_AVG_WRITE_LATENCY_MS,
+    RESULT_AVG_TRANS_LATENCY_MS,
+    RESULT_AVG_CONN_LATENCY_MS,
+    // Maximum Latency submenu
     RESULT_MAX_LATENCY_MS,
+    RESULT_MAX_READ_LATENCY_MS,
+    RESULT_MAX_WRITE_LATENCY_MS,
+    RESULT_MAX_TRANS_LATENCY_MS,
+    RESULT_MAX_CONN_LATENCY_MS,
+    // CPU submenu
     RESULT_CPU_UTIL,
     RESULT_CPU_USER,
-    RESULT_CPU_KERNEL,
+    RESULT_CPU_KERNEL,          // % Privileged Time in original
+    RESULT_CPU_DPC,
+    RESULT_CPU_INT_TIME,
+    RESULT_CPU_INTERRUPTS_PS,
+    RESULT_CPU_EFFECTIVENESS,
+    // Network submenu
+    RESULT_NET_PACKETS_PS,
+    RESULT_NET_PACKET_ERRORS,
+    RESULT_NET_RETRANS_PS,
+    // Errors submenu
     RESULT_ERRORS,
+    RESULT_READ_ERRORS,
+    RESULT_WRITE_ERRORS,
+
     NUM_RESULT_TYPES
 };
 
@@ -79,47 +108,66 @@ struct WorkerResult {
 
     double get(int resultType) const {
         switch (resultType) {
-            case RESULT_IOPS:           return iops;
-            case RESULT_MBPS_DEC:       return mbpsDec;
-            case RESULT_MBPS_BIN:       return mbpsBin;
-            case RESULT_READ_IOPS:      return readIops;
-            case RESULT_WRITE_IOPS:     return writeIops;
-            case RESULT_READ_MBPS_DEC:  return readMbpsDec;
-            case RESULT_WRITE_MBPS_DEC: return writeMbpsDec;
-            case RESULT_AVG_LATENCY_MS: return avgLatencyMs;
-            case RESULT_MAX_LATENCY_MS: return maxLatencyMs;
-            case RESULT_CPU_UTIL:       return cpuUtil;
-            case RESULT_CPU_USER:       return cpuUser;
-            case RESULT_CPU_KERNEL:     return cpuKernel;
-            case RESULT_ERRORS:         return errors;
-            default:                    return 0.0;
+            case RESULT_IOPS:               return iops;
+            case RESULT_READ_IOPS:          return readIops;
+            case RESULT_WRITE_IOPS:         return writeIops;
+            case RESULT_MBPS_DEC:           return mbpsDec;
+            case RESULT_READ_MBPS_DEC:      return readMbpsDec;
+            case RESULT_WRITE_MBPS_DEC:     return writeMbpsDec;
+            case RESULT_MBPS_BIN:           return mbpsBin;
+            case RESULT_AVG_LATENCY_MS:     return avgLatencyMs;
+            case RESULT_MAX_LATENCY_MS:     return maxLatencyMs;
+            case RESULT_CPU_UTIL:           return cpuUtil;
+            case RESULT_CPU_USER:           return cpuUser;
+            case RESULT_CPU_KERNEL:         return cpuKernel;
+            case RESULT_ERRORS:             return errors;
+            // Fields not collected yet — return 0 so the row still works
+            default:                        return 0.0;
         }
     }
 };
 
 // ---- Access specification ---------------------------------------------------
 
-struct AccessSpec {
-    QString name           = "Untitled";
-    int     xferSizeBytes  = 65536;
-    int     alignBytes     = 65536;
-    int     readPercent    = 100;
-    int     seqPercent     = 100;
-    int     burstLength    = 1;
-    double  delayMs        = 0.0;
-    int     iterations     = 0;      // 0 = run until stopped
-    bool    defaultSpec    = false;
+// One I/O pattern row inside an AccessSpec (mirrors Test_Spec::access[i])
+struct AccessSpecLine {
+    int    sizeBytes   = 65536;  // transfer size in bytes
+    int    ofSize      = 100;    // % of access specification (% Access column)
+    int    readPercent = 100;    // % reads (0-100)
+    int    seqPercent  = 100;    // % sequential; randomPercent = 100 - seqPercent
+    int    burstLength = 1;      // burst length (I/Os)
+    double delayMs     = 0.0;    // transfer delay in ms
+    // Alignment: 0 = sector boundaries (512 B on wire),
+    //           -1 = request-size boundaries (size on wire),
+    //           >0 = explicit bytes
+    int    alignBytes  = 0;
+    int    replyBytes  = 0;      // 0 = no reply (network specs only)
+};
 
-    // Format as the original shows in the Global list:
-    // "64 KiB; 100% Read; 0% random"
+// Format one size value as "X MiB Y KiB Z B" (omitting zero components)
+inline QString formatSizeCompact(int bytes) {
+    if (bytes <= 0)              return "0 B";
+    if (bytes >= 1048576)        return QString("%1 MiB").arg(bytes / 1048576);
+    if (bytes >= 1024)           return QString("%1 KiB").arg(bytes / 1024);
+    return                              QString("%1 B").arg(bytes);
+}
+
+struct AccessSpec {
+    QString               name        = "Untitled";
+    bool                  defaultSpec = false;
+    int                   iterations  = 0;         // 0 = run until stopped
+    QList<AccessSpecLine> lines;                    // I/O pattern rows (≥1 for valid specs)
+
+    // Returns a display label matching the original list format.
+    // Single-line specs show "64 KiB; 100% Read; 0% random".
+    // Multi-line specs show their name.
     QString displayLabel() const {
-        // Format size
-        QString sizeStr;
-        if      (xferSizeBytes >= 1048576) sizeStr = QString("%1 MiB").arg(xferSizeBytes / 1048576);
-        else if (xferSizeBytes >= 1024)    sizeStr = QString("%1 KiB").arg(xferSizeBytes / 1024);
-        else                               sizeStr = QString("%1 B").arg(xferSizeBytes);
-        const int randomPct = 100 - seqPercent;
-        return QString("%1; %2% Read; %3% random").arg(sizeStr).arg(readPercent).arg(randomPct);
+        if (lines.size() != 1) return name;
+        const auto &l = lines[0];
+        return QString("%1; %2% Read; %3% random")
+            .arg(formatSizeCompact(l.sizeBytes))
+            .arg(l.readPercent)
+            .arg(100 - l.seqPercent);
     }
 };
 

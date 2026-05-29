@@ -18,6 +18,10 @@
 #include <QMenuBar>
 #include <QMenu>
 #include <QFileDialog>
+#include <QFile>
+#include <QTextStream>
+#include <QDateTime>
+#include <QDir>
 #include <QMessageBox>
 #include <QCloseEvent>
 #include <QApplication>
@@ -33,319 +37,66 @@
 #include <QCoreApplication>
 
 // =============================================================================
-// Icon helpers -- draw classic raised-3D bitmaps matching the original toolbar
+// Icon helpers — load directly from the original Toolbar.bmp resource strip.
+// The strip is 403×31 px, 13 icons each 31 px wide.
+// Background colour (Windows button-face grey) is made transparent.
 // =============================================================================
 
-static void paintRaisedBox(QPainter &p, int w, int h)
-{
-    // Windows classic raised-3D button background
-    p.fillRect(0, 0, w, h, QColor(0xd4, 0xd0, 0xc8));
-    p.setPen(QColor(0xff, 0xff, 0xff));
-    p.drawLine(0, 0, w-2, 0);   // top highlight
-    p.drawLine(0, 0, 0, h-2);   // left highlight
-    p.setPen(QColor(0x80, 0x80, 0x80));
-    p.drawLine(0, h-1, w-1, h-1); // bottom shadow
-    p.drawLine(w-1, 0, w-1, h-1); // right shadow
-    p.setPen(QColor(0x40, 0x40, 0x40));
-    p.drawLine(1, h-2, w-2, h-2);
-    p.drawLine(w-2, 1, w-2, h-2);
-}
+// Indices into the 13-icon strip (left to right, 0-based)
+enum ToolbarIcon {
+    TBI_OPEN        = 0,
+    TBI_SAVE        = 1,
+    TBI_NEW_DYNAMO  = 2,
+    TBI_NEW_DISK    = 3,
+    TBI_NEW_NET     = 4,
+    TBI_COPY_WORKER = 5,
+    TBI_START       = 6,
+    TBI_STOP        = 7,
+    TBI_STOP_ALL    = 8,
+    TBI_RESET       = 9,
+    TBI_EXIT_ONE    = 10,
+    TBI_EXIT        = 11,
+    TBI_HELP        = 12,
+};
 
-QIcon MainWindow::makeNewIcon()
+static QIcon toolbarIcon(int idx)
 {
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    // White page with fold
-    p.setBrush(Qt::white);
-    p.setPen(QColor(0x60, 0x60, 0x60));
-    p.drawRect(5, 3, 11, 16);
-    // Fold corner
-    p.setBrush(QColor(0xd4, 0xd0, 0xc8));
-    p.drawPolygon(QPolygon({ QPoint(12,3), QPoint(16,7), QPoint(16,3) }));
-    p.setBrush(QColor(0xaa, 0xaa, 0xaa));
-    p.drawPolygon(QPolygon({ QPoint(12,3), QPoint(16,7), QPoint(12,7) }));
-    // Lines on page
-    p.setPen(QColor(0xb0, 0xb0, 0xb0));
-    for (int y : {9, 12, 15})
-        p.drawLine(7, y, 14, y);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeOpenIcon()
-{
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    // Folder body
-    p.setBrush(QColor(0xff, 0xcc, 0x33));
-    p.setPen(QColor(0x80, 0x60, 0x00));
-    // Tab
-    p.drawRect(4, 8, 5, 3);
-    // Body
-    p.drawRect(3, 10, 16, 9);
-    // Open flap (slightly lighter)
-    p.setBrush(QColor(0xff, 0xdd, 0x66));
-    p.drawPolygon(QPolygon({ QPoint(3,10), QPoint(19,10), QPoint(17,7), QPoint(3,7) }));
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeSaveIcon()
-{
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    // Floppy body
-    p.setBrush(QColor(0x44, 0x88, 0xcc));
-    p.setPen(QColor(0x22, 0x44, 0x88));
-    p.drawRect(4, 3, 16, 18);
-    // White label area
-    p.setBrush(Qt::white);
-    p.setPen(QColor(0x88, 0x88, 0x88));
-    p.drawRect(6, 4, 12, 7);
-    // Shutter slot
-    p.setBrush(QColor(0x22, 0x22, 0x22));
-    p.setPen(Qt::NoPen);
-    p.drawRect(10, 5, 4, 5);
-    // Lines on label
-    p.setPen(QColor(0xcc, 0xcc, 0xcc));
-    p.drawLine(7, 7, 11, 7);
-    p.drawLine(7, 9, 11, 9);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeStartIcon()
-{
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Green right-pointing triangle (play button)
-    QPolygon tri;
-    tri << QPoint(7, 5) << QPoint(7, 19) << QPoint(19, 12);
-    p.setBrush(QColor(0x00, 0xcc, 0x44));
-    p.setPen(QColor(0x00, 0x66, 0x22));
-    p.drawPolygon(tri);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeStopIcon(bool all)
-{
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Red octagon
-    const int cx = 12, cy = all ? 10 : 12, r = all ? 7 : 9, cut = 2;
-    QPolygon oct;
-    oct << QPoint(cx-r+cut, cy-r) << QPoint(cx+r-cut, cy-r)
-        << QPoint(cx+r, cy-r+cut) << QPoint(cx+r, cy+r-cut)
-        << QPoint(cx+r-cut, cy+r) << QPoint(cx-r+cut, cy+r)
-        << QPoint(cx-r, cy+r-cut) << QPoint(cx-r, cy-r+cut);
-    p.setBrush(QColor(0xcc, 0x00, 0x00));
-    p.setPen(QColor(0x66, 0x00, 0x00));
-    p.drawPolygon(oct);
-    // "STOP" text
-    p.setPen(Qt::white);
-    p.setFont(QFont("Arial", all ? 4 : 5, QFont::Bold));
-    p.drawText(QRect(cx-6, cy-5, 12, 10), Qt::AlignCenter, "STOP");
-    if (all) {
-        p.setFont(QFont("Arial", 4, QFont::Bold));
-        p.setPen(QColor(0xcc, 0x00, 0x00));
-        p.drawText(QRect(3, 18, 18, 5), Qt::AlignCenter, "ALL");
+    // Function-local static: only initialized on first call, after QApplication exists.
+    static QPixmap strip;
+    if (strip.isNull()) {
+        strip.load(":/Toolbar.bmp");
+        if (strip.isNull()) return {};
     }
-    return QIcon(pm);
+
+    const int w = strip.width() / 13;   // 31 px per icon
+    const int h = strip.height();        // 31 px
+
+    QPixmap cell = strip.copy(idx * w, 0, w, h);
+
+    // Make the Windows button-face background transparent.
+    // Original BMP uses the standard Windows grey 0xC0C0C0 as background.
+    QImage img = cell.toImage().convertToFormat(QImage::Format_ARGB32);
+    const QRgb bgKey = qRgb(0xC0, 0xC0, 0xC0);
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+            if ((img.pixel(x, y) & 0x00FFFFFF) == (bgKey & 0x00FFFFFF))
+                img.setPixel(x, y, 0x00000000);
+
+    return QIcon(QPixmap::fromImage(img));
 }
 
-QIcon MainWindow::makeMeterIcon()
-{
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Dark circular face
-    p.setBrush(QColor(0x20, 0x20, 0x20));
-    p.setPen(QColor(0x80, 0x80, 0x80));
-    p.drawEllipse(3, 3, 18, 18);
-    // Tick marks
-    p.setPen(Qt::white);
-    for (int i = 0; i <= 6; ++i) {
-        const double a = (200.0 + i * (140.0/6.0)) * M_PI / 180.0;
-        const int x1 = 12 + (int)(8.0 * std::cos(a));
-        const int y1 = 12 + (int)(8.0 * std::sin(a));
-        const int x2 = 12 + (int)(6.5 * std::cos(a));
-        const int y2 = 12 + (int)(6.5 * std::sin(a));
-        p.drawLine(x1, y1, x2, y2);
-    }
-    // Red needle
-    p.setPen(QPen(Qt::red, 1));
-    p.drawLine(12, 12, 12 + 5, 17);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeNewDynamoIcon()
-{
-    // Gray computer monitor (CRT) — represents "spawn a new Dynamo/manager"
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    // Monitor body
-    p.setBrush(QColor(0x80, 0x80, 0x80));
-    p.setPen(QColor(0x40, 0x40, 0x40));
-    p.drawRect(3, 3, 16, 12);
-    // Screen (dark)
-    p.setBrush(QColor(0x00, 0x44, 0x88));
-    p.setPen(Qt::NoPen);
-    p.drawRect(5, 5, 12, 8);
-    // Base/stand
-    p.setBrush(QColor(0x80, 0x80, 0x80));
-    p.setPen(QColor(0x40, 0x40, 0x40));
-    p.drawRect(9, 15, 4, 3);
-    p.drawRect(6, 18, 10, 2);
-    // Green "+" to indicate "new"
-    p.setPen(QPen(QColor(0x00, 0xcc, 0x00), 2));
-    p.drawLine(18, 3, 18, 9);
-    p.drawLine(15, 6, 21, 6);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeNewDiskWorkerIcon()
-{
-    // Stick figure (worker) + disk — "new disk worker"
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Head
-    p.setBrush(QColor(0xf0, 0xc8, 0x80));
-    p.setPen(QColor(0x60, 0x40, 0x00));
-    p.drawEllipse(3, 2, 6, 6);
-    // Body
-    p.setPen(QPen(QColor(0x20, 0x60, 0xa0), 2));
-    p.drawLine(6, 8, 6, 14);
-    // Arms
-    p.drawLine(2, 10, 10, 10);
-    // Legs
-    p.drawLine(6, 14, 3, 19);
-    p.drawLine(6, 14, 9, 19);
-    // Disk (right side)
-    p.setBrush(QColor(0xcc, 0xcc, 0xcc));
-    p.setPen(QColor(0x60, 0x60, 0x60));
-    p.drawEllipse(13, 8, 8, 8);
-    p.setBrush(QColor(0x88, 0x88, 0x88));
-    p.drawEllipse(16, 11, 2, 2);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeNewNetWorkerIcon()
-{
-    // Stick figure + network nodes — "new network worker"
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Head
-    p.setBrush(QColor(0xf0, 0xc8, 0x80));
-    p.setPen(QColor(0x60, 0x40, 0x00));
-    p.drawEllipse(3, 2, 6, 6);
-    // Body
-    p.setPen(QPen(QColor(0x20, 0x60, 0xa0), 2));
-    p.drawLine(6, 8, 6, 14);
-    p.drawLine(2, 10, 10, 10);
-    p.drawLine(6, 14, 3, 19);
-    p.drawLine(6, 14, 9, 19);
-    // Network nodes (right side): three circles connected
-    p.setPen(QPen(QColor(0x00, 0x80, 0x00), 1));
-    p.setBrush(QColor(0x00, 0xcc, 0x44));
-    p.drawEllipse(13, 5, 5, 5);   // top
-    p.drawEllipse(17, 11, 5, 5);  // right
-    p.drawEllipse(13, 17, 5, 5);  // bottom
-    p.setPen(QPen(QColor(0x00, 0x80, 0x00), 1));
-    p.drawLine(16, 9, 19, 11);
-    p.drawLine(19, 15, 16, 17);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeCopyWorkerIcon()
-{
-    // Two overlapping stick figures — "copy worker"
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Shadow figure (back, offset)
-    p.setBrush(QColor(0xc0, 0xc0, 0xc0));
-    p.setPen(QColor(0x80, 0x80, 0x80));
-    p.drawEllipse(9, 3, 6, 6);
-    p.setPen(QPen(QColor(0x80, 0x80, 0x80), 2));
-    p.drawLine(12, 9, 12, 15);
-    p.drawLine(8, 11, 16, 11);
-    p.drawLine(12, 15, 9, 20);
-    p.drawLine(12, 15, 15, 20);
-    // Front figure
-    p.setBrush(QColor(0xf0, 0xc8, 0x80));
-    p.setPen(QColor(0x60, 0x40, 0x00));
-    p.drawEllipse(3, 5, 6, 6);
-    p.setPen(QPen(QColor(0x20, 0x60, 0xa0), 2));
-    p.drawLine(6, 11, 6, 17);
-    p.drawLine(2, 13, 10, 13);
-    p.drawLine(6, 17, 3, 22);
-    p.drawLine(6, 17, 9, 22);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeExitOneIcon()
-{
-    // Stick figure with a red X — "delete/remove selected"
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Figure (grayed out)
-    p.setBrush(QColor(0xc0, 0xc0, 0xc0));
-    p.setPen(QColor(0x80, 0x80, 0x80));
-    p.drawEllipse(4, 2, 7, 7);
-    p.setPen(QPen(QColor(0x80, 0x80, 0x80), 2));
-    p.drawLine(7, 9, 7, 15);
-    p.drawLine(3, 11, 11, 11);
-    p.drawLine(7, 15, 4, 20);
-    p.drawLine(7, 15, 10, 20);
-    // Red X (top-right)
-    p.setPen(QPen(Qt::red, 2));
-    p.drawLine(15, 4, 21, 10);
-    p.drawLine(21, 4, 15, 10);
-    return QIcon(pm);
-}
-
-QIcon MainWindow::makeHelpIcon()
-{
-    // Blue "?" circle — Help/About
-    QPixmap pm(24, 24);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    paintRaisedBox(p, 24, 24);
-    p.setRenderHint(QPainter::Antialiasing);
-    // Circle
-    p.setBrush(QColor(0x22, 0x66, 0xcc));
-    p.setPen(QColor(0x11, 0x44, 0x99));
-    p.drawEllipse(3, 3, 18, 18);
-    // "?"
-    p.setPen(Qt::white);
-    p.setFont(QFont("Arial", 11, QFont::Bold));
-    p.drawText(QRect(3, 2, 18, 18), Qt::AlignCenter, "?");
-    return QIcon(pm);
-}
+QIcon MainWindow::makeOpenIcon()        { return toolbarIcon(TBI_OPEN);        }
+QIcon MainWindow::makeSaveIcon()        { return toolbarIcon(TBI_SAVE);        }
+QIcon MainWindow::makeNewDynamoIcon()   { return toolbarIcon(TBI_NEW_DYNAMO);  }
+QIcon MainWindow::makeNewDiskWorkerIcon(){ return toolbarIcon(TBI_NEW_DISK);   }
+QIcon MainWindow::makeNewNetWorkerIcon(){ return toolbarIcon(TBI_NEW_NET);     }
+QIcon MainWindow::makeCopyWorkerIcon()  { return toolbarIcon(TBI_COPY_WORKER); }
+QIcon MainWindow::makeStartIcon()       { return toolbarIcon(TBI_START);       }
+QIcon MainWindow::makeStopIcon(bool all){ return toolbarIcon(all ? TBI_STOP_ALL : TBI_STOP); }
+QIcon MainWindow::makeResetIcon()       { return toolbarIcon(TBI_RESET);       }
+QIcon MainWindow::makeExitOneIcon()     { return toolbarIcon(TBI_EXIT_ONE);    }
+QIcon MainWindow::makeExitIcon()        { return toolbarIcon(TBI_EXIT);        }
+QIcon MainWindow::makeHelpIcon()        { return toolbarIcon(TBI_HELP);        }
 
 // =============================================================================
 // MainWindow
@@ -403,10 +154,10 @@ void MainWindow::setupToolBar()
     m_actStopAll         = tb->addAction(makeStopIcon(true),       "Stop All");
     tb->addSeparator();
 
-    // ── Group 4: Config reset / remove item / meter / help ───────────────────
-    m_actNew             = tb->addAction(makeNewIcon(),            "Reset");
+    // ── Group 4: Config reset / remove item / exit / help ────────────────────
+    m_actNew             = tb->addAction(makeResetIcon(),          "Reset");
     m_actExitOne         = tb->addAction(makeExitOneIcon(),        "Delete Selected");
-    m_actBigMeter        = tb->addAction(makeMeterIcon(),          "Presentation Meter");
+    m_actExit            = tb->addAction(makeExitIcon(),           "Exit");
     m_actHelp            = tb->addAction(makeHelpIcon(),           "About");
 
     // ── Tooltips ──────────────────────────────────────────────────────────────
@@ -421,7 +172,7 @@ void MainWindow::setupToolBar()
     m_actStopAll->setToolTip("Stop all tests and reset");
     m_actNew->setToolTip("Reset — clear all workers and start over (Ctrl+N)");
     m_actExitOne->setToolTip("Delete selected worker or disconnect selected manager");
-    m_actBigMeter->setToolTip("Open Presentation Meter");
+    m_actExit->setToolTip("Exit Iometer");
     m_actHelp->setToolTip("About Iometer");
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -443,9 +194,8 @@ void MainWindow::setupToolBar()
     connect(m_actStopAll,       &QAction::triggered, this, &MainWindow::onStopAll);
     connect(m_actNew,           &QAction::triggered, this, &MainWindow::onNew);
     connect(m_actExitOne,       &QAction::triggered, this, &MainWindow::onExitOne);
-    connect(m_actBigMeter,      &QAction::triggered, this, [this]{
-        m_tabs->setCurrentIndex(3);
-        m_pageDisplay->onBigMeterClicked();
+    connect(m_actExit,          &QAction::triggered, this, [this]{
+        close();
     });
     connect(m_actHelp,          &QAction::triggered, this, &MainWindow::onAbout);
 
@@ -471,6 +221,13 @@ void MainWindow::setupToolBar()
     testMenu->addAction(m_actStart);
     testMenu->addAction(m_actStop);
     testMenu->addAction(m_actStopAll);
+
+    // BigMeter is accessible from Results Display; also provide a menu entry
+    m_actBigMeter = new QAction("Presentation Meter", this);
+    connect(m_actBigMeter, &QAction::triggered, this, [this]{
+        m_tabs->setCurrentIndex(3);
+        m_pageDisplay->onBigMeterClicked();
+    });
 
     auto *viewMenu = menuBar()->addMenu("&View");
     viewMenu->addAction(m_actBigMeter);
@@ -531,6 +288,9 @@ void MainWindow::setupTabs()
             m_pageDisplay, &PageDisplay::onTestStarted);
     connect(m_engine, &IometerEngine::testStopped,
             m_pageDisplay, &PageDisplay::onTestStopped);
+    // BigMeter "Next >>" = advance to next spec (same as toolbar Stop)
+    connect(m_pageDisplay, &PageDisplay::nextSpecRequested,
+            this,          &MainWindow::onStop);
     connect(m_engine, &IometerEngine::managerConnected,
             m_pageNetwork, &PageNetwork::onManagerConnected);
     connect(m_engine, &IometerEngine::managerDisconnected,
@@ -616,7 +376,16 @@ void MainWindow::rebuildWorkerTree()
                             break;
                         }
                     }
-                    if (!toSelect) toSelect = mgrItem; // worker gone, fall back to manager
+                    if (!toSelect) {
+                        // Worker was deleted — land on the worker at the same
+                        // position, or the last worker if it was the last one.
+                        const int nw = mgrItem->childCount();
+                        if (m_deletedWorkerPos >= 0 && nw > 0)
+                            toSelect = mgrItem->child(
+                                qMin(m_deletedWorkerPos, nw - 1));
+                        else
+                            toSelect = mgrItem;   // no workers left
+                    }
                 }
             }
         }
@@ -727,9 +496,66 @@ void MainWindow::onSave()
         setWindowTitle("Iometer -- " + path);
 }
 
-void MainWindow::onStart()    { if (!m_running) m_engine->startTest(); }
-void MainWindow::onStop()     { m_engine->stopTest(); }
-void MainWindow::onStopAll()  { m_engine->stopAll(); }
+void MainWindow::onStart()
+{
+    if (m_running) return;
+
+    // Build the run queue from the Assigned list; fall back to a single
+    // empty spec so at least one pass runs when no specs are assigned.
+    m_runQueue = m_pageAccess->currentAssignedSpecs();
+    if (m_runQueue.isEmpty()) {
+        const auto all = m_engine->accessSpecs();
+        if (!all.isEmpty()) m_runQueue.append(all.first());
+    }
+    m_runQueueIdx   = 0;
+    m_specAdvancing = false;
+
+    // Prompt for results file
+    const QString path = QFileDialog::getSaveFileName(
+        this,
+        "Save Results To",
+        QDir::currentPath() + "/results_" +
+            QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss") + ".csv",
+        "CSV Files (*.csv);;All Files (*)");
+
+    if (!path.isEmpty()) {
+        delete m_resultsFile;
+        m_resultsFile = new QFile(path, this);
+        if (m_resultsFile->open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(m_resultsFile);
+            out << "Timestamp,Manager,Worker,"
+                   "IOps,Read_IOps,Write_IOps,"
+                   "MBps_Dec,Read_MBps,Write_MBps,MiBps,"
+                   "Avg_Latency_ms,Max_Latency_ms,"
+                   "CPU_Util_pct,CPU_User_pct,CPU_Kernel_pct,"
+                   "Errors\n";
+        } else {
+            QMessageBox::warning(this, "Results File",
+                "Could not open results file:\n" + path);
+            delete m_resultsFile;
+            m_resultsFile = nullptr;
+        }
+    }
+
+    if (!m_runQueue.isEmpty())
+        m_engine->setCurrentTestSpec(m_runQueue[0]);
+    m_pageAccess->setActiveSpecIndex(0);
+    m_engine->startTest();
+}
+
+void MainWindow::onStop()
+{
+    // Stop = end current spec and advance to next (like the original).
+    m_specAdvancing = true;
+    m_engine->stopTest();
+}
+
+void MainWindow::onStopAll()
+{
+    // Stop All = abort everything, do not advance.
+    m_specAdvancing = false;
+    m_engine->stopAll();
+}
 
 void MainWindow::onNewDynamo()
 {
@@ -810,9 +636,25 @@ void MainWindow::onExitOne()
     if (m_selManagerName.isEmpty()) return;
 
     if (!m_selWorkerId.isEmpty()) {
-        // Remove selected worker
+        // Record the worker's position so rebuildWorkerTree() can land on the
+        // right sibling after the delete (same slot, or last if it was last).
+        m_deletedWorkerPos = -1;
+        for (const auto &mgr : m_engine->managers()) {
+            if (mgr.name != m_selManagerName) continue;
+            for (int i = 0; i < mgr.workers.size(); ++i) {
+                if (mgr.workers[i].id == m_selWorkerId) {
+                    m_deletedWorkerPos = i;
+                    break;
+                }
+            }
+            break;
+        }
         m_engine->removeWorker(m_selManagerName, m_selWorkerId);
-        m_selWorkerId.clear();
+        // Do NOT clear m_selWorkerId here — removeWorker() fires configChanged
+        // synchronously, which calls rebuildWorkerTree() → setCurrentItem() →
+        // onWorkerTreeSelectionChanged(), which already sets m_selWorkerId to
+        // the next worker. Clearing it here would wipe that correct value.
+        m_deletedWorkerPos = -1;
     } else {
         // Disconnect the selected manager
         const auto btn = QMessageBox::question(this, "Disconnect Manager",
@@ -848,8 +690,33 @@ void MainWindow::onTestStarted()
 
 void MainWindow::onTestStopped()
 {
+    // Check if we should advance to the next spec in the run queue
+    const int nextIdx = m_runQueueIdx + 1;
+    if (m_specAdvancing && nextIdx < m_runQueue.size()) {
+        m_specAdvancing = false;
+        m_runQueueIdx   = nextIdx;
+        m_engine->setCurrentTestSpec(m_runQueue[nextIdx]);
+        m_pageAccess->setActiveSpecIndex(nextIdx);
+        m_engine->startTest();
+        m_statusLeft->setText(
+            QString("Running spec %1/%2: %3")
+                .arg(nextIdx + 1).arg(m_runQueue.size())
+                .arg(m_runQueue[nextIdx].name));
+        return;   // stay in running state — don't update toolbar
+    }
+
+    // Full stop (last spec finished, or Stop All was used)
+    m_specAdvancing = false;
+    m_runQueueIdx   = 0;
+    m_pageAccess->setActiveSpecIndex(-1);   // clear the green arrow
     setRunningState(false);
     m_statusLeft->setText("Test stopped.");
+
+    if (m_resultsFile) {
+        m_resultsFile->close();
+        delete m_resultsFile;
+        m_resultsFile = nullptr;
+    }
 }
 
 void MainWindow::onResultsUpdated(QVector<WorkerResult> results)
@@ -861,6 +728,30 @@ void MainWindow::onResultsUpdated(QVector<WorkerResult> results)
                     .arg(r.iops, 0, 'f', 0)
                     .arg(r.mbpsDec, 0, 'f', 1));
             break;
+        }
+    }
+
+    // Append one row per worker (plus aggregate) to the open results file
+    if (m_resultsFile && m_resultsFile->isOpen()) {
+        QTextStream out(m_resultsFile);
+        const QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+        for (const auto &r : results) {
+            out << ts                    << ','
+                << r.managerName         << ','
+                << r.workerName          << ','
+                << r.iops                << ','
+                << r.readIops            << ','
+                << r.writeIops           << ','
+                << r.mbpsDec             << ','
+                << r.readMbpsDec         << ','
+                << r.writeMbpsDec        << ','
+                << r.mbpsBin             << ','
+                << r.avgLatencyMs        << ','
+                << r.maxLatencyMs        << ','
+                << r.cpuUtil             << ','
+                << r.cpuUser             << ','
+                << r.cpuKernel           << ','
+                << r.errors              << '\n';
         }
     }
 }
@@ -901,7 +792,8 @@ void MainWindow::setRunningState(bool running)
     // Test control
     m_actStart->setEnabled(!running);
     m_actStop->setEnabled(running);
-    m_actStopAll->setEnabled(running);
+    // Stop All enabled when: running with multiple specs cycling, OR multiple managers
+    m_actStopAll->setEnabled(running && (m_runQueue.size() > 1 || m_engine->managers().size() > 1));
 
     // Reset disabled while running
     m_actNew->setEnabled(!running);
