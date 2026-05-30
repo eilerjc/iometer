@@ -185,7 +185,8 @@ class DynamoEngine : public IometerEngine
     Q_OBJECT
 
 public:
-    explicit DynamoEngine(QObject *parent = nullptr);
+    // startListening=false skips binding port 1066 (used by unit tests)
+    explicit DynamoEngine(bool startListening = true, QObject *parent = nullptr);
     ~DynamoEngine() override;
 
     // ── IometerEngine interface ───────────────────────────────────────────────
@@ -197,6 +198,12 @@ public:
     bool loadConfig(const QString &filepath) override;
     bool saveConfig(const QString &filepath) override;
     bool saveBatchResults(const QString &filepath) override;
+
+    // Static helper — write the results CSV without a live engine instance.
+    // Used by saveBatchResults() and directly by unit tests.
+    static bool writeBatchResultsCsv(const QString &filepath,
+                                     const QVector<WorkerResult> &results,
+                                     const TestConfig &cfg);
     void newConfig()  override;
 
     QList<ManagerInfo>   managers()     const override { return m_managers; }

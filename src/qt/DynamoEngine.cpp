@@ -10,6 +10,7 @@
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QDateTime>
+#include <QSet>
 #include <cstring>
 #include <cmath>
 
@@ -809,22 +810,22 @@ void DySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
 // DynamoEngine
 // ─────────────────────────────────────────────────────────────────────────────
 
-DynamoEngine::DynamoEngine(QObject *parent)
+DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
     : IometerEngine(parent)
 {
-    // Full built-in access spec library (Idle, Default, 512B–32KiB at 5 read levels)
     m_specs = IometerEngine::builtinAccessSpecs();
 
-    // Start the TCP server
     m_server = new QTcpServer(this);
     connect(m_server, &QTcpServer::newConnection, this, &DynamoEngine::onNewConnection);
 
-    if (m_server->listen(QHostAddress::Any, DY_PORT)) {
-        emit statusMessage(QString("Listening for Dynamo on port %1 — start Dynamo.exe to connect")
-                           .arg(DY_PORT));
-    } else {
-        emit errorOccurred(QString("Cannot listen on port %1: %2")
-                           .arg(DY_PORT).arg(m_server->errorString()));
+    if (startListening) {
+        if (m_server->listen(QHostAddress::Any, DY_PORT)) {
+            emit statusMessage(QString("Listening for Dynamo on port %1 — start Dynamo.exe to connect")
+                               .arg(DY_PORT));
+        } else {
+            emit errorOccurred(QString("Cannot listen on port %1: %2")
+                               .arg(DY_PORT).arg(m_server->errorString()));
+        }
     }
 }
 
@@ -1180,46 +1181,75 @@ bool DynamoEngine::saveConfig(const QString &filepath)
 
     // ── Manager List ──────────────────────────────────────────────────────
     out << "'MANAGER LIST ==================================================================\n";
-    int mgrid = 1;
-    for (const auto &mgr : m_managers) {
-        out << "'Manager ID, manager name\n";
-        out << "\t" << mgrid++ << "," << mgr.name << "\n";
-        out << "'Manager network address\n\t\n";
-        for (const auto &w : mgr.workers) {
-            out << "'Worker\n\t" << w.name << "\n";
-            out << "'Worker type\n\t" << (w.type == "Network" ? "NET" : "DISK") << "\n";
-            out << "'Default target settings for worker\n";
-            out << "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value\n";
-            out << "\t" << w.queueDepth << ","
-                << (w.testConnRate ? "ENABLED" : "DISABLED") << ","
-                << w.transPerConn << ","
-                << (w.useFixedSeed ? "ENABLED" : "DISABLED") << ","
-                << w.fixedSeedValue << "\n";
-            out << "'Disk maximum size,starting sector,Data pattern\n";
-            out << "\t" << w.maxDiskSize << "," << w.startingSector << "," << w.dataPattern << "\n";
-            out << "'End default target settings for worker\n";
-            out << "'Assigned access specs\n";
-            for (const auto &sn : w.assignedSpecs)
-                out << "\t" << sn << "\n";
-            if (w.assignedSpecs.isEmpty() && !m_specs.isEmpty())
-                out << "\t" << m_specs.first().name << "\n";
-            out << "'End assigned access specs\n";
-            out << "'Target assignments\n";
-            for (const auto &tgt : w.targets) {
-                out << "'Target\n\t" << tgt << "\n";
-                out << "'Target type\n\tDISK\n";
-                out << "'End target\n";
-            }
-            out << "'End target assignments\n";
-            out << "'End worker\n";
+
+    // Lambda that writes a single worker section
+    auto writeWorker = [&](const QString &name, const QString &type,
+                           const QStringList &assignedSpecs,
+                           const QStringList &targets,
+                           int qd=1, bool tcr=false, int tpc=1,
+                           bool ufs=false, qint64 fsv=0,
+                           qint64 maxSz=0, qint64 startSec=0, int dataPat=0) {
+        out << "'Worker\n\t" << name << "\n";
+        out << "'Worker type\n\t" << type << "\n";
+        out << "'Default target settings for worker\n";
+        out << "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value\n";
+        out << "\t" << qd << "," << (tcr?"ENABLED":"DISABLED") << ","
+            << tpc << "," << (ufs?"ENABLED":"DISABLED") << "," << fsv << "\n";
+        out << "'Disk maximum size,starting sector,Data pattern\n";
+        out << "\t" << maxSz << "," << startSec << "," << dataPat << "\n";
+        out << "'End default target settings for worker\n";
+        out << "'Assigned access specs\n";
+        for (const auto &sn : assignedSpecs) out << "\t" << sn << "\n";
+        if (assignedSpecs.isEmpty() && !m_specs.isEmpty())
+            out << "\t" << m_specs.first().name << "\n";
+        out << "'End assigned access specs\n";
+        out << "'Target assignments\n";
+        for (const auto &tgt : targets) {
+            out << "'Target\n\t" << tgt << "\n";
+            out << "'Target type\n\tDISK\n";
+            out << "'End target\n";
         }
+        out << "'End target assignments\n";
+        out << "'End worker\n";
+    };
+
+    if (!m_managers.isEmpty()) {
+        // Live Dynamo connection — write actual connected state
+        int mgrid = 1;
+        for (const auto &mgr : m_managers) {
+            out << "'Manager ID, manager name\n\t" << mgrid++ << "," << mgr.name << "\n";
+            out << "'Manager network address\n\t\n";
+            for (const auto &w : mgr.workers)
+                writeWorker(w.name, (w.type=="Network"?"NET":"DISK"),
+                            w.assignedSpecs, w.targets,
+                            w.queueDepth, w.testConnRate, w.transPerConn,
+                            w.useFixedSeed, w.fixedSeedValue,
+                            w.maxDiskSize, w.startingSector, w.dataPattern);
+            out << "'End manager\n";
+        }
+    } else if (!m_batchWorkers.isEmpty()) {
+        // No live connection — preserve the batch worker config from the loaded ICF
+        out << "'Manager ID, manager name\n\t1,MANAGER\n";
+        out << "'Manager network address\n\t\n";
+        for (const auto &bw : m_batchWorkers)
+            writeWorker(bw.name.isEmpty() ? "Worker 1" : bw.name,
+                        "DISK", bw.assignedSpecs, bw.targets);
         out << "'End manager\n";
     }
+
     out << "'END manager list\n";
     out << "Version 1.1.0 \n";
     return true;
 }
 bool DynamoEngine::saveBatchResults(const QString &filepath)
+{
+    const auto &r = m_savedResults.isEmpty() ? m_currentResults : m_savedResults;
+    return writeBatchResultsCsv(filepath, r, m_testConfig);
+}
+
+bool DynamoEngine::writeBatchResultsCsv(const QString &filepath,
+                                        const QVector<WorkerResult> &results,
+                                        const TestConfig &cfg)
 {
     QFile f(filepath);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
@@ -1228,14 +1258,14 @@ bool DynamoEngine::saveBatchResults(const QString &filepath)
     // ── File header (matches original ManagerList output) ─────────────────
     out << "'Iometer Output File\n";
     out << "Version 1.1.0 \n";
-    out << "'Test Description\n\t" << m_testConfig.description << "\n";
+    out << "'Test Description\n\t" << cfg.description << "\n";
     out << "'Time Stamp\n\t"
         << QDateTime::currentDateTime().toString("yyyy/MM/dd hh:mm:ss") << "\n";
     out << "'Run Time\n'\thours      minutes    seconds\n";
-    out << "\t" << m_testConfig.runHours
-        << "          " << m_testConfig.runMinutes
-        << "          " << m_testConfig.runSeconds << "\n";
-    out << "'Ramp Up Time (s)\n\t" << m_testConfig.rampSeconds << "\n";
+    out << "\t" << cfg.runHours
+        << "          " << cfg.runMinutes
+        << "          " << cfg.runSeconds << "\n";
+    out << "'Ramp Up Time (s)\n\t" << cfg.rampSeconds << "\n";
 
     // ── Column headers (exact original order, 60+ columns) ────────────────
     // The smoke test cares only that: field[0]=="ALL", [6]=IOps, [12]=MBps(Dec), [27]=Errors
@@ -1263,7 +1293,6 @@ bool DynamoEngine::saveBatchResults(const QString &filepath)
     int workerCount = 0, mgCount = 0;
     QSet<QString> managers;
 
-    const auto &results = m_savedResults.isEmpty() ? m_currentResults : m_savedResults;
     for (const auto &r : results) {
         if (r.isAggregate) continue;
         agg.iops         += r.iops;
