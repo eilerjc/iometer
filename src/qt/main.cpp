@@ -76,7 +76,21 @@ static int batchMain(const QString &icfFile,
         [&](ManagerInfo) {
             qInfo("Batch: Dynamo connected. Configuring test...");
 
-            // Apply the assigned spec from the ICF to the test
+            // Assign ICF targets to every worker so they have a disk to test on
+            const QStringList batchTargets = engine.batchTargets();
+            if (!batchTargets.isEmpty()) {
+                qInfo("Batch: Assigning targets: %s", qPrintable(batchTargets.join(", ")));
+                for (const auto &mgr : engine.managers()) {
+                    for (auto w : mgr.workers) {
+                        w.targets = batchTargets;
+                        engine.updateWorker(w);
+                    }
+                }
+            } else {
+                qWarning("Batch: No targets in ICF — workers will use default targets.");
+            }
+
+            // Apply the assigned spec from the ICF
             const QString specName = engine.batchAssignedSpec();
             if (!specName.isEmpty()) {
                 for (const auto &s : engine.accessSpecs()) {
@@ -90,8 +104,6 @@ static int batchMain(const QString &icfFile,
 
             qInfo("Batch: Starting test (%d ms)...", runMs);
             engine.startTest();
-
-            // Stop after the configured run time
             QTimer::singleShot(runMs, &engine, &IometerEngine::stopTest);
         });
 

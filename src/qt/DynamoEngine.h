@@ -238,10 +238,12 @@ private:
     QList<AccessSpec>     m_specs;
     AccessSpec            m_currentTestSpec;
     bool                  m_hasCurrentTestSpec = false;
-    QString               m_batchAssignedSpec;  // spec name loaded from ICF for batch mode
+    QString               m_batchAssignedSpec;  // spec name from ICF for batch mode
+    QStringList           m_batchTargets;       // target paths from ICF for batch mode
 
 public:
-    QString batchAssignedSpec() const { return m_batchAssignedSpec; }
+    QString     batchAssignedSpec() const { return m_batchAssignedSpec; }
+    QStringList batchTargets()      const { return m_batchTargets;      }
 private:
     TestConfig            m_testConfig;
     QVector<WorkerResult> m_currentResults;

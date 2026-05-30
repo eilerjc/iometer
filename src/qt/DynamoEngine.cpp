@@ -1002,6 +1002,7 @@ bool DynamoEngine::loadConfig(const QString &filepath)
     TestConfig cfg;
     QList<AccessSpec> specs;
     m_batchAssignedSpec.clear();
+    m_batchTargets.clear();
 
     // Returns the first non-comment, non-empty data line after line i, trimmed.
     // Returns "" if none found before a section boundary.
@@ -1037,7 +1038,9 @@ bool DynamoEngine::loadConfig(const QString &filepath)
             const QString data = dataAfter(i);
             cfg.rampSeconds = data.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).value(0).toInt();
         } else if (t == "'Test Description") {
-            cfg.description = dataAfter(i);
+            // Description may be blank — take the very next line as-is
+            if (i + 1 < lines.size())
+                cfg.description = lines[i + 1].trimmed();
         }
 
         // ── Access Specifications ──────────────────────────────────────────
@@ -1081,14 +1084,20 @@ bool DynamoEngine::loadConfig(const QString &filepath)
 
         // ── Manager / Worker ───────────────────────────────────────────────
         else if (t == "'Assigned access specs") {
-            // Collect names until 'End assigned access specs
             for (int j = i + 1; j < lines.size(); ++j) {
                 const QString d = lines[j].trimmed();
                 if (d.startsWith("'End assigned access")) break;
                 if (d.isEmpty() || d.startsWith("'")) continue;
                 if (m_batchAssignedSpec.isEmpty())
-                    m_batchAssignedSpec = d;   // take the first assignment
+                    m_batchAssignedSpec = d;
             }
+        }
+
+        else if (t == "'Target") {
+            // The next non-comment, non-empty line is the target path
+            const QString tgt = dataAfter(i);
+            if (!tgt.isEmpty() && !m_batchTargets.contains(tgt))
+                m_batchTargets.append(tgt);
         }
     }
 
