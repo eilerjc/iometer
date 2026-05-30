@@ -951,6 +951,12 @@ void DynamoEngine::startTest()
     for (const auto &mgr : m_managers)
         allWorkers += mgr.workers;
 
+    // In batch mode the ICF specifies an exact worker count.  Trim the list so
+    // that extra Dynamo workers (beyond what the ICF defines) never receive
+    // DY_SET_ACCESS / DY_SET_TARGETS and stay idle — matching original behaviour.
+    if (!m_batchWorkers.isEmpty() && allWorkers.size() > m_batchWorkers.size())
+        allWorkers = allWorkers.mid(0, m_batchWorkers.size());
+
     // Use the override spec if set (cycling), otherwise the global list
     const QList<AccessSpec> specs = m_hasCurrentTestSpec
         ? QList<AccessSpec>{m_currentTestSpec}
@@ -1001,8 +1007,7 @@ bool DynamoEngine::loadConfig(const QString &filepath)
 
     TestConfig cfg;
     QList<AccessSpec> specs;
-    m_batchAssignedSpec.clear();
-    m_batchTargets.clear();
+    m_batchWorkers.clear();
 
     // Returns the first non-comment, non-empty data line after line i, trimmed.
     // Returns "" if none found before a section boundary.
@@ -1083,21 +1088,28 @@ bool DynamoEngine::loadConfig(const QString &filepath)
         }
 
         // ── Manager / Worker ───────────────────────────────────────────────
-        else if (t == "'Assigned access specs") {
+        // State machine: collect per-worker spec+target assignments.
+        else if (t == "'Worker") {
+            // Start a new worker config; name is the next data line
+            BatchWorkerConfig wc;
+            wc.name = dataAfter(i);
+            // Scan forward for this worker's assigned specs and targets
             for (int j = i + 1; j < lines.size(); ++j) {
                 const QString d = lines[j].trimmed();
-                if (d.startsWith("'End assigned access")) break;
-                if (d.isEmpty() || d.startsWith("'")) continue;
-                if (m_batchAssignedSpec.isEmpty())
-                    m_batchAssignedSpec = d;
+                if (d == "'End worker") { i = j; break; }
+                if (d == "'Assigned access specs") {
+                    for (int k = j + 1; k < lines.size(); ++k) {
+                        const QString s = lines[k].trimmed();
+                        if (s.startsWith("'End assigned access")) { j = k; break; }
+                        if (!s.isEmpty() && !s.startsWith("'"))
+                            wc.assignedSpecs.append(s);
+                    }
+                } else if (d == "'Target") {
+                    const QString tgt = dataAfter(j);
+                    if (!tgt.isEmpty()) wc.targets.append(tgt);
+                }
             }
-        }
-
-        else if (t == "'Target") {
-            // The next non-comment, non-empty line is the target path
-            const QString tgt = dataAfter(i);
-            if (!tgt.isEmpty() && !m_batchTargets.contains(tgt))
-                m_batchTargets.append(tgt);
+            m_batchWorkers.append(wc);
         }
     }
 

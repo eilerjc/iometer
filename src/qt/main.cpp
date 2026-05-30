@@ -76,21 +76,32 @@ static int batchMain(const QString &icfFile,
         [&](ManagerInfo) {
             qInfo("Batch: Dynamo connected. Configuring test...");
 
-            // Assign ICF targets to every worker so they have a disk to test on
-            const QStringList batchTargets = engine.batchTargets();
-            if (!batchTargets.isEmpty()) {
-                qInfo("Batch: Assigning targets: %s", qPrintable(batchTargets.join(", ")));
-                for (const auto &mgr : engine.managers()) {
-                    for (auto w : mgr.workers) {
-                        w.targets = batchTargets;
-                        engine.updateWorker(w);
+            // Configure workers to match the ICF exactly:
+            //   - Workers 0..N-1  get per-worker targets+spec from ICF
+            //   - Workers N..end  get empty targets (no I/O — matches original)
+            const auto batchWorkers = engine.batchWorkers();
+            qInfo("Batch: ICF defines %d worker(s); Dynamo reported %d.",
+                  batchWorkers.size(),
+                  engine.managers().isEmpty() ? 0 : engine.managers().first().workers.size());
+
+            int wi = 0;
+            for (const auto &mgr : engine.managers()) {
+                for (auto w : mgr.workers) {
+                    if (wi < batchWorkers.size()) {
+                        w.targets = batchWorkers[wi].targets;
+                        qInfo("Batch:   Worker %d ('%s'): targets=[%s] spec='%s'",
+                              wi, qPrintable(w.name),
+                              qPrintable(w.targets.join(", ")),
+                              qPrintable(batchWorkers[wi].assignedSpecs.value(0)));
+                    } else {
+                        w.targets.clear();   // no targets → Dynamo skips this worker
                     }
+                    engine.updateWorker(w);
+                    ++wi;
                 }
-            } else {
-                qWarning("Batch: No targets in ICF — workers will use default targets.");
             }
 
-            // Apply the assigned spec from the ICF
+            // Apply the first ICF worker's spec globally (all active workers share it)
             const QString specName = engine.batchAssignedSpec();
             if (!specName.isEmpty()) {
                 for (const auto &s : engine.accessSpecs()) {
