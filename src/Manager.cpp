@@ -291,7 +291,7 @@ int Manager::WorkerCount(TargetType type)
 {
 	int i, count = 0, worker_count;
 
-	worker_count = workers.GetSize();
+	worker_count = (int)workers.GetSize();
 	for (i = 0; i < worker_count; i++) {
 		if (IsType(workers[i]->Type(), type))
 			count++;
@@ -340,13 +340,13 @@ void Manager::RemoveNetInfo()
 	int i, net_count, wkr_count;
 
 	// Deleting network information referenced by "tcp" array
-	net_count = tcps.GetSize();
+	net_count = (int)tcps.GetSize();
 	for (i = 0; i < net_count; i++)
 		delete tcps[i];
 
 	tcps.RemoveAll();
 
-	net_count = vis.GetSize();
+	net_count = (int)vis.GetSize();
 	for (i = 0; i < net_count; i++)
 		delete vis[i];
 
@@ -1343,21 +1343,21 @@ int Manager::InterfaceCount(TargetType type)
 {
 	switch (type) {
 	case GenericType:
-		return disks.GetSize() + tcps.GetSize() + vis.GetSize();
+		return (int)disks.GetSize() + (int)tcps.GetSize() + (int)vis.GetSize();
 	case GenericDiskType:
-		return disks.GetSize();
+		return (int)disks.GetSize();
 	case GenericNetType:
 	case GenericServerType:
 	case GenericClientType:
-		return tcps.GetSize() + vis.GetSize();
+		return (int)tcps.GetSize() + (int)vis.GetSize();
 	case GenericTCPType:
 	case TCPServerType:
 	case TCPClientType:
-		return tcps.GetSize();
+		return (int)tcps.GetSize();
 	case GenericVIType:
 	case VIServerType:
 	case VIClientType:
-		return vis.GetSize();
+		return (int)vis.GetSize();
 	default:
 		ErrorMessage("Unknown target type in Manager::InterfaceCount()");
 		return 0;

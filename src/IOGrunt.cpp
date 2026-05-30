@@ -1029,7 +1029,7 @@ void Grunt::Asynchronous_Delay(int transfer_delay)
 
 		// More waiting is needed before allowing additional requests.
 		_ftime(&end_wait_time);
-		transfer_delay -= (((end_wait_time._time - start_wait_time._time) * 1000)
+		transfer_delay -= (int)(((end_wait_time._time - start_wait_time._time) * 1000)
 				   + end_wait_time._millitm - start_wait_time._millitm);
 	}
 	while (transfer_delay > 0);

@@ -200,7 +200,7 @@ int Worker::TargetCount(TargetType type)
 {
 	int i, count = 0, target_count;
 
-	target_count = targets.GetSize();
+	target_count = (int)targets.GetSize();
 	for (i = 0; i < target_count; i++) {
 		if (IsType(targets[i]->spec.type, type))
 			count++;
@@ -1870,7 +1870,7 @@ BOOL Worker::InsertAccessSpec(Test_Spec * spec, int insert_at_index)
 
 	// Inserts to the end of the array by default.
 	if (insert_at_index == IOERROR || insert_at_index > access_spec_list.GetSize())
-		insert_at_index = access_spec_list.GetSize();
+		insert_at_index = (int)access_spec_list.GetSize();
 
 	// Validating global_index.
 	if (theApp.access_spec_list.IndexByRef(spec) == IOERROR)
@@ -1930,7 +1930,7 @@ int Worker::AccessSpecCount()
 	if (IsType(Type(), GenericClientType))
 		return net_partner->AccessSpecCount();
 
-	return access_spec_list.GetSize();
+	return (int)access_spec_list.GetSize();
 }
 
 //

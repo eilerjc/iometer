@@ -203,9 +203,9 @@ void CPageDisplay::Initialize()
 	selected_button = 5;
 	theApp.pView->OnMDisplay(MDisplayErrSubmenuID, MDisplayErrIO);
 
-	SetUpdateDelay(0);
+	SetUpdateDelay(1);
 
-	SetWhichPerf(WHOLE_TEST_PERF);
+	SetWhichPerf(LAST_UPDATE_PERF);
 
 	Reset();
 }
@@ -914,7 +914,7 @@ void CPageDisplay::SelectStatisticByName(int button, const char *statistic_name)
 			return;
 		}
 
-		for (menu_item = 0; menu_item < pSubPopup->GetMenuItemCount(); menu_item++) {
+		for (menu_item = 0; menu_item < (UINT)pSubPopup->GetMenuItemCount(); menu_item++) {
 			CString title;
 
 			pSubPopup->GetMenuString(menu_item, title, MF_BYPOSITION);

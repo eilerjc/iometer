@@ -231,17 +231,20 @@ BOOL PortTCP::Create(char *port_name, char *remote_name, DWORD size, unsigned sh
 		strcpy(network_name, remote_name);
 	} else {
 		// get the specified host's first network address
-		struct hostent *hostinfo = gethostbyname(name);
-
-		if (hostinfo == NULL) {
+		struct addrinfo hints = {}, *res = NULL;
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		if (getaddrinfo(name, NULL, &hints, &res) != 0 || res == NULL) {
 			*errmsg << "===> ERROR: Getting host name for \"" << name << "\" failed." << endl
 			    << "     [PortTCP::Create() in " << __FILE__ << " line " << __LINE__ << "]" << endl
 			    << "     errno = " << WSAGetLastError() << ends;
+			if (res) freeaddrinfo(res);
 			OutputErrMsg();
 			return FALSE;
 		}
-		memcpy(&sin.sin_addr.s_addr, hostinfo->h_addr_list[0], hostinfo->h_length);
-		strncpy(network_name, inet_ntoa(sin.sin_addr), sizeof(network_name) - 1);
+		inet_ntop(AF_INET, &((struct sockaddr_in *)res->ai_addr)->sin_addr,
+		          network_name, sizeof(network_name));
+		freeaddrinfo(res);
 
 	}
 
@@ -259,7 +262,7 @@ BOOL PortTCP::Create(char *port_name, char *remote_name, DWORD size, unsigned sh
 	}
 #if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
 	else {
-		server_socket = WSASocket(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);
+		server_socket = WSASocketW(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);
 	}
 #endif
 
@@ -315,9 +318,7 @@ BOOL PortTCP::Create(char *port_name, char *remote_name, DWORD size, unsigned sh
 //
 BOOL PortTCP::Connect(char *port_name, unsigned short port_number)
 {
-	unsigned long server_address = INADDR_NONE;
 	struct sockaddr_in sin;
-	struct hostent *hostinfo;
 	int retval;
 
 	// get hostname to connect to (default local host name).
@@ -334,25 +335,21 @@ BOOL PortTCP::Connect(char *port_name, unsigned short port_number)
 		}
 	}
 
-	if (atoi(name) > 0) {
-		// looks like a numeric IP address was specified
-		// if this is not an IP address (e.g., a name starting with a digit),
-		//      INADDR_NONE (0xffffffff) will be returned.
-		server_address = inet_addr(name);
-	}
-
-	if (server_address == INADDR_NONE) {
-		// treat it as a hostname
-		hostinfo = gethostbyname(name);
-		if (hostinfo == NULL) {
+	// resolve numeric IP or hostname to a sockaddr
+	{
+		struct addrinfo hints = {}, *res = NULL;
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		if (getaddrinfo(name, NULL, &hints, &res) != 0 || res == NULL) {
 			*errmsg << "===> ERROR: Getting host information for \"" << name << "\" failed." << endl
 			    << "     [PortTCP::Connect() in " << __FILE__ << " line " << __LINE__ << "]" << endl
 			    << "     errno = " << WSAGetLastError() << ends;
+			if (res) freeaddrinfo(res);
 			OutputErrMsg();
 			return FALSE;
 		}
-
-		memcpy(&server_address, hostinfo->h_addr, hostinfo->h_length);
+		sin.sin_addr.s_addr = ((struct sockaddr_in *)res->ai_addr)->sin_addr.s_addr;
+		freeaddrinfo(res);
 	}
 	// create socket for the connnection.
 
@@ -366,7 +363,7 @@ BOOL PortTCP::Connect(char *port_name, unsigned short port_number)
 	}
 #if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
 	else {
-		client_socket = WSASocket(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);
+		client_socket = WSASocketW(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);
 	}
 #endif
 
@@ -381,10 +378,14 @@ BOOL PortTCP::Connect(char *port_name, unsigned short port_number)
 
 	sin.sin_family = AF_INET;	// use Internet Protocol
 	sin.sin_port = htons(port_number);	// connect to this port
-	sin.sin_addr.s_addr = server_address;	// connect to this server
+	// sin.sin_addr.s_addr already set by getaddrinfo block above
 
 #if PORT_DETAILS || _DETAILS
-	cout << "Host address: " << inet_ntoa(sin.sin_addr) << endl;
+	{
+		char addr_str[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &sin.sin_addr, addr_str, sizeof(addr_str));
+		cout << "Host address: " << addr_str << endl;
+	}
 #endif
 
 	// attempt to connect (keep trying forever if necessary).
@@ -523,7 +524,7 @@ BOOL PortTCP::Accept()
 		WSASetLastError(0);
 #endif
 
-		client_socket = WSASocket(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);
+		client_socket = WSASocketW(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);
 
 		if (client_socket == INVALID_SOCKET) {
 			*errmsg << "===> ERROR: Creating client socket for " << name << " failed." << endl
@@ -912,7 +913,7 @@ DWORD PortTCP::Peek()
 	if (synchronous) {
 		FD_ZERO(&sock_set);	// clear the fd_set structure.
 		FD_SET(client_socket, &sock_set);	// Add the one and only socket to it.
-		if (select(client_socket + 1, &sock_set, NULL, NULL, &timeout)) {
+		if (select((int)(client_socket + 1), &sock_set, NULL, NULL, &timeout)) {
 			//if there is data available or select returns an error, 
 			//we want bytes_available to set by the result of recv().
 			bytes_available = recv(client_socket, buf, sizeof(buf), MSG_PEEK);

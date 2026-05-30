@@ -214,7 +214,7 @@ void NetAsyncTCP::SetAddress( BOOL set_server, const char *ip_address,
 	if ( ip_address )
 	{
 		// accept connections on specified address
-		address->sin_addr.s_addr = inet_addr( ip_address );	
+		inet_pton(AF_INET, ip_address, &address->sin_addr);
     } 
 	else
 	{
@@ -418,7 +418,7 @@ ReturnVal NetAsyncTCP::Connect( const char *ip_address,
 
 	// specify protocol, port, and address to connect to.
 	address.sin_family = AF_INET; // use Internet Protocol
-	address.sin_addr.s_addr = inet_addr(ip_address); // connect to this server
+	inet_pton(AF_INET, ip_address, &address.sin_addr); // connect to this server
 	address.sin_port = htons(port_number); // connect to this port
 
 	result = ConnectSocket( &address );

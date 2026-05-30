@@ -358,7 +358,7 @@ BOOL CGalileoCmdLine::IsValidInteger(const CString & instring)
 //
 BOOL CGalileoCmdLine::IsValidFilename(const CString & instring)
 {
-	const CString legal = "abcdefghijklmnopqrstuvwxyz1234567890_-=+!&%@#$.,;:'[]{}()\\ ";
+	const CString legal = "abcdefghijklmnopqrstuvwxyz1234567890_-=+!&%@#$.,;:'[]{}()/\\ ";
 	CString teststring = instring;
 
 	teststring.MakeLower();

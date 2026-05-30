@@ -1,0 +1,36 @@
+# Visual Studio build outputs
+src/msvs11/Release/
+src/msvs11/Debug/
+src/msvc9/Release/
+src/msvc9/Debug/
+
+# VS user-specific files
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.ipch
+*.sdf
+*.opensdf
+
+# Object/intermediate files
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.idb
+*.tlog
+*.lastbuildstate
+*.unsuccessfulbuild
+
+# Stray files from VS build process
+src/msvs11/No
+
+# Test results (generated, not committed)
+test/results_*.csv
+
+# Windows
+Thumbs.db
+Desktop.ini

@@ -713,7 +713,7 @@ Test_Spec *AccessSpecList::Copy(Test_Spec * source_spec)
 	name.Format("Copy of %s", spec->name);
 	copy_number = 1;
 	do {
-		snprintf(spec->name, MAX_NAME, "%s (%d)", name, copy_number++);
+		snprintf(spec->name, MAX_NAME, "%s (%d)", (LPCTSTR)name, copy_number++);
 	} while (RefByName(spec->name) != spec);
 
 	return spec;
@@ -768,7 +768,7 @@ Test_Spec *AccessSpecList::Get(int index)
 //
 int AccessSpecList::Count()
 {
-	return spec_list.GetSize();
+	return (int)spec_list.GetSize();
 }
 
 //
@@ -777,7 +777,7 @@ int AccessSpecList::Count()
 Test_Spec *AccessSpecList::RefByName(const char *check_name)
 {
 	Test_Spec *spec;
-	int spec_count = spec_list.GetSize();
+	int spec_count = (int)spec_list.GetSize();
 
 	for (int s = 0; s < spec_count; s++) {
 		spec = Get(s);
@@ -795,7 +795,7 @@ Test_Spec *AccessSpecList::RefByName(const char *check_name)
 //
 int AccessSpecList::IndexByRef(const Test_Spec * spec)
 {
-	int spec_count = spec_list.GetSize();
+	int spec_count = (int)spec_list.GetSize();
 
 	for (int index = 0; index < spec_count; index++) {
 		if (Get(index) == spec)
@@ -1313,5 +1313,5 @@ void AccessSpecList::SmartName(Test_Spec * spec)
 	while (RefByName((LPCTSTR) name)) {
 		name.Format("%s %d", name.Left(name_size), ++spec_number);
 	}
-	snprintf(spec->name, MAX_NAME, "%s", name);
+	snprintf(spec->name, MAX_NAME, "%s", (LPCTSTR)name);
 }
