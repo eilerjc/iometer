@@ -196,6 +196,7 @@ public:
 
     bool loadConfig(const QString &filepath) override;
     bool saveConfig(const QString &filepath) override;
+    bool saveBatchResults(const QString &filepath) override;
     void newConfig()  override;
 
     QList<ManagerInfo>   managers()     const override { return m_managers; }
@@ -237,6 +238,11 @@ private:
     QList<AccessSpec>     m_specs;
     AccessSpec            m_currentTestSpec;
     bool                  m_hasCurrentTestSpec = false;
+    QString               m_batchAssignedSpec;  // spec name loaded from ICF for batch mode
+
+public:
+    QString batchAssignedSpec() const { return m_batchAssignedSpec; }
+private:
     TestConfig            m_testConfig;
     QVector<WorkerResult> m_currentResults;
     QVector<WorkerResult> m_savedResults;

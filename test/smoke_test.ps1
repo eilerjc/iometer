@@ -37,13 +37,14 @@ param(
     # Qt engine path
     [string]$QtBinDir      = "$PSScriptRoot\..\src\qt\build\Release",
 
-    # Qt-only: use --demo mode (no Dynamo needed)
-    [switch]$Demo,
+    # Qt-only flags
+    [switch]$Demo,   # use --demo mode (no Dynamo needed)
+    [switch]$Batch,  # use batch mode (/c /r /t) — mirrors Original mode exactly
 
     [string]$TestDir       = $PSScriptRoot,
     [int]   $LoginTimeout  = 60,
 
-    # Qt+Dynamo: seconds to keep both alive after connection window
+    # Qt+Dynamo (connection-only) mode: seconds to keep both alive
     [int]   $QtRunSeconds  = 15
 )
 
@@ -101,7 +102,8 @@ function Wait-PortEstablished([int]$Port, [int]$TimeoutSec = 30) {
 
 Write-Host ""
 Write-Host "=== Iometer Smoke Test ===" -ForegroundColor Cyan
-Write-Host "  Engine : $Engine$(if ($Engine -eq 'Qt' -and $Demo) { ' (--demo)' })"
+$modeStr = if ($Engine -eq 'Qt' -and $Demo) { ' (--demo)' } elseif ($Engine -eq 'Qt' -and $Batch) { ' (--batch)' } else { '' }
+Write-Host "  Engine : $Engine$modeStr"
 Write-Host ""
 
 # --- ORIGINAL ENGINE ----------------------------------------------------------
@@ -293,6 +295,144 @@ if ($Engine -eq "Qt") {
         Write-Host "PASS: IometerQt --demo ran for ${QtRunSeconds}s without crashing." `
                    -ForegroundColor Green
         exit 0
+    }
+
+    # -- Qt + Batch mode --------------------------------------------------------
+    # Mirrors the Original engine path exactly: /c /r /t flags, same CSV parsing.
+    # Requires elevation (Dynamo needs raw-disk access).
+    if ($Batch) {
+        Check-Elevation
+
+        $dynamo = Join-Path $BinDir "Dynamo.exe"
+        Require-File $dynamo
+
+        $startTime  = Get-Date
+        $stamp      = $startTime | Get-Date -Format "yyyyMMdd_HHmmss"
+        $resultFile = Join-Path $TestDir "results_${stamp}_qt.csv"
+
+        Write-Host "  Binary : $iometerQt"
+        Write-Host "  Dynamo : $dynamo"
+        Write-Host "  Config : $IcfFile"
+        Write-Host "  Results: $resultFile"
+        Write-Host ""
+
+        # Kill stale instances
+        Get-Process -Name "IometerQt","Dynamo" -ErrorAction SilentlyContinue |
+            Stop-Process -Force
+        Start-Sleep -Seconds 1
+
+        # [1/4] Start IometerQt in batch mode (same flags as original IOmeter.exe)
+        Write-Host "[1/4] Starting IometerQt (batch mode, ${LoginTimeout}s login timeout)..." `
+                   -ForegroundColor Yellow
+        $qtProc = Start-Process -FilePath $iometerQt `
+            -ArgumentList "/c `"$IcfFile`" /r `"$resultFile`" /t $LoginTimeout" `
+            -PassThru
+        Start-Sleep -Seconds 3
+
+        if ($qtProc.HasExited) {
+            Write-Host "FAIL: IometerQt exited immediately (code $($qtProc.ExitCode))." `
+                       -ForegroundColor Red
+            exit 1
+        }
+
+        # [2/4] Start Dynamo
+        Write-Host "[2/4] Starting Dynamo (connecting to 127.0.0.1)..." -ForegroundColor Yellow
+        $hostname   = $env:COMPUTERNAME.ToLower()
+        $dynamoProc = Start-Process -FilePath $dynamo `
+            -ArgumentList "-i 127.0.0.1 -m $hostname" `
+            -PassThru
+
+        # [3/4] Wait for IometerQt to finish (it exits when the test completes)
+        Write-Host "[3/4] Waiting for test to complete (run time + login timeout + overhead)..." `
+                   -ForegroundColor Yellow
+        $maxWait = $LoginTimeout + 60   # ICF run time (10s) + login window + overhead
+        $waited  = 0
+        while (-not $qtProc.HasExited -and $waited -lt $maxWait) {
+            Start-Sleep -Seconds 2
+            $waited += 2
+            Write-Host "  ...${waited}s" -NoNewline
+        }
+        Write-Host ""
+
+        if (-not $dynamoProc.HasExited) {
+            Stop-Process -Id $dynamoProc.Id -Force -ErrorAction SilentlyContinue
+        }
+
+        if (-not $qtProc.HasExited) {
+            Write-Host "TIMEOUT: IometerQt did not finish within ${maxWait}s. Killing." `
+                       -ForegroundColor Red
+            Stop-Process -Id $qtProc.Id -Force -ErrorAction SilentlyContinue
+            exit 1
+        }
+
+        if ($qtProc.ExitCode -ne 0) {
+            Write-Host "FAIL: IometerQt exited with code $($qtProc.ExitCode)." `
+                       -ForegroundColor Red
+            exit 1
+        }
+
+        # [4/4] Verify results (identical logic to Original engine)
+        Write-Host "[4/4] Verifying results..." -ForegroundColor Yellow
+
+        $found = Get-ChildItem -Path $TestDir -Filter "results_*_qt.csv" `
+                     -ErrorAction SilentlyContinue |
+                 Where-Object { $_.LastWriteTime -ge $startTime } |
+                 Sort-Object LastWriteTime -Descending |
+                 Select-Object -First 1
+
+        if ($null -eq $found) {
+            Write-Host "FAIL: No Qt results file created." -ForegroundColor Red
+            exit 1
+        }
+
+        $resultFile = $found.FullName
+        Write-Host "  Found  : $resultFile"
+
+        $allRow    = $null
+        $inResults = $false
+        foreach ($line in Get-Content $resultFile) {
+            if ($line -match "^'Results") { $inResults = $true; continue }
+            if (-not $inResults)          { continue }
+            if ($line -match "^'")        { continue }
+            $fields = $line -split ","
+            if ($fields.Count -gt 27 -and $fields[0].Trim() -eq "ALL") {
+                $allRow = $fields
+                break
+            }
+        }
+
+        if ($null -eq $allRow) {
+            Write-Host "FAIL: No 'ALL' row in results file." -ForegroundColor Red
+            exit 1
+        }
+
+        $mbps   = [double]$allRow[12].Trim()
+        $iops   = [double]$allRow[6].Trim()
+        $errors = [double]$allRow[27].Trim()
+
+        Write-Host ""
+        Write-Host "  MBps (Dec) : $mbps"
+        Write-Host "  IOps       : $iops"
+        Write-Host "  Errors     : $errors"
+        Write-Host ""
+
+        $pass = $true
+        if ($mbps -le 0) {
+            Write-Host "FAIL: MBps is $mbps (expected > 0)" -ForegroundColor Red
+            $pass = $false
+        }
+        if ($errors -ne 0) {
+            Write-Host "FAIL: Error count is $errors (expected 0)" -ForegroundColor Red
+            $pass = $false
+        }
+
+        if ($pass) {
+            Write-Host "PASS: All checks passed." -ForegroundColor Green
+            exit 0
+        } else {
+            Write-Host "FAIL: One or more checks failed. See $resultFile" -ForegroundColor Red
+            exit 1
+        }
     }
 
     # -- Qt + real Dynamo mode --------------------------------------------------

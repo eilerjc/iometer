@@ -53,6 +53,9 @@ public:
     virtual QVector<WorkerResult> savedResults()        const = 0;
     virtual void clearSavedResults()                          = 0;
 
+    // Write results to a CSV in the original Iometer format (batch mode output).
+    virtual bool saveBatchResults(const QString &filepath)    = 0;
+
     // ---- Built-in spec library (shared by all engines) ----------------------
     // Mirrors the original AccessSpecList::InsertIdleSpec() + InsertDefaultSpecs().
     // Mirrors InsertIdleSpec() + InsertDefaultSpecs() exactly, including the

@@ -40,6 +40,7 @@ public:
     QVector<WorkerResult> currentResults() const override { return m_current; }
     QVector<WorkerResult> savedResults()   const override { return m_saved;   }
     void clearSavedResults() override { m_saved.clear(); }
+    bool saveBatchResults(const QString &) override { return false; }  // demo has no real results
 
 private slots:
     void tick();
