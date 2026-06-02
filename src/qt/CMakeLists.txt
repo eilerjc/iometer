@@ -119,6 +119,11 @@ iometer_test(tst_results)
 iometer_test(tst_demo)
 iometer_test(tst_protocol)
 
+# ── UI Tests (Qt widget tests) ──────────────────────────────────────────────
+iometer_test(tst_meters)
+iometer_test(tst_pagesetup)
+iometer_test(tst_mainwindow)
+
 # ── Coverage: set up test environment for profdata collection ──────────────────
 if(IOMETER_COVERAGE)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/coverage")
