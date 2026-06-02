@@ -1,4 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
+
+# Coverage build option (separate from default build)
+# Must be set BEFORE project() so compiler can be selected early
+option(IOMETER_COVERAGE "Build with code coverage instrumentation (clang-cl)" OFF)
+
+# ── Coverage: use clang-cl compiler if enabled ──────────────────────────────
+if(IOMETER_COVERAGE)
+    set(CMAKE_CXX_COMPILER "C:/Program Files/LLVM/bin/clang-cl.exe")
+    set(CMAKE_C_COMPILER   "C:/Program Files/LLVM/bin/clang-cl.exe")
+    message(STATUS "Coverage mode: using clang-cl compiler")
+endif()
+
 project(IometerQt VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -16,6 +28,17 @@ else()
     message(STATUS "Using Qt ${Qt5_VERSION}")
     set(_QT Qt5)
 endif()
+
+# ── Helper function: apply coverage instrumentation flags ──────────────────────
+function(apply_coverage_flags target)
+    if(IOMETER_COVERAGE)
+        # clang-cl instrumentation for llvm-cov
+        target_compile_options(${target} PRIVATE
+            -fprofile-instr-generate -fcoverage-mapping)
+        target_link_options(${target} PRIVATE
+            -fprofile-instr-generate)
+    endif()
+endfunction()
 
 # ── Engine + widget sources (shared between app and tests via static lib) ────
 set(CORE_SOURCES
@@ -53,6 +76,9 @@ add_library(IometerQtCore STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 target_include_directories(IometerQtCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(IometerQtCore PUBLIC ${_QT}::Widgets ${_QT}::Network)
 
+# Apply coverage instrumentation to the library (so test coverage includes it)
+apply_coverage_flags(IometerQtCore)
+
 # ── Main application ─────────────────────────────────────────────────────────
 add_executable(IometerQt main.cpp resources.qrc)
 target_link_libraries(IometerQt PRIVATE IometerQtCore)
@@ -79,6 +105,10 @@ macro(iometer_test name)
     if(WIN32)
         set_target_properties(${name} PROPERTIES WIN32_EXECUTABLE FALSE)
     endif()
+
+    # Apply coverage instrumentation if enabled
+    apply_coverage_flags(${name})
+
     add_test(NAME ${name} COMMAND ${name} -v2)
 endmacro()
 
@@ -88,6 +118,17 @@ iometer_test(tst_icf)
 iometer_test(tst_results)
 iometer_test(tst_demo)
 iometer_test(tst_protocol)
+
+# ── Coverage: set up test environment for profdata collection ──────────────────
+if(IOMETER_COVERAGE)
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/coverage")
+    # Set environment variable for all tests so profraw goes to the right place
+    set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/CTestCoverageEnv.cmake")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/CTestCoverageEnv.cmake"
+        "set(ENV{LLVM_PROFILE_FILE} \"${CMAKE_BINARY_DIR}/coverage/%p.profraw\")\n")
+    message(STATUS "Coverage profraw output: ${CMAKE_BINARY_DIR}/coverage")
+endif()
 
 # ── Install ───────────────────────────────────────────────────────────────────
 install(TARGETS IometerQt RUNTIME DESTINATION bin)
