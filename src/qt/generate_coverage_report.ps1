@@ -142,19 +142,35 @@ foreach ($test in $testData.Values) {
     }
 }
 
-# Create a structure for JavaScript with actual file contents
-foreach ($file in $sourceFilesContent.Keys) {
-    $lines = $sourceFilesContent[$file]
-    $sourceFilesWithContent[$file] = @{
-        lines = $lines
-        coverage = $fileListJson[$file]
-    }
-}
-
-# Convert to JSON
+# Convert to JSON - just the basic structures
 $testDataJson = $testData | ConvertTo-Json -Depth 10
 $fileListJson = $fileListJson | ConvertTo-Json -Depth 10
-$sourceFilesJson = $sourceFilesWithContent | ConvertTo-Json -Depth 10
+
+# For source files, create a simple key-value map
+$sourceFilesJson = "{"
+$first = $true
+foreach ($file in $sourceFilesContent.Keys) {
+    if (-not $first) { $sourceFilesJson += "," }
+    $first = $false
+
+    # Escape and quote the filename
+    $escapedFile = $file.Replace('\', '\\').Replace('"', '\"')
+    $sourceFilesJson += "`"$escapedFile`": [`r`n"
+
+    # Add each line as JSON array element
+    $lines = $sourceFilesContent[$file]
+    $lineFirst = $true
+    foreach ($line in $lines) {
+        if (-not $lineFirst) { $sourceFilesJson += ",`r`n" }
+        $lineFirst = $false
+
+        # Escape special characters in line content
+        $escapedLine = $line.Replace('\', '\\').Replace('"', '\"').Replace("`n", '\n').Replace("`r", '\r')
+        $sourceFilesJson += "    `"$escapedLine`""
+    }
+    $sourceFilesJson += "`r`n  ]"
+}
+$sourceFilesJson += "`r`n}"
 
 # Build HTML
 $html = @'
