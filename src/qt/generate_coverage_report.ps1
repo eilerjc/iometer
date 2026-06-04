@@ -373,7 +373,10 @@ $html += @'
             html += '<div class="section">';
             html += '<div class="section-title">Covered Files</div>';
             data.files.forEach(f => {
-                html += '<div class="file-item">' + f + '</div>';
+                html += '<div class="file-item" onclick="goToFile(\'' + f.replace(/'/g, "\\'") + '\')" style="cursor: pointer; transition: background 0.2s;">';
+                html += '<span style="color: #58a6ff; font-weight: bold;">' + f + '</span> ';
+                html += '<span style="color: #6e7681; font-size: 0.8em;">[click to view]</span>';
+                html += '</div>';
             });
             html += '</div>';
 
@@ -381,7 +384,12 @@ $html += @'
             html += '<div class="section-title">Functions Tested</div>';
             html += '<table><tr><th>Function</th><th>Lines</th><th style="width: 80px;">Status</th></tr>';
             data.functions.forEach(f => {
-                html += '<tr><td><code style="color: #79c0ff;">' + f.name + '</code></td><td style="color: #8b949e;">' + f.lines + '</td><td><span class="covered">[OK]</span></td></tr>';
+                const file = data.files[0];
+                html += '<tr style="cursor: pointer;" onclick="goToFileAndHighlight(\'' + file.replace(/'/g, "\\'") + '\', \'' + f.lines.replace(/'/g, "\\'") + '\')">';
+                html += '<td><code style="color: #79c0ff;">' + f.name + '</code></td>';
+                html += '<td style="color: #8b949e;">' + f.lines + '</td>';
+                html += '<td><span class="covered">[OK]</span></td>';
+                html += '</tr>';
             });
             html += '</table>';
             html += '</div>';
@@ -390,6 +398,32 @@ $html += @'
 
             panel.innerHTML = html;
             renderTests();
+        }
+
+        function goToFile(file) {
+            selectedFile = file;
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('files-view').classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.nav-btn')[1].classList.add('active');
+            selectFile(file);
+        }
+
+        function goToFileAndHighlight(file, lineRange) {
+            goToFile(file);
+            // Show which function is being viewed
+            setTimeout(() => {
+                const panel = document.getElementById('fileDetailsPanel');
+                if (panel.innerHTML) {
+                    const highlight = document.createElement('div');
+                    highlight.style.cssText = 'background: #1f6feb; border: 1px solid #58a6ff; padding: 10px; border-radius: 4px; margin-bottom: 10px; color: white;';
+                    highlight.innerHTML = 'Viewing function at lines <strong>' + lineRange + '</strong>';
+                    const details = panel.querySelector('.details');
+                    if (details) {
+                        details.insertBefore(highlight, details.firstChild);
+                    }
+                }
+            }, 100);
         }
 
         function clearTestSelect() {
@@ -401,11 +435,14 @@ $html += @'
             selectedFile = file;
             const data = fileList[file];
             const panel = document.getElementById('fileDetailsPanel');
+            const noFileSelect = document.getElementById('noFileSelect');
 
             let html = '<button onclick="clearFileSelect()">Back</button>';
             html += '<div class="details">';
             html += '<div class="detail-title">' + file + '</div>';
-            html += '<p style="margin-bottom: 15px; color: #8b949e;">Covered by: ' + data.tests.join(', ') + '</p>';
+            html += '<p style="margin-bottom: 15px; color: #8b949e;">Covered by: ';
+            html += data.tests.map(t => '<strong style="color: #58a6ff; cursor: pointer;" onclick="switchTestFromFile(\'' + t + '\')">' + t + '</strong>').join(', ');
+            html += '</p>';
 
             html += '<div class="section">';
             html += '<div class="section-title">Code Coverage (Sample)</div>';
@@ -458,7 +495,17 @@ $html += @'
             html += '</div>';
 
             panel.innerHTML = html;
+            if (noFileSelect) noFileSelect.style.display = 'none';
             renderFiles();
+        }
+
+        function switchTestFromFile(testName) {
+            selectedTest = testName;
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('tests-view').classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.nav-btn')[0].classList.add('active');
+            selectTest(testName);
         }
 
         function clearFileSelect() {
