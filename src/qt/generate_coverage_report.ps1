@@ -165,7 +165,7 @@ $html = @'
 <body>
     <div class="container">
         <header>
-            <h1>📊 Iometer Code Coverage Report</h1>
+            <h1>Iometer Code Coverage Report</h1>
             <p>Interactive test-to-code coverage explorer</p>
             <div class="stats">
                 <div class="stat">
@@ -198,10 +198,10 @@ $html = @'
                     <p style="font-size: 1.1em; margin-bottom: 20px;">Click a test on the left to see details</p>
                     <p>Each test will show:</p>
                     <ul style="list-style: none; margin-top: 15px; text-align: left; display: inline-block;">
-                        <li>✓ Which files it covers</li>
-                        <li>✓ Which functions are tested</li>
-                        <li>✓ Coverage percentage</li>
-                        <li>✓ Execution time</li>
+                        <li>[OK] Which files it covers</li>
+                        <li>[OK] Which functions are tested</li>
+                        <li>[OK] Coverage percentage</li>
+                        <li>[OK] Execution time</li>
                     </ul>
                 </div>
             </div>
@@ -218,7 +218,7 @@ $html = @'
 # Append the JSON data
 $html += "var testData = " + $testDataJson + ";"
 
-# Append the JavaScript
+# Append the JavaScript (using ASCII-safe characters)
 $html += @'
 
         let selectedTest = null;
@@ -270,7 +270,7 @@ $html += @'
             for (const func of data.functions) {
                 html += '<tr><td><code style="color: #79c0ff;">' + func.name + '</code></td>';
                 html += '<td style="color: #8b949e; font-size: 0.85em;">' + func.lines + '</td>';
-                html += '<td><span class="covered">✓ Covered</span></td></tr>';
+                html += '<td><span class="covered">[OK] Covered</span></td></tr>';
             }
             html += '</table>';
             html += '</div>';
@@ -295,7 +295,8 @@ $html += @'
 </html>
 '@
 
-# Write the HTML file
-$html | Out-File -FilePath "$OutputDir\index.html" -Encoding UTF8 -Force
+# Write the HTML file with proper encoding (no BOM)
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText("$OutputDir\index.html", $html, $utf8NoBom)
 
 Write-Host "Report generated: $OutputDir\index.html" -ForegroundColor Green
