@@ -93,25 +93,68 @@ $testData = @{
     }
 }
 
-# Build file list from test data
+# Read actual source files and build file cache
+$sourceFilesContent = @{}
+Get-ChildItem -Filter "*.h" -File | ForEach-Object {
+    $fileName = $_.Name
+    $content = @(Get-Content $_.FullName -ErrorAction SilentlyContinue)
+
+    # Handle case where file is empty or single line
+    if ($null -eq $content) {
+        $content = @()
+    } elseif ($content -isnot [array]) {
+        $content = @($content)
+    }
+
+    $sourceFilesContent[$fileName] = $content
+}
+
+Get-ChildItem -Filter "*.cpp" -File | ForEach-Object {
+    $fileName = $_.Name
+    $content = @(Get-Content $_.FullName -ErrorAction SilentlyContinue)
+
+    # Handle case where file is empty or single line
+    if ($null -eq $content) {
+        $content = @()
+    } elseif ($content -isnot [array]) {
+        $content = @($content)
+    }
+
+    $sourceFilesContent[$fileName] = $content
+}
+
+Write-Host "Read $($sourceFilesContent.Count) source files" -ForegroundColor Cyan
+
+# Build file list with coverage data and actual content
 $fileListJson = @{}
+$sourceFilesWithContent = @{}
+
 foreach ($test in $testData.Values) {
     foreach ($file in $test.files) {
         if (-not $fileListJson.ContainsKey($file)) {
             $fileListJson[$file] = @{
                 tests = @()
                 coverage = 100
+                lineCount = $sourceFilesContent[$file].Count
             }
         }
         $fileListJson[$file].tests += $test.name
     }
 }
 
-Write-Host "Found $($fileListJson.Count) source files" -ForegroundColor Cyan
+# Create a structure for JavaScript with actual file contents
+foreach ($file in $sourceFilesContent.Keys) {
+    $lines = $sourceFilesContent[$file]
+    $sourceFilesWithContent[$file] = @{
+        lines = $lines
+        coverage = $fileListJson[$file]
+    }
+}
 
 # Convert to JSON
 $testDataJson = $testData | ConvertTo-Json -Depth 10
 $fileListJson = $fileListJson | ConvertTo-Json -Depth 10
+$sourceFilesJson = $sourceFilesWithContent | ConvertTo-Json -Depth 10
 
 # Build HTML
 $html = @'
@@ -288,6 +331,7 @@ $html = @'
 # Append JSON data
 $html += "var testData = " + $testDataJson + ";"
 $html += "var fileList = " + $fileListJson + ";"
+$html += "var sourceFiles = " + $sourceFilesJson + ";"
 
 # Append JavaScript
 $html += @'
@@ -445,45 +489,39 @@ $html += @'
             html += '</p>';
 
             html += '<div class="section">';
-            html += '<div class="section-title">Code Coverage (Sample)</div>';
+            html += '<div class="section-title">Source Code</div>';
 
-            // Generate sample code with coverage highlighting
+            // Get actual source file content
             html += '<div class="code-viewer">';
-            const sampleLines = [
-                '#include <iostream>',
-                '// Configuration structures',
-                'struct Config {',
-                '  int timeout;    // COVERED by tst_types',
-                '  int retries;    // COVERED by tst_types',
-                '  bool debug;     // PARTIAL - only true case tested',
-                '};',
-                '// Function definitions',
-                'void processConfig(Config& cfg) {',
-                '  if (cfg.debug) {  // PARTIAL - else path not tested',
-                '    printf("Debug enabled\\\\n");',
-                '  }',
-                '  // Uncovered path below',
-                '  if (false) {',
-                '    printf("This is never reached");',
-                '  }',
-                '}'
-            ];
+            if (sourceFiles[file] && sourceFiles[file].lines) {
+                const sourceLines = sourceFiles[file].lines;
+                const testCoverage = testData[data.tests[0]];
+                const coveredLines = testCoverage && testCoverage.lineCoverage && testCoverage.lineCoverage[file] ? testCoverage.lineCoverage[file] : [];
+                const coveredSet = new Set(coveredLines);
 
-            // Coverage map for demo (would be real in actual implementation)
-            const coverageStatus = ['', '', '', 'covered', 'covered', 'partial', '', '', 'covered', 'partial', 'covered', 'covered', '', 'uncovered', 'uncovered', 'uncovered'];
+                sourceLines.forEach((line, idx) => {
+                    const lineNum = idx + 1;
+                    let lineClass = 'uncovered-line';
+                    if (coveredSet.has(lineNum)) {
+                        lineClass = 'covered-line';
+                    }
 
-            sampleLines.forEach((line, idx) => {
-                const lineNum = idx + 1;
-                const status = coverageStatus[idx] || '';
-                let lineClass = 'uncovered-line';
-                if (status === 'covered') lineClass = 'covered-line';
-                if (status === 'partial') lineClass = 'partial-line';
+                    // Escape HTML special characters
+                    const escapedLine = (line || '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
 
-                html += '<div class="code-line ' + lineClass + '">';
-                html += '<div class="line-num">' + lineNum + '</div>';
-                html += '<div class="line-content">' + line + '</div>';
-                html += '</div>';
-            });
+                    html += '<div class="code-line ' + lineClass + '">';
+                    html += '<div class="line-num">' + lineNum + '</div>';
+                    html += '<div class="line-content">' + escapedLine + '</div>';
+                    html += '</div>';
+                });
+            } else {
+                html += '<div style="padding: 20px; color: #8b949e; text-align: center;">File content not available</div>';
+            }
             html += '</div>';
 
             html += '<div class="legend" style="margin-top: 15px;">';
