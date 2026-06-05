@@ -819,6 +819,13 @@ DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
     m_specs = IometerEngine::builtinAccessSpecs();
 
     m_workerPool = new WorkerPool(this);
+    m_testRunner = new TestRunner(this);
+
+    // Forward TestRunner signals to IometerEngine signals
+    connect(m_testRunner, &TestRunner::statusMessage,
+            this, &DynamoEngine::statusMessage);
+    connect(m_testRunner, &TestRunner::errorOccurred,
+            this, &DynamoEngine::errorOccurred);
 
     m_server = new QTcpServer(this);
     connect(m_server, &QTcpServer::newConnection, this, &DynamoEngine::onNewConnection);
@@ -969,6 +976,14 @@ void DynamoEngine::startTest()
         ? QList<AccessSpec>{m_currentTestSpec}
         : m_specs;
 
+    // Delegate to TestRunner to manage test state machine
+    if (!m_testRunner->startTest(m_testConfig, allWorkers, specs)) {
+        m_running = false;
+        emit errorOccurred(m_testRunner->lastError());
+        return;
+    }
+
+    // Start test on all sessions (protocol-level)
     for (auto *s : m_sessions)
         s->startTest(allWorkers, specs);
 
@@ -980,8 +995,14 @@ void DynamoEngine::startTest()
 void DynamoEngine::stopTest()
 {
     if (!m_running) return;
+
+    // Stop test in TestRunner (state machine)
+    m_testRunner->stopTest();
+
+    // Stop protocol-level test on all sessions
     for (auto *s : m_sessions)
         s->stopTest();
+
     m_running = false;
     m_savedResults = m_currentResults;
     emit testStopped();
@@ -991,8 +1012,11 @@ void DynamoEngine::stopTest()
 void DynamoEngine::stopAll()
 {
     // Stop tests only - do NOT exit Dynamo workers; managers stay connected
+    m_testRunner->stopAll();
+
     for (auto *s : m_sessions)
         s->stopTest();
+
     m_running = false;
     m_savedResults = m_currentResults;
     emit testStopped();
@@ -1081,6 +1105,7 @@ void DynamoEngine::newConfig()
     for (auto *s : m_sessions) s->deleteLater();
     m_sessions.clear();
     m_workerPool->clear();
+    m_testRunner->stopAll();  // Reset test state machine
     m_currentResults.clear();
     m_running = false;
     emit configChanged();

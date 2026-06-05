@@ -4,6 +4,7 @@
 #include "IometerEngine.h"
 #include "DyProto.h"
 #include "../core/WorkerPool.h"
+#include "../core/TestRunner.h"
 #include <QObject>
 #include <QList>
 #include <QVector>
@@ -248,6 +249,7 @@ private:
     QTcpServer           *m_server   = nullptr;
     QList<DySession*>     m_sessions;
     WorkerPool           *m_workerPool = nullptr;  // Manages manager/worker lifecycle
+    TestRunner           *m_testRunner = nullptr;  // Manages test state machine
     QList<AccessSpec>     m_specs;
     AccessSpec            m_currentTestSpec;
     bool                  m_hasCurrentTestSpec = false;
