@@ -134,16 +134,33 @@ foreach ($file in $sourceFilesContent.Keys) {
         tests = @()
         coverage = 0
         lineCount = $sourceFilesContent[$file].Count
+        coveredLines = 0
     }
 }
 
-# Then mark files that have test coverage
+# Then calculate actual line coverage for files that have test coverage
 foreach ($test in $testData.Values) {
     foreach ($file in $test.files) {
         if ($fileListJson.ContainsKey($file)) {
-            $fileListJson[$file].coverage = 100
             $fileListJson[$file].tests += $test.name
+
+            # Count covered lines for this file from this test
+            if ($test.lineCoverage.ContainsKey($file)) {
+                $coveredCount = @($test.lineCoverage[$file]).Count
+                $fileListJson[$file].coveredLines = [Math]::Max($fileListJson[$file].coveredLines, $coveredCount)
+            }
         }
+    }
+}
+
+# Calculate percentage coverage for each file
+foreach ($file in $fileListJson.Keys) {
+    $lineCount = $fileListJson[$file].lineCount
+    $coveredLines = $fileListJson[$file].coveredLines
+    if ($lineCount -gt 0) {
+        $fileListJson[$file].coverage = [Math]::Round(($coveredLines / $lineCount) * 100)
+    } else {
+        $fileListJson[$file].coverage = 0
     }
 }
 
@@ -406,15 +423,19 @@ $html += @'
             files.forEach(file => {
                 const data = fileList[file];
                 const active = selectedFile === file ? ' active' : '';
-                const badgeColor = data.coverage === 100 ? '#238636' : '#da3633';
-                const badgeText = data.coverage > 0 ? 'Covered' : 'Uncovered';
+
+                // Color based on coverage percentage
+                let badgeColor = '#f85149';  // Red: 0%
+                if (data.coverage >= 80) badgeColor = '#238636';      // Green: 80%+
+                else if (data.coverage >= 50) badgeColor = '#9e6a03'; // Yellow: 50-79%
+                else if (data.coverage > 0) badgeColor = '#da3633';   // Red: 1-49%
 
                 html += '<div class="item' + active + '" onclick="selectFile(\'' + file.replace(/'/g, "\\'") + '\')">';
-                html += '<div class="name">' + file + '<span class="badge" style="background: ' + badgeColor + ';">' + badgeText + '</span></div>';
-                if (data.coverage === 100) {
-                    html += '<div class="meta">' + data.tests.length + ' tests cover this</div>';
+                html += '<div class="name">' + file + '<span class="badge" style="background: ' + badgeColor + ';">' + data.coverage + '%</span></div>';
+                if (data.coverage > 0) {
+                    html += '<div class="meta">' + data.coveredLines + ' of ' + data.lineCount + ' lines | ' + data.tests.length + ' test(s)</div>';
                 } else {
-                    html += '<div class="meta" style="color: #f85149;">No test coverage</div>';
+                    html += '<div class="meta" style="color: #f85149;">No coverage</div>';
                 }
                 html += '</div>';
             });
