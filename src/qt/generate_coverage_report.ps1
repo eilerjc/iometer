@@ -162,22 +162,43 @@ foreach ($test in $testData.Values) {
     }
 }
 
-# De-duplicate covered lines and calculate coverage percentage
-foreach ($file in $fileCoverageDetails.Keys) {
-    $uniqueCoveredLines = @($fileCoverageDetails[$file].coveredLines | Sort-Object -Unique)
-    $fileListJson[$file].coveredLines = $uniqueCoveredLines.Count
-    $lineCount = $fileListJson[$file].lineCount
-    if ($lineCount -gt 0) {
-        $fileListJson[$file].coverage = [Math]::Round(($uniqueCoveredLines.Count / $lineCount) * 100)
+# Count only code lines (exclude comments and whitespace)
+$codeLineCount = @{}
+foreach ($file in $sourceFilesContent.Keys) {
+    $lines = $sourceFilesContent[$file]
+    $codeLines = 0
+
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        # Count as code if not empty and not a comment-only line
+        if ($trimmed.Length -gt 0 -and -not $trimmed.StartsWith("//")) {
+            $codeLines++
+        }
     }
+
+    $codeLineCount[$file] = [Math]::Max($codeLines, 1)  # At least 1 to avoid division by zero
 }
 
-# Calculate percentage coverage for each file
-foreach ($file in $fileListJson.Keys) {
-    $lineCount = $fileListJson[$file].lineCount
-    $coveredLines = $fileListJson[$file].coveredLines
-    if ($lineCount -gt 0) {
-        $fileListJson[$file].coverage = [Math]::Round(($coveredLines / $lineCount) * 100)
+# De-duplicate covered lines and calculate coverage percentage (excluding comments/whitespace)
+foreach ($file in $fileCoverageDetails.Keys) {
+    $uniqueCoveredLines = @($fileCoverageDetails[$file].coveredLines | Sort-Object -Unique)
+    $coveredCodeLines = 0
+
+    # Only count covered lines that are actual code
+    foreach ($lineNum in $uniqueCoveredLines) {
+        if ($lineNum -le $sourceFilesContent[$file].Count) {
+            $line = $sourceFilesContent[$file][$lineNum - 1]
+            $trimmed = $line.Trim()
+            if ($trimmed.Length -gt 0 -and -not $trimmed.StartsWith("//")) {
+                $coveredCodeLines++
+            }
+        }
+    }
+
+    $fileListJson[$file].coveredLines = $coveredCodeLines
+    $codeCount = $codeLineCount[$file]
+    if ($codeCount -gt 0) {
+        $fileListJson[$file].coverage = [Math]::Round(($coveredCodeLines / $codeCount) * 100)
     } else {
         $fileListJson[$file].coverage = 0
     }
@@ -285,6 +306,7 @@ $html = @'
         .covered-line { background: rgba(63, 185, 80, 0.1); border-left: 3px solid #3fb950; }
         .uncovered-line { background: rgba(248, 81, 73, 0.05); border-left: 3px solid #f85149; }
         .partial-line { background: rgba(158, 106, 3, 0.1); border-left: 3px solid #9e6a03; }
+        .non-code-line { background: transparent; border-left: 3px solid #6e7681; opacity: 0.6; }
 
         .legend { display: flex; gap: 20px; margin: 20px 0; padding: 15px; background: #0d1117; border-radius: 6px; flex-wrap: wrap; font-size: 0.9em; }
         .legend-item { display: flex; align-items: center; gap: 8px; }
@@ -603,9 +625,16 @@ $html += @'
                 if (sourceLines.length > 0) {
                     sourceLines.forEach((line, idx) => {
                         const lineNum = idx + 1;
-                        let lineClass = 'uncovered-line';
-                        if (coveredSet.has(lineNum)) {
-                            lineClass = 'covered-line';
+                        const trimmed = line.trim();
+                        const isComment = trimmed.length === 0 || trimmed.startsWith('//');
+                        let lineClass = 'non-code-line';
+
+                        if (!isComment) {
+                            // Only color actual code lines
+                            lineClass = 'uncovered-line';
+                            if (coveredSet.has(lineNum)) {
+                                lineClass = 'covered-line';
+                            }
                         }
 
                         html += '<div class="code-line ' + lineClass + '">';
