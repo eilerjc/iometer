@@ -199,8 +199,9 @@ public:
     bool saveConfig(const QString &filepath) override;
     bool saveBatchResults(const QString &filepath) override;
 
-    // Static helper - write the results CSV without a live engine instance.
+    // Static helper - delegates to ResultsWriter for CSV generation.
     // Used by saveBatchResults() and directly by unit tests.
+    // Kept here for backward compatibility.
     static bool writeBatchResultsCsv(const QString &filepath,
                                      const QVector<WorkerResult> &results,
                                      const TestConfig &cfg);

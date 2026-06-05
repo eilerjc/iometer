@@ -53,6 +53,7 @@ set(CORE_SOURCES
     PageResults.cpp
     PageNetwork.cpp
     MainWindow.cpp
+    ../core/ResultsWriter.cpp
 )
 set(CORE_HEADERS
     IometerTypes.h
@@ -69,11 +70,12 @@ set(CORE_HEADERS
     PageResults.h
     PageNetwork.h
     MainWindow.h
+    ../core/ResultsWriter.h
 )
 
 # ── Static library shared by app + all test targets ──────────────────────────
 add_library(IometerQtCore STATIC ${CORE_SOURCES} ${CORE_HEADERS})
-target_include_directories(IometerQtCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(IometerQtCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../core)
 target_link_libraries(IometerQtCore PUBLIC ${_QT}::Widgets ${_QT}::Network)
 
 # Apply coverage instrumentation to the library (so test coverage includes it)

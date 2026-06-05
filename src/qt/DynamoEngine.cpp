@@ -1,6 +1,7 @@
 // DynamoEngine.cpp
 #include "DynamoEngine.h"
 #include "IometerEngine.h"
+#include "../core/ResultsWriter.h"
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QHostAddress>
@@ -1251,106 +1252,9 @@ bool DynamoEngine::writeBatchResultsCsv(const QString &filepath,
                                         const QVector<WorkerResult> &results,
                                         const TestConfig &cfg)
 {
-    QFile f(filepath);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
-    QTextStream out(&f);
-
-    // -- File header (matches original ManagerList output) -----------------
-    out << "'Iometer Output File\n";
-    out << "Version 1.1.0 \n";
-    out << "'Test Description\n\t" << cfg.description << "\n";
-    out << "'Time Stamp\n\t"
-        << QDateTime::currentDateTime().toString("yyyy/MM/dd hh:mm:ss") << "\n";
-    out << "'Run Time\n'\thours      minutes    seconds\n";
-    out << "\t" << cfg.runHours
-        << "          " << cfg.runMinutes
-        << "          " << cfg.runSeconds << "\n";
-    out << "'Ramp Up Time (s)\n\t" << cfg.rampSeconds << "\n";
-
-    // -- Column headers (exact original order, 60+ columns) ----------------
-    // The smoke test cares only that: field[0]=="ALL", [6]=IOps, [12]=MBps(Dec), [27]=Errors
-    out << "'Results\n";
-    out << "'Target Type,Target Name,Manager,Workers,Managers,Targets,"
-           "IOps,Read IOps,Write IOps,"
-           "MBps (Binary),Read MBps (Binary),Write MBps (Binary),"
-           "MBps (Decimal),Read MBps (Decimal),Write MBps (Decimal),"
-           "Transactions per Second,Connections per Second,"
-           "Average I/O Response Time (ms),Average Read Response Time (ms),"
-           "Average Write Response Time (ms),Average Transaction Time (ms),"
-           "Average Connection Time (ms),"
-           "Maximum I/O Response Time (ms),Maximum Read Response Time (ms),"
-           "Maximum Write Response Time (ms),Maximum Transaction Time (ms),"
-           "Maximum Connection Time (ms),"
-           "Errors,Read Errors,Write Errors,"
-           "CPU % Utilization (total),CPU % User,CPU % Privileged,"
-           "CPU % DPC,CPU % Interrupt,CPU Interrupts/sec,CPU Effectiveness\n";
-
-    // Build aggregate from saved results
-    WorkerResult agg;
-    agg.managerName = "ALL";
-    agg.workerName  = "All";
-    agg.isAggregate = true;
-    int workerCount = 0, mgCount = 0;
-    QSet<QString> managers;
-
-    for (const auto &r : results) {
-        if (r.isAggregate) continue;
-        agg.iops         += r.iops;
-        agg.readIops     += r.readIops;
-        agg.writeIops    += r.writeIops;
-        agg.mbpsDec      += r.mbpsDec;
-        agg.readMbpsDec  += r.readMbpsDec;
-        agg.writeMbpsDec += r.writeMbpsDec;
-        agg.mbpsBin      += r.mbpsBin;
-        agg.avgLatencyMs += r.avgLatencyMs;
-        agg.maxLatencyMs  = qMax(agg.maxLatencyMs, r.maxLatencyMs);
-        agg.cpuUtil      += r.cpuUtil;
-        agg.errors       += r.errors;
-        managers.insert(r.managerName);
-        ++workerCount;
-    }
-    if (workerCount > 0) agg.avgLatencyMs /= workerCount;
-    mgCount = managers.size();
-
-    // Write the ALL aggregate row - column positions must match the header above
-    // [0]ALL [1]All [2]manager [3]workers [4]managers [5]targets
-    // [6]IOps [7]ReadIOps [8]WriteIOps
-    // [9]MBpsBin [10]ReadMBpsBin [11]WriteMBpsBin
-    // [12]MBpsDec [13]ReadMBpsDec [14]WriteMBpsDec
-    // [15]Trans/s [16]Conn/s
-    // [17]AvgIO [18]AvgRead [19]AvgWrite [20]AvgTrans [21]AvgConn
-    // [22]MaxIO [23]MaxRead [24]MaxWrite [25]MaxTrans [26]MaxConn
-    // [27]Errors [28]ReadErrors [29]WriteErrors
-    // [30-36] CPU fields
-    auto fmt = [](double v, int dec=6) { return QString::number(v, 'f', dec); };
-
-    out << "ALL,All,," << workerCount << "," << mgCount << "," << workerCount << ","
-        << fmt(agg.iops) << "," << fmt(agg.readIops) << "," << fmt(agg.writeIops) << ","
-        << fmt(agg.mbpsBin) << "," << fmt(agg.mbpsBin) << ",0.000000,"
-        << fmt(agg.mbpsDec) << "," << fmt(agg.readMbpsDec) << "," << fmt(agg.writeMbpsDec) << ","
-        << fmt(agg.iops) << ",0.000000,"
-        << fmt(agg.avgLatencyMs) << "," << fmt(agg.avgLatencyMs) << ",0.000000,0.000000,0.000000,"
-        << fmt(agg.maxLatencyMs) << "," << fmt(agg.maxLatencyMs) << ",0.000000,0.000000,0.000000,"
-        << agg.errors << ",0,0,"
-        << fmt(agg.cpuUtil) << "," << fmt(agg.cpuUser) << "," << fmt(agg.cpuKernel)
-        << ",0.000000,0.000000,0.000000,0.000000\n";
-
-    // Write per-worker rows
-    for (const auto &r : results) {
-        if (r.isAggregate) continue;
-        out << "DISK," << r.workerName << "," << r.managerName << ",1,1,1,"
-            << fmt(r.iops) << "," << fmt(r.readIops) << "," << fmt(r.writeIops) << ","
-            << fmt(r.mbpsBin) << "," << fmt(r.mbpsBin) << ",0.000000,"
-            << fmt(r.mbpsDec) << "," << fmt(r.readMbpsDec) << "," << fmt(r.writeMbpsDec) << ","
-            << fmt(r.iops) << ",0.000000,"
-            << fmt(r.avgLatencyMs) << "," << fmt(r.avgLatencyMs) << ",0.000000,0.000000,0.000000,"
-            << fmt(r.maxLatencyMs) << "," << fmt(r.maxLatencyMs) << ",0.000000,0.000000,0.000000,"
-            << r.errors << ",0,0,"
-            << fmt(r.cpuUtil) << "," << fmt(r.cpuUser) << "," << fmt(r.cpuKernel)
-            << ",0.000000,0.000000,0.000000,0.000000\n";
-    }
-
-    return true;
+    // Delegate to ResultsWriter for CSV generation
+    // This keeps CSV format logic in one place for both MFC and Qt
+    return ResultsWriter::writeBatchResultsCsv(filepath, results, cfg);
 }
 
 void DynamoEngine::newConfig()
