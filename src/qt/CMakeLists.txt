@@ -57,6 +57,7 @@ set(CORE_SOURCES
     ../core/DynamoConnection.cpp
     ../core/IcfFile.cpp
     ../core/WorkerPool.cpp
+    ../core/TestRunner.cpp
 )
 set(CORE_HEADERS
     IometerTypes.h
@@ -77,6 +78,7 @@ set(CORE_HEADERS
     ../core/DynamoConnection.h
     ../core/IcfFile.h
     ../core/WorkerPool.h
+    ../core/TestRunner.h
 )
 
 # ── Static library shared by app + all test targets ──────────────────────────
