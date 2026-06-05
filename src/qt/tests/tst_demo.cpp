@@ -22,7 +22,7 @@ private slots:
     }
     void initialState_hasWorkers() {
         DemoEngine eng;
-        QVERIFY(!eng.managers().first().workers.isEmpty());
+        QVERIFY(!eng.managers().first().workers.empty());
     }
     void initialState_hasSpecsFromLibrary() {
         DemoEngine eng;
@@ -118,11 +118,11 @@ private slots:
         AccessSpec s;
         s.name = "TestSpec";
         AccessSpecLine l; l.sizeBytes = 4096; l.readPercent = 50; l.seqPercent = 100;
-        s.lines.append(l);
+        s.lines.push_back(l);
         custom.append(s);
         eng.setAccessSpecs(custom);
         QCOMPARE(eng.accessSpecs().size(), 1);
-        QCOMPARE(eng.accessSpecs()[0].name, QString("TestSpec"));
+        QCOMPARE(QString::fromStdString(eng.accessSpecs()[0].name), QString("TestSpec"));
     }
 
     // ── TestConfig round-trip ────────────────────────────────────────────────

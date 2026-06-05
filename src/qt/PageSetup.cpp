@@ -232,19 +232,20 @@ void PageSetup::populateTargetList()
 
     // Find the manager to get its availableTargets list
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
+        if (mgr.name != m_selManagerName.toStdString()) continue;
 
         // Collect available targets, falling back to worker assignments if needed
-        QList<TargetInfo> avail = mgr.availableTargets;
+        QList<TargetInfo> avail(mgr.availableTargets.begin(), mgr.availableTargets.end());
         if (avail.isEmpty()) {
             QStringList seen;
             for (const auto &w : mgr.workers) {
                 for (const auto &t : w.targets) {
-                    if (!seen.contains(t)) {
-                        seen.append(t);
+                    const QString tq = QString::fromStdString(t);
+                    if (!seen.contains(tq)) {
+                        seen.append(tq);
                         // Infer type from name: PhysicalDrive → physical, else logical
-                        const bool isPhys = t.contains("PhysicalDrive", Qt::CaseInsensitive)
-                                         || t.startsWith("\\\\.\\");
+                        const bool isPhys = tq.contains("PhysicalDrive", Qt::CaseInsensitive)
+                                         || tq.startsWith("\\\\.\\");
                         avail.append(TargetInfo{
                             t,
                             isPhys ? TargetKind::PhysicalDisk : TargetKind::LogicalDisk,
@@ -259,7 +260,10 @@ void PageSetup::populateTargetList()
         QStringList assigned;
         if (!m_selWorkerId.isEmpty()) {
             for (const auto &w : mgr.workers)
-                if (w.id == m_selWorkerId) { assigned = w.targets; break; }
+                if (w.id == m_selWorkerId.toStdString()) {
+                    for (const auto &t : w.targets) assigned << QString::fromStdString(t);
+                    break;
+                }
         }
 
         // Prepare the three possible icons
@@ -276,9 +280,9 @@ void PageSetup::populateTargetList()
             else
                 icon = logUnreadyIcon;
 
-            auto *item = new QListWidgetItem(icon, ti.name);
+            auto *item = new QListWidgetItem(icon, QString::fromStdString(ti.name));
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(assigned.contains(ti.name) ? Qt::Checked : Qt::Unchecked);
+            item->setCheckState(assigned.contains(QString::fromStdString(ti.name)) ? Qt::Checked : Qt::Unchecked);
             m_targetList->addItem(item);
         }
         break;
@@ -362,10 +366,11 @@ void PageSetup::onTargetItemChanged(QListWidgetItem *item)
     }
 
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
+        if (mgr.name != m_selManagerName.toStdString()) continue;
         for (auto w : mgr.workers) {
-            if (w.id != m_selWorkerId) continue;
-            w.targets = assigned;
+            if (w.id != m_selWorkerId.toStdString()) continue;
+            w.targets.clear();
+            for (const auto &s : assigned) w.targets.push_back(s.toStdString());
             m_engine->updateWorker(w);
             return;
         }

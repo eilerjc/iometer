@@ -36,7 +36,7 @@ private slots:
     // ── Each spec has at least one line ─────────────────────────────────────
     void allSpecsHaveLines() {
         for (const auto &spec : IometerEngine::builtinAccessSpecs())
-            QVERIFY2(!spec.lines.isEmpty(), qPrintable(spec.name + " has no lines"));
+            QVERIFY2(!spec.lines.empty(), (spec.name + " has no lines").c_str());
     }
 
     // ── Specific spec parameters ─────────────────────────────────────────────
@@ -53,7 +53,7 @@ private slots:
     void spec_4KiB_aligned_random() {
         const auto specs = IometerEngine::builtinAccessSpecs();
         const auto it = std::find_if(specs.begin(), specs.end(),
-            [](const AccessSpec &s){ return s.name.startsWith("4 KiB aligned; 100%"); });
+            [](const AccessSpec &s){ return s.name.rfind("4 KiB aligned; 100%", 0) == 0; });
         QVERIFY(it != specs.end());
         QCOMPARE(it->lines[0].sizeBytes,   4096);
         QCOMPARE(it->lines[0].alignBytes,  4096);
@@ -82,7 +82,7 @@ private slots:
     // ── "All in one" multi-line distribution ─────────────────────────────────
     void allInOne_lineCount() {
         const auto &spec = IometerEngine::builtinAccessSpecs().last();
-        QCOMPARE(spec.name, QString("All in one"));
+        QCOMPARE(QString::fromStdString(spec.name), QString("All in one"));
         QCOMPARE(spec.lines.size(), 29); // 29 patterns (excluding Idle and Default)
     }
     void allInOne_ofSizeSumsTo100() {
@@ -102,8 +102,8 @@ private slots:
         const auto specs = IometerEngine::builtinAccessSpecs();
         QSet<QString> seen;
         for (const auto &s : specs) {
-            QVERIFY2(!seen.contains(s.name), qPrintable("Duplicate spec: " + s.name));
-            seen.insert(s.name);
+            QVERIFY2(!seen.contains(QString::fromStdString(s.name)), ("Duplicate spec: " + s.name).c_str());
+            seen.insert(QString::fromStdString(s.name));
         }
     }
 
@@ -113,7 +113,7 @@ private slots:
             if (spec.name == "All in one") continue;
             if (spec.lines.size() == 1)
                 QVERIFY2(spec.lines[0].ofSize == 100,
-                         qPrintable(spec.name + " single-line ofSize != 100"));
+                         (spec.name + " single-line ofSize != 100").c_str());
         }
     }
 

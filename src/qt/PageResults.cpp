@@ -173,7 +173,7 @@ void PageResults::loadConfig()
 {
     m_updating = true;
     const TestConfig &c = m_engine->testConfig();
-    m_description->setText(c.description);
+    m_description->setText(QString::fromStdString(c.description));
     m_runHours->setValue(c.runHours);
     m_runMinutes->setValue(c.runMinutes);
     m_runSeconds->setValue(c.runSeconds);
@@ -197,7 +197,7 @@ void PageResults::saveConfig()
 {
     if (m_updating) return;
     TestConfig c;
-    c.description   = m_description->text();
+    c.description   = m_description->text().toStdString();
     c.runHours      = m_runHours->value();
     c.runMinutes    = m_runMinutes->value();
     c.runSeconds    = m_runSeconds->value();

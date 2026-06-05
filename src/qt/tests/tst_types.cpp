@@ -34,7 +34,7 @@ private slots:
     void displayLabel_emptySpec() {
         AccessSpec s;
         s.name = "TestSpec";
-        QCOMPARE(s.displayLabel(), QString("TestSpec"));
+        QCOMPARE(accessSpecDisplayLabel(s), QString("TestSpec"));
     }
     void displayLabel_singleLine_sequential() {
         AccessSpec s;
@@ -43,9 +43,9 @@ private slots:
         l.sizeBytes   = 65536;
         l.readPercent = 100;
         l.seqPercent  = 100;   // 100% sequential → 0% random
-        s.lines.append(l);
+        s.lines.push_back(l);
         // Single-line → should produce formatted label
-        const QString lbl = s.displayLabel();
+        const QString lbl = accessSpecDisplayLabel(s);
         QVERIFY(lbl.contains("64 KiB"));
         QVERIFY(lbl.contains("100%"));
         QVERIFY(lbl.contains("0%"));    // 0% random
@@ -57,8 +57,8 @@ private slots:
         l.sizeBytes   = 4096;
         l.readPercent = 50;
         l.seqPercent  = 0;     // 0% sequential → 100% random
-        s.lines.append(l);
-        const QString lbl = s.displayLabel();
+        s.lines.push_back(l);
+        const QString lbl = accessSpecDisplayLabel(s);
         QVERIFY(lbl.contains("4 KiB"));
         QVERIFY(lbl.contains("50%"));
         QVERIFY(lbl.contains("100%")); // 100% random
@@ -68,9 +68,9 @@ private slots:
         s.name = "All in one";
         AccessSpecLine l;
         l.sizeBytes = 512; l.ofSize = 50; l.readPercent = 100; l.seqPercent = 100;
-        s.lines.append(l);
-        s.lines.append(l);  // two lines → fall back to name
-        QCOMPARE(s.displayLabel(), QString("All in one"));
+        s.lines.push_back(l);
+        s.lines.push_back(l);  // two lines → fall back to name
+        QCOMPARE(accessSpecDisplayLabel(s), QString("All in one"));
     }
 
     // ── WorkerResult::get ────────────────────────────────────────────────────

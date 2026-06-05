@@ -28,7 +28,7 @@ private slots:
         PageSetup page(&engine);
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
-        page.setSelectedManager(managers[0].name);
+        page.setSelectedManager(QString::fromStdString(managers[0].name));
         QVERIFY(true);
     }
 
@@ -52,8 +52,8 @@ private slots:
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
         const auto &mgr = managers[0];
-        QVERIFY(!mgr.workers.isEmpty());
-        page.setSelectedWorker(mgr.name, mgr.workers[0].id);
+        QVERIFY(!mgr.workers.empty());
+        page.setSelectedWorker(QString::fromStdString(mgr.name), QString::fromStdString(mgr.workers[0].id));
         QVERIFY(true);
     }
 
@@ -62,7 +62,7 @@ private slots:
         PageSetup page(&engine);
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
-        page.setSelectedWorker(managers[0].name, "InvalidWorkerID");
+        page.setSelectedWorker(QString::fromStdString(managers[0].name), "InvalidWorkerID");
         QVERIFY(true);
     }
 
@@ -84,8 +84,8 @@ private slots:
         DemoEngine engine;
         PageSetup page(&engine);
         const auto managers = engine.managers();
-        if (!managers.isEmpty() && !managers[0].workers.isEmpty()) {
-            page.setSelectedWorker(managers[0].name, managers[0].workers[0].id);
+        if (!managers.isEmpty() && !managers[0].workers.empty()) {
+            page.setSelectedWorker(QString::fromStdString(managers[0].name), QString::fromStdString(managers[0].workers[0].id));
             page.refreshForEngine();
             QVERIFY(true);
         }
@@ -97,9 +97,9 @@ private slots:
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
 
-        page.setSelectedManager(managers[0].name);
-        if (!managers[0].workers.isEmpty()) {
-            page.setSelectedWorker(managers[0].name, managers[0].workers[0].id);
+        page.setSelectedManager(QString::fromStdString(managers[0].name));
+        if (!managers[0].workers.empty()) {
+            page.setSelectedWorker(QString::fromStdString(managers[0].name), QString::fromStdString(managers[0].workers[0].id));
         }
         page.refreshForEngine();
         page.clearSelection();

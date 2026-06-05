@@ -42,13 +42,13 @@ void DemoEngine::buildDefaultConfig()
     const QStringList diskNames = {"W:", "X:", "Y:", "Z:"};
     for (int i = 0; i < 4; ++i) {
         WorkerInfo w;
-        w.id          = QString("local-w%1").arg(i);
-        w.name        = QString("Worker %1").arg(i + 1);
+        w.id          = QString("local-w%1").arg(i).toStdString();
+        w.name        = QString("Worker %1").arg(i + 1).toStdString();
         w.type        = "Disk";
         w.managerName = local.name;
-        w.targets     = QStringList{ diskNames[i] };
+        w.targets     = { diskNames[i].toStdString() };
         w.queueDepth  = (i == 0) ? 32 : (i == 1) ? 16 : 8;
-        local.workers.append(w);
+        local.workers.push_back(w);
     }
     m_managers.append(local);
 
@@ -88,7 +88,7 @@ void DemoEngine::stopAll()
 
 // ---- Simulation tick --------------------------------------------------------
 
-WorkerResult DemoEngine::makeResult(const WorkerInfo &w, const QString &mgrName, double t) const
+WorkerResult DemoEngine::makeResult(const WorkerInfo &w, const std::string &mgrName, double t) const
 {
     int idx = 0;
     for (int i = 0; i < m_managers.first().workers.size(); ++i)
@@ -105,8 +105,8 @@ WorkerResult DemoEngine::makeResult(const WorkerInfo &w, const QString &mgrName,
     const double latJitter  = latBase * 0.15 * std::sin(t * 1.3 + phase);
 
     WorkerResult r;
-    r.managerName  = mgrName;
-    r.workerName   = w.name;
+    r.managerName  = mgrName;          // std::string
+    r.workerName   = w.name;           // std::string
     r.mbpsDec      = mbps;
     r.readMbpsDec  = mbps;
     r.mbpsBin      = mbps / 1.048576;
@@ -134,7 +134,7 @@ void DemoEngine::tick()
     for (const auto &mgr : std::as_const(m_managers)) {
         if (!mgr.connected) continue;
         for (const auto &w : mgr.workers) {
-            WorkerResult r = makeResult(w, mgr.name, m_t);
+            WorkerResult r = makeResult(w, mgr.name, m_t);   // mgr.name is std::string
             m_current.append(r);
 
             aggregate.iops         += r.iops;
@@ -187,11 +187,11 @@ bool DemoEngine::saveConfig(const QString &)
 void DemoEngine::connectManager(const QString &address, const QString &name)
 {
     for (auto &m : m_managers) {
-        if (m.address == address) { m.connected = true; emit managerConnected(m); return; }
+        if (m.address == address.toStdString()) { m.connected = true; emit managerConnected(m); return; }
     }
     ManagerInfo m;
-    m.name      = name.isEmpty() ? address : name;
-    m.address   = address;
+    m.name      = (name.isEmpty() ? address : name).toStdString();
+    m.address   = address.toStdString();
     m.connected = true;
     m_managers.append(m);
     emit managerConnected(m);
@@ -200,7 +200,7 @@ void DemoEngine::connectManager(const QString &address, const QString &name)
 void DemoEngine::disconnectManager(const QString &mgrName)
 {
     for (int i = 0; i < m_managers.size(); ++i) {
-        if (m_managers[i].name == mgrName) {
+        if (m_managers[i].name == mgrName.toStdString()) {
             m_managers[i].connected = false;
             emit managerDisconnected(mgrName);
             return;
@@ -211,15 +211,15 @@ void DemoEngine::disconnectManager(const QString &mgrName)
 void DemoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
 {
     for (auto &m : m_managers)
-        if (m.name == mgrName) { m.workers.append(w); emit configChanged(); return; }
+        if (m.name == mgrName.toStdString()) { m.workers.push_back(w); emit configChanged(); return; }
 }
 
 void DemoEngine::removeWorker(const QString &mgrName, const QString &workerId)
 {
     for (auto &m : m_managers)
-        if (m.name == mgrName)
-            for (int i = 0; i < m.workers.size(); ++i)
-                if (m.workers[i].id == workerId) { m.workers.removeAt(i); emit configChanged(); return; }
+        if (m.name == mgrName.toStdString())
+            for (size_t i = 0; i < m.workers.size(); ++i)
+                if (m.workers[i].id == workerId.toStdString()) { m.workers.erase(m.workers.begin() + i); emit configChanged(); return; }
 }
 
 void DemoEngine::updateWorker(const WorkerInfo &w)

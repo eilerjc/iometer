@@ -3,8 +3,8 @@
 
 #include "IometerEngine.h"
 #include "DyProto.h"
-#include "QtTestRunnerAdapter.h"
-#include "QtWorkerPoolAdapter.h"
+#include "../core/WorkerPool.h"
+#include "../core/TestRunner.h"
 #include <QObject>
 #include <QList>
 #include <QVector>
@@ -68,7 +68,7 @@ public:
         QList<TargetInfo> infos;
         for (const auto &t : m_diskTargets) {
             TargetInfo ti;
-            ti.name = QString::fromLocal8Bit(t.name);
+            ti.name = QString::fromLocal8Bit(t.name).toStdString();
             if (t.type == DY_PHYSICAL_DISK) {
                 ti.kind  = TargetKind::PhysicalDisk;
                 ti.ready = true;   // physical disks are always directly testable
@@ -248,8 +248,8 @@ private:
 
     QTcpServer                *m_server        = nullptr;
     QList<DySession*>         m_sessions;
-    QtWorkerPoolAdapter       *m_workerPoolAdapter = nullptr;  // Qt wrapper around WorkerPool
-    QtTestRunnerAdapter       *m_testRunnerAdapter = nullptr;  // Qt wrapper around TestRunner
+    WorkerPool                m_workerPool;   // core domain model (manager/worker lifecycle)
+    TestRunner                m_testRunner;   // core domain model (test state machine)
     QList<AccessSpec>         m_specs;
     AccessSpec            m_currentTestSpec;
     bool                  m_hasCurrentTestSpec = false;

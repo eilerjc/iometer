@@ -337,15 +337,15 @@ void MainWindow::rebuildWorkerTree()
     int workerCount = 0;
     for (const auto &mgr : m_engine->managers()) {
         auto *mgrItem = new QTreeWidgetItem(root);
-        mgrItem->setText(0, mgr.name);
-        mgrItem->setData(0, Qt::UserRole, "mgr:" + mgr.name);
+        mgrItem->setText(0, QString::fromStdString(mgr.name));
+        mgrItem->setData(0, Qt::UserRole, QString::fromStdString("mgr:" + mgr.name));
         mgrItem->setIcon(0, computerIcon);
         mgrItem->setExpanded(true);
 
         for (const auto &w : mgr.workers) {
             auto *wItem = new QTreeWidgetItem(mgrItem);
-            wItem->setText(0, w.name);
-            wItem->setData(0, Qt::UserRole, "worker:" + mgr.name + ":" + w.id);
+            wItem->setText(0, QString::fromStdString(w.name));
+            wItem->setData(0, Qt::UserRole, QString::fromStdString("worker:" + mgr.name + ":" + w.id));
             wItem->setIcon(0, w.type == "Network" ? netIcon : hdIcon);
             ++workerCount;
         }
@@ -579,16 +579,16 @@ void MainWindow::onNewDiskWorker()
     // Count existing workers to pick next number
     int workerNum = 1;
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name == m_selManagerName) {
+        if (mgr.name == m_selManagerName.toStdString()) {
             workerNum = mgr.workers.size() + 1;
             break;
         }
     }
     WorkerInfo w;
-    w.id          = QString("%1-disk-%2").arg(m_selManagerName).arg(workerNum);
-    w.name        = QString("Worker %1").arg(workerNum);
+    w.id          = QString("%1-disk-%2").arg(m_selManagerName).arg(workerNum).toStdString();
+    w.name        = QString("Worker %1").arg(workerNum).toStdString();
     w.type        = "Disk";
-    w.managerName = m_selManagerName;
+    w.managerName = m_selManagerName.toStdString();
     w.queueDepth  = 1;
     m_engine->addWorker(m_selManagerName, w);
 }
@@ -599,16 +599,16 @@ void MainWindow::onNewNetWorker()
 
     int workerNum = 1;
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name == m_selManagerName) {
+        if (mgr.name == m_selManagerName.toStdString()) {
             workerNum = mgr.workers.size() + 1;
             break;
         }
     }
     WorkerInfo w;
-    w.id          = QString("%1-net-%2").arg(m_selManagerName).arg(workerNum);
-    w.name        = QString("Net Worker %1").arg(workerNum);
+    w.id          = QString("%1-net-%2").arg(m_selManagerName).arg(workerNum).toStdString();
+    w.name        = QString("Net Worker %1").arg(workerNum).toStdString();
     w.type        = "Network";
-    w.managerName = m_selManagerName;
+    w.managerName = m_selManagerName.toStdString();
     w.queueDepth  = 1;
     m_engine->addWorker(m_selManagerName, w);
 }
@@ -618,12 +618,12 @@ void MainWindow::onCopyWorker()
     if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
 
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
+        if (mgr.name != m_selManagerName.toStdString()) continue;
         for (const auto &src : mgr.workers) {
-            if (src.id != m_selWorkerId) continue;
+            if (src.id != m_selWorkerId.toStdString()) continue;
             WorkerInfo w  = src;
             const int  n  = mgr.workers.size() + 1;
-            w.id          = QString("%1-%2-copy").arg(m_selManagerName).arg(n);
+            w.id          = QString("%1-%2-copy").arg(m_selManagerName).arg(n).toStdString();
             w.name        = src.name + " (copy)";
             m_engine->addWorker(m_selManagerName, w);
             return;
@@ -701,7 +701,7 @@ void MainWindow::onTestStopped()
         m_statusLeft->setText(
             QString("Running spec %1/%2: %3")
                 .arg(nextIdx + 1).arg(m_runQueue.size())
-                .arg(m_runQueue[nextIdx].name));
+                .arg(QString::fromStdString(m_runQueue[nextIdx].name)));
         return;   // stay in running state - don't update toolbar
     }
 
@@ -737,8 +737,8 @@ void MainWindow::onResultsUpdated(QVector<WorkerResult> results)
         const QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
         for (const auto &r : results) {
             out << ts                    << ','
-                << r.managerName         << ','
-                << r.workerName          << ','
+                << QString::fromStdString(r.managerName) << ','
+                << QString::fromStdString(r.workerName)  << ','
                 << r.iops                << ','
                 << r.readIops            << ','
                 << r.writeIops           << ','

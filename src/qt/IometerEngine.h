@@ -80,8 +80,8 @@ public:
         // Helper: make a single-line spec
         auto addOne = [&](const QString &name, AccessSpecLine l) {
             AccessSpec s;
-            s.name = name;
-            s.lines.append(l);
+            s.name = name.toStdString();
+            s.lines.push_back(l);
             specs.append(s);
         };
 
@@ -91,7 +91,7 @@ public:
             s.name = "Idle";
             AccessSpecLine l;
             l.sizeBytes = 0; l.ofSize = 100;
-            s.lines.append(l);
+            s.lines.push_back(l);
             specs.append(s);
         }
 
@@ -99,7 +99,7 @@ public:
         {
             AccessSpec s;
             s.name = "Default"; s.defaultSpec = true;
-            s.lines.append(line(65536, 100, 100));
+            s.lines.push_back(line(65536, 100, 100));
             specs.append(s);
         }
 
@@ -158,7 +158,7 @@ public:
                 AccessSpecLine l = patterns[i].l;
                 // Distribute 100% as evenly as possible (matches original rounding)
                 l.ofSize = (i < 100 % n) ? 100 / n + 1 : 100 / n;
-                s.lines.append(l);
+                s.lines.push_back(l);
             }
             specs.append(s);
         }

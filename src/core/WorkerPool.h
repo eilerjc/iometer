@@ -53,6 +53,6 @@ private:
     std::vector<ManagerEntry> m_managers;
     std::string m_lastError;
 
-    ManagerEntry* findManager(const QString &managerName);
-    const ManagerEntry* findManagerConst(const QString &managerName) const;
+    ManagerEntry* findManager(const std::string &managerName);
+    const ManagerEntry* findManagerConst(const std::string &managerName) const;
 };

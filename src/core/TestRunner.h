@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <cstdint>
 #include "IometerTypes.h"
 
 // Forward declarations (included via IometerTypes.h above, repeated here for clarity)
@@ -64,13 +65,9 @@ public:
     std::function<void(const std::string&)> onStatusMessage;
     std::function<void(const std::string&)> onErrorOccurred;
 
-private slots:
-    void onStartupComplete();
-    void onShutdownComplete();
-
 private:
     void setState(State newState);
-    void recordError(const QString &message);
+    void recordError(const std::string &message);
 
     State m_state;
     TestConfig m_config;
@@ -79,7 +76,7 @@ private:
     std::vector<WorkerResult> m_results;
     std::string m_lastError;
 
-    // Timing
-    qint64 m_startTime;
-    qint64 m_elapsed;
+    // Timing (milliseconds since epoch)
+    int64_t m_startTime;
+    int64_t m_elapsed;
 };

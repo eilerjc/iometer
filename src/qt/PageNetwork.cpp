@@ -164,10 +164,10 @@ void PageNetwork::populateTargetTree()
     QStringList assigned;
     if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty()) {
         for (const auto &mgr : m_engine->managers()) {
-            if (mgr.name != m_selManagerName) continue;
+            if (mgr.name != m_selManagerName.toStdString()) continue;
             for (const auto &w : mgr.workers) {
-                if (w.id == m_selWorkerId && w.type == "Network") {
-                    assigned = w.targets;
+                if (w.id == m_selWorkerId.toStdString() && w.type == "Network") {
+                    for (const auto &t : w.targets) assigned << QString::fromStdString(t);
                     break;
                 }
             }
@@ -183,17 +183,17 @@ void PageNetwork::populateTargetTree()
         if (!mgr.connected) continue;
 
         auto *mgrItem = new QTreeWidgetItem(m_targetTree);
-        mgrItem->setText(0, mgr.name);
+        mgrItem->setText(0, QString::fromStdString(mgr.name));
         mgrItem->setIcon(0, mgrIcon);
         mgrItem->setFlags(mgrItem->flags() & ~Qt::ItemIsUserCheckable);
 
-        for (const QString &nic : mgr.availableNetInterfaces) {
+        for (const auto &nic : mgr.availableNetInterfaces) {
             auto *nicItem = new QTreeWidgetItem(mgrItem);
-            nicItem->setText(0, nic);
+            nicItem->setText(0, QString::fromStdString(nic));
             nicItem->setIcon(0, nicIcon);
             nicItem->setFlags(nicItem->flags() | Qt::ItemIsUserCheckable);
             // Key: "managerName/nic"
-            const QString key = mgr.name + "/" + nic;
+            const QString key = QString::fromStdString(mgr.name + "/" + nic);
             nicItem->setCheckState(0, assigned.contains(key) ? Qt::Checked : Qt::Unchecked);
             nicItem->setData(0, Qt::UserRole, key);
         }
@@ -210,9 +210,9 @@ void PageNetwork::rebuildNicCombo()
 
     // Show NICs on the selected manager as candidates for outgoing connections
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
-        for (const QString &nic : mgr.availableNetInterfaces)
-            m_nicCombo->addItem(nic);
+        if (mgr.name != m_selManagerName.toStdString()) continue;
+        for (const auto &nic : mgr.availableNetInterfaces)
+            m_nicCombo->addItem(QString::fromStdString(nic));
         break;
     }
     m_updating = false;
@@ -223,11 +223,11 @@ void PageNetwork::loadWorkerParams()
     if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     m_updating = true;
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
+        if (mgr.name != m_selManagerName.toStdString()) continue;
         for (const auto &w : mgr.workers) {
-            if (w.id != m_selWorkerId) continue;
+            if (w.id != m_selWorkerId.toStdString()) continue;
             // Set NIC combo to match worker's networkInterface
-            const int idx = m_nicCombo->findText(w.networkInterface);
+            const int idx = m_nicCombo->findText(QString::fromStdString(w.networkInterface));
             if (idx >= 0) m_nicCombo->setCurrentIndex(idx);
 
             m_maxSends->setValue(w.maxOutstandingSends);
@@ -245,10 +245,10 @@ void PageNetwork::saveWorkerParams()
 {
     if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
+        if (mgr.name != m_selManagerName.toStdString()) continue;
         for (auto w : mgr.workers) {
-            if (w.id != m_selWorkerId) continue;
-            w.networkInterface    = m_nicCombo->currentText();
+            if (w.id != m_selWorkerId.toStdString()) continue;
+            w.networkInterface    = m_nicCombo->currentText().toStdString();
             w.maxOutstandingSends = m_maxSends->value();
             w.testConnRate        = m_testConnRateChk->isChecked();
             w.transPerConn        = m_transPerConn->value();
@@ -287,10 +287,11 @@ void PageNetwork::onTargetItemChanged(QTreeWidgetItem *item, int /*column*/)
     }
 
     for (const auto &mgr : m_engine->managers()) {
-        if (mgr.name != m_selManagerName) continue;
+        if (mgr.name != m_selManagerName.toStdString()) continue;
         for (auto w : mgr.workers) {
-            if (w.id != m_selWorkerId) continue;
-            w.targets = assigned;
+            if (w.id != m_selWorkerId.toStdString()) continue;
+            w.targets.clear();
+            for (const auto &s : assigned) w.targets.push_back(s.toStdString());
             m_engine->updateWorker(w);
             return;
         }

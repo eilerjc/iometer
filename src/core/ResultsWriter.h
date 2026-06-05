@@ -58,4 +58,9 @@ public:
 
     // CSV format version (shared)
     static constexpr const char *VERSION = "1.1.0";
+
+private:
+    // Formatting helpers
+    static std::string formatDouble(double value, int precision = 2);
+    static std::string escapeCsvField(const std::string &field);
 };

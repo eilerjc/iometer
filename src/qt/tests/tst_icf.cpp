@@ -31,7 +31,7 @@ private slots:
         DynamoEngine eng(false);
         QVERIFY(eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/minimal.icf"));
         // Blank description must not bleed into run-time data
-        const QString desc = eng.testConfig().description;
+        const QString desc = QString::fromStdString(eng.testConfig().description);
         bool isNumeric = desc.toInt() != 0 && !desc.isEmpty();
         QVERIFY2(!isNumeric, qPrintable("Description '" + desc + "' looks like run-time data"));
     }

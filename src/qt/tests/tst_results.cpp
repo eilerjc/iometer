@@ -16,8 +16,8 @@ static WorkerResult makeResult(const QString &manager, const QString &worker,
                                bool aggregate = false)
 {
     WorkerResult r;
-    r.managerName    = manager;
-    r.workerName     = worker;
+    r.managerName    = manager.toStdString();
+    r.workerName     = worker.toStdString();
     r.isAggregate    = aggregate;
     r.iops           = iops;
     r.readIops       = iops * 0.9;

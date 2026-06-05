@@ -126,7 +126,7 @@ void PageAccess::setupUi()
 // =============================================================================
 
 static QString specLabel(const AccessSpec &s) {
-    return s.name;   // all built-in specs carry their full original name
+    return QString::fromStdString(s.name);   // all built-in specs carry their full original name
 }
 
 void PageAccess::rebuildGlobalList()
@@ -135,7 +135,7 @@ void PageAccess::rebuildGlobalList()
     m_global->clear();
     for (const auto &s : m_engine->accessSpecs()) {
         auto *item = new QListWidgetItem(specLabel(s));
-        item->setData(Qt::UserRole, s.name);
+        item->setData(Qt::UserRole, QString::fromStdString(s.name));
         if (s.defaultSpec) {
             QFont f = item->font();
             f.setBold(true);
@@ -302,7 +302,7 @@ bool PageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
     dlg.setMinimumSize(730, 560);
 
     // Working copy of lines - edited locally until OK
-    QList<AccessSpecLine> lines = spec.lines;
+    QList<AccessSpecLine> lines(spec.lines.begin(), spec.lines.end());
     if (lines.isEmpty()) {
         AccessSpecLine l; l.sizeBytes = 65536; l.ofSize = 100;
         lines.append(l);
@@ -311,7 +311,7 @@ bool PageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
     bool updating = false;
 
     // -- Top row: Name + Default Assignment ----------------------------------
-    auto *nameEdit    = new QLineEdit(spec.name);
+    auto *nameEdit    = new QLineEdit(QString::fromStdString(spec.name));
     auto *defCombo    = new QComboBox;
     defCombo->addItems({"None", "All Managers"});
     defCombo->setCurrentIndex(spec.defaultSpec ? 1 : 0);
@@ -635,18 +635,18 @@ bool PageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
     // Save the currently selected row before accepting
     saveControls(table->currentRow());
 
-    spec.name        = nameEdit->text().trimmed();
+    spec.name        = nameEdit->text().trimmed().toStdString();
     spec.defaultSpec = (defCombo->currentIndex() > 0);
-    spec.lines       = lines;
+    spec.lines.assign(lines.begin(), lines.end());
     return true;
 }
 
 void PageAccess::onNewSpec()
 {
     AccessSpec s;
-    s.name = QString("New Spec %1").arg(m_engine->accessSpecs().size() + 1);
+    s.name = QString("New Spec %1").arg(m_engine->accessSpecs().size() + 1).toStdString();
     AccessSpecLine l; l.sizeBytes = 4096; l.ofSize = 100;
-    s.lines.append(l);
+    s.lines.push_back(l);
     if (!editSpecDialog(s, "New Access Specification")) return;
     auto specs = m_engine->accessSpecs();
     specs.append(s);
@@ -692,7 +692,7 @@ void PageAccess::onDeleteSpec()
     auto specs = m_engine->accessSpecs();
     if (row >= specs.size()) return;
     const auto btn = QMessageBox::question(this, "Delete Spec",
-        QString("Delete \"%1\"?").arg(specs[row].name));
+        QString("Delete \"%1\"?").arg(QString::fromStdString(specs[row].name)));
     if (btn != QMessageBox::Yes) return;
     specs.removeAt(row);
     m_engine->setAccessSpecs(specs);

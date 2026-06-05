@@ -88,10 +88,12 @@ static int batchMain(const QString &icfFile,
             for (const auto &mgr : engine.managers()) {
                 for (auto w : mgr.workers) {
                     if (wi < batchWorkers.size()) {
-                        w.targets = batchWorkers[wi].targets;
+                        w.targets.clear();
+                        for (const auto &t : batchWorkers[wi].targets)
+                            w.targets.push_back(t.toStdString());
                         qInfo("Batch:   Worker %d ('%s'): targets=[%s] spec='%s'",
-                              wi, qPrintable(w.name),
-                              qPrintable(w.targets.join(", ")),
+                              wi, w.name.c_str(),
+                              qPrintable(batchWorkers[wi].targets.join(", ")),
                               qPrintable(batchWorkers[wi].assignedSpecs.value(0)));
                     } else {
                         w.targets.clear();   // no targets → Dynamo skips this worker
@@ -105,9 +107,9 @@ static int batchMain(const QString &icfFile,
             const QString specName = engine.batchAssignedSpec();
             if (!specName.isEmpty()) {
                 for (const auto &s : engine.accessSpecs()) {
-                    if (s.name == specName) {
+                    if (s.name == specName.toStdString()) {
                         engine.setCurrentTestSpec(s);
-                        qInfo("Batch: Using spec '%s'", qPrintable(s.name));
+                        qInfo("Batch: Using spec '%s'", s.name.c_str());
                         break;
                     }
                 }

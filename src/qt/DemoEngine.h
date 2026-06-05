@@ -47,7 +47,7 @@ private slots:
 
 private:
     void buildDefaultConfig();
-    WorkerResult makeResult(const WorkerInfo &w, const QString &mgrName, double t) const;
+    WorkerResult makeResult(const WorkerInfo &w, const std::string &mgrName, double t) const;
 
     QList<ManagerInfo>    m_managers;
     QList<AccessSpec>     m_specs;
