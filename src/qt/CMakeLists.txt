@@ -145,5 +145,22 @@ if(IOMETER_COVERAGE)
     message(STATUS "Coverage profraw output: ${CMAKE_BINARY_DIR}/coverage")
 endif()
 
+# ── Qt Runtime Deployment (copy DLLs and plugins post-build) ──────────────────
+if(WIN32)
+    # Find Qt bin and plugins directories
+    get_target_property(QT_QMAKE_EXECUTABLE ${_QT}::qmake IMPORTED_LOCATION)
+    get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
+    get_filename_component(QT_ROOT_DIR "${QT_BIN_DIR}" DIRECTORY)
+    set(QT_PLUGINS_DIR "${QT_ROOT_DIR}/plugins")
+
+    # Copy essential Qt DLLs post-build
+    add_custom_command(TARGET IometerQt POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Deploying Qt runtime libraries..."
+        COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/DeployQt.cmake
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Copying Qt DLLs and plugins for Release deployment"
+    )
+endif()
+
 # ── Install ───────────────────────────────────────────────────────────────────
 install(TARGETS IometerQt RUNTIME DESTINATION bin)
