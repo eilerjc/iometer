@@ -154,6 +154,15 @@ const QList<WorkerInfo>& WorkerPool::workers(const QString &managerName) const
     return mgr ? mgr->workers : emptyList;
 }
 
+QList<ManagerInfo> WorkerPool::managerInfos() const
+{
+    QList<ManagerInfo> infos;
+    for (const auto &mgr : m_managers) {
+        infos.append(mgr.info);
+    }
+    return infos;
+}
+
 bool WorkerPool::isValid() const
 {
     if (m_managers.isEmpty()) {

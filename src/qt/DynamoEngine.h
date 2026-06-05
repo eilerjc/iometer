@@ -3,6 +3,7 @@
 
 #include "IometerEngine.h"
 #include "DyProto.h"
+#include "../core/WorkerPool.h"
 #include <QObject>
 #include <QList>
 #include <QVector>
@@ -179,7 +180,11 @@ private:
 
 // -----------------------------------------------------------------------------
 // DynamoEngine - IometerEngine implementation backed by real Dynamo processes
+// Uses WorkerPool to manage manager/worker lifecycle
 // -----------------------------------------------------------------------------
+
+class WorkerPool;  // Forward declaration
+
 class DynamoEngine : public IometerEngine
 {
     Q_OBJECT
@@ -207,7 +212,7 @@ public:
                                      const TestConfig &cfg);
     void newConfig()  override;
 
-    QList<ManagerInfo>   managers()     const override { return m_managers; }
+    QList<ManagerInfo>   managers()     const override { return m_workerPool->managerInfos(); }
     void connectManager(const QString &address, const QString &name = {}) override;
     void disconnectManager(const QString &mgrName)                        override;
     void addWorker(const QString &mgrName, const WorkerInfo &w)           override;
@@ -242,7 +247,7 @@ private:
 
     QTcpServer           *m_server   = nullptr;
     QList<DySession*>     m_sessions;
-    QList<ManagerInfo>    m_managers;
+    WorkerPool           *m_workerPool = nullptr;  // Manages manager/worker lifecycle
     QList<AccessSpec>     m_specs;
     AccessSpec            m_currentTestSpec;
     bool                  m_hasCurrentTestSpec = false;

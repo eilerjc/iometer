@@ -3,6 +3,7 @@
 #include "IometerEngine.h"
 #include "../core/ResultsWriter.h"
 #include "../core/IcfFile.h"
+#include "../core/WorkerPool.h"
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QHostAddress>
@@ -817,6 +818,8 @@ DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
 {
     m_specs = IometerEngine::builtinAccessSpecs();
 
+    m_workerPool = new WorkerPool(this);
+
     m_server = new QTcpServer(this);
     connect(m_server, &QTcpServer::newConnection, this, &DynamoEngine::onNewConnection);
 
@@ -951,8 +954,9 @@ void DynamoEngine::startTest()
     m_savedResults.clear();
 
     QList<WorkerInfo> allWorkers;
-    for (const auto &mgr : m_managers)
-        allWorkers += mgr.workers;
+    auto managers = m_workerPool->managerInfos();
+    for (const auto &mgr : managers)
+        allWorkers += m_workerPool->workers(mgr.name);
 
     // In batch mode the ICF specifies an exact worker count.  Trim the list so
     // that extra Dynamo workers (beyond what the ICF defines) never receive
@@ -1031,10 +1035,12 @@ bool DynamoEngine::saveConfig(const QString &filepath)
     // Convert DynamoEngine BatchWorkerConfig to IcfFile BatchWorker
     QList<IcfFile::BatchWorker> batchWorkers;
 
-    if (!m_managers.isEmpty()) {
+    auto managers = m_workerPool->managerInfos();
+    if (!managers.isEmpty()) {
         // Live Dynamo connection - write actual connected state
-        for (const auto &mgr : m_managers) {
-            for (const auto &w : mgr.workers) {
+        for (const auto &mgr : managers) {
+            auto workers = m_workerPool->workers(mgr.name);
+            for (const auto &w : workers) {
                 IcfFile::BatchWorker bw;
                 bw.name = w.name;
                 bw.assignedSpecs = w.assignedSpecs;
@@ -1074,7 +1080,7 @@ void DynamoEngine::newConfig()
 {
     for (auto *s : m_sessions) s->deleteLater();
     m_sessions.clear();
-    m_managers.clear();
+    m_workerPool->clear();
     m_currentResults.clear();
     m_running = false;
     emit configChanged();
@@ -1098,39 +1104,20 @@ void DynamoEngine::disconnectManager(const QString &mgrName)
 
 void DynamoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
 {
-    for (auto &mgr : m_managers) {
-        if (mgr.name == mgrName) {
-            mgr.workers.append(w);
-            emit configChanged();
-            return;
-        }
-    }
+    m_workerPool->addWorker(mgrName, w);
+    emit configChanged();
 }
 
 void DynamoEngine::removeWorker(const QString &mgrName, const QString &workerId)
 {
-    for (auto &mgr : m_managers) {
-        if (mgr.name == mgrName) {
-            mgr.workers.removeIf([&](const WorkerInfo &w){ return w.id == workerId; });
-            emit configChanged();
-            return;
-        }
-    }
+    m_workerPool->removeWorker(mgrName, workerId);
+    emit configChanged();
 }
 
 void DynamoEngine::updateWorker(const WorkerInfo &w)
 {
-    for (auto &mgr : m_managers) {
-        if (mgr.name == w.managerName) {
-            for (auto &existing : mgr.workers) {
-                if (existing.id == w.id) {
-                    existing = w;
-                    emit configChanged();
-                    return;
-                }
-            }
-        }
-    }
+    m_workerPool->updateWorker(w);
+    emit configChanged();
 }
 
 void DynamoEngine::setAccessSpecs(const QList<AccessSpec> &specs)
@@ -1142,7 +1129,7 @@ void DynamoEngine::setAccessSpecs(const QList<AccessSpec> &specs)
 
 void DynamoEngine::rebuildManagers()
 {
-    m_managers.clear();
+    m_workerPool->clear();
     for (const auto *s : m_sessions) {
         if (s->state() == DySession::State::Ready ||
             s->state() == DySession::State::Running ||
@@ -1154,7 +1141,14 @@ void DynamoEngine::rebuildManagers()
             mgr.processorCount   = s->processorCount();
             mgr.workers          = s->workers();
             mgr.availableTargets = s->diskTargetInfos();
-            m_managers.append(mgr);
+
+            // Add manager to WorkerPool
+            m_workerPool->addManager(mgr);
+
+            // Add workers from this session
+            for (const auto &w : s->workers()) {
+                m_workerPool->addWorker(mgr.name, w);
+            }
         }
     }
 }

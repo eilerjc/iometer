@@ -41,6 +41,9 @@ public:
     // Query operations
     const QList<WorkerInfo>& workers(const QString &managerName) const;
 
+    // Get list of all manager infos (for UI/display)
+    QList<ManagerInfo> managerInfos() const;
+
     // Validation
     bool isValid() const;
     QString lastError() const;
