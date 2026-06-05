@@ -1,5 +1,5 @@
 // BigMeterWidget.h
-// Qt port of CBigMeter — the Iometer "Presentation Meter" window.
+// Qt port of CBigMeter - the Iometer "Presentation Meter" window.
 //
 // Displays a large speedometer (MeterWidget) together with:
 //   • test title and worker/result labels
@@ -30,19 +30,19 @@ class BigMeterWidget : public QWidget
 public:
     explicit BigMeterWidget(QWidget *parent = nullptr);
 
-    // ── Display control ───────────────────────────────────────────────────
+    // -- Display control ---------------------------------------------------
     void setTitle(const QString &testTitle);
     void setWorkerResult(const QString &workerName, const QString &resultName);
     void updateDisplay(double value, const QString &formattedText = {});
     void resetWatermark();
 
-    // ── Button state (mirrors CBigMeter::SetButtonState) ─────────────────
+    // -- Button state (mirrors CBigMeter::SetButtonState) -----------------
     //   canStart  → show "Start" button enabled
     //   canStop   → show "Stop" button enabled
     //   canStopAll→ "Next >>" button enabled (when running, there are more tests)
     void setButtonState(bool canStart, bool canStop, bool canStopAll);
 
-    // ── Access to the embedded gauge ──────────────────────────────────────
+    // -- Access to the embedded gauge --------------------------------------
     MeterWidget *meter() const { return m_meter; }
 
 signals:

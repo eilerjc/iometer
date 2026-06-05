@@ -1,4 +1,4 @@
-// main.cpp — Iometer Qt entry point
+// main.cpp - Iometer Qt entry point
 //
 // GUI mode (default):
 //   IometerQt.exe            → DynamoEngine, full GUI
@@ -41,7 +41,7 @@ static void translateOriginalFlags(int argc, char *argv[],
 }
 
 // ---------------------------------------------------------------------------
-// Batch mode — no window, QCoreApplication only.
+// Batch mode - no window, QCoreApplication only.
 // Mirrors the original IOmeter.exe /c /r /t behaviour exactly.
 // ---------------------------------------------------------------------------
 static int batchMain(const QString &icfFile,
@@ -59,7 +59,7 @@ static int batchMain(const QString &icfFile,
     const TestConfig cfg = engine.testConfig();
     const int runMs = ((cfg.runHours * 60 + cfg.runMinutes) * 60 + cfg.runSeconds) * 1000;
     if (runMs <= 0) {
-        qCritical("Batch: ICF run time is 0 seconds — nothing to do.");
+        qCritical("Batch: ICF run time is 0 seconds - nothing to do.");
         return 1;
     }
 
@@ -78,7 +78,7 @@ static int batchMain(const QString &icfFile,
 
             // Configure workers to match the ICF exactly:
             //   - Workers 0..N-1  get per-worker targets+spec from ICF
-            //   - Workers N..end  get empty targets (no I/O — matches original)
+            //   - Workers N..end  get empty targets (no I/O - matches original)
             const auto batchWorkers = engine.batchWorkers();
             qInfo("Batch: ICF defines %d worker(s); Dynamo reported %d.",
                   batchWorkers.size(),
@@ -155,7 +155,7 @@ static int guiMain(int argc, char *argv[])
     app.setFont(defaultFont);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("Iometer Qt GUI — I/O benchmark controller");
+    parser.setApplicationDescription("Iometer Qt GUI - I/O benchmark controller");
     parser.addHelpOption();
     parser.addVersionOption();
 

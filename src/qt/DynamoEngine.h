@@ -1,4 +1,4 @@
-// DynamoEngine.h — Real Iometer engine: TCP server on port 1066 + Dynamo protocol
+// DynamoEngine.h - Real Iometer engine: TCP server on port 1066 + Dynamo protocol
 #pragma once
 
 #include "IometerEngine.h"
@@ -12,9 +12,9 @@
 class QTcpServer;
 class QTcpSocket;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DySession — manages the protocol exchange with one connected Dynamo instance
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// DySession - manages the protocol exchange with one connected Dynamo instance
+// -----------------------------------------------------------------------------
 class DySession : public QObject
 {
     Q_OBJECT
@@ -28,7 +28,7 @@ public:
         WaitTargetsTcp,     // awaiting TCP targets Data_Message
         WaitTargetsVi,      // awaiting VI targets Data_Message
         WaitAddWorkers,     // sent ADD_WORKERS, awaiting 8-byte confirmation
-        Ready,              // connected, idle — test not started
+        Ready,              // connected, idle - test not started
         SetupAccess,        // sending SET_ACCESS for workers, awaiting reply
         SetupTargetsReply,  // sent SET_TARGETS, awaiting 8-byte reply
         SetupTargetsData,   // awaiting SET_TARGETS reply Data_Message
@@ -79,12 +79,12 @@ public:
         return infos;
     }
 
-    // ── Test control (called by DynamoEngine after state==Ready) ─────────────
+    // -- Test control (called by DynamoEngine after state==Ready) -------------
     void startTest(const QList<WorkerInfo> &workers, const QList<AccessSpec> &specs);
     void stopTest();
     void stopAll();
 
-    // ── Incremental result vectors (updated after each REPORT_UPDATE) ────────
+    // -- Incremental result vectors (updated after each REPORT_UPDATE) --------
     const QVector<WorkerResult>& pendingResults() const { return m_pendingResults; }
 
 signals:
@@ -177,9 +177,9 @@ private:
     bool m_stopRequested = false;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DynamoEngine — IometerEngine implementation backed by real Dynamo processes
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// DynamoEngine - IometerEngine implementation backed by real Dynamo processes
+// -----------------------------------------------------------------------------
 class DynamoEngine : public IometerEngine
 {
     Q_OBJECT
@@ -189,7 +189,7 @@ public:
     explicit DynamoEngine(bool startListening = true, QObject *parent = nullptr);
     ~DynamoEngine() override;
 
-    // ── IometerEngine interface ───────────────────────────────────────────────
+    // -- IometerEngine interface -----------------------------------------------
     void startTest() override;
     void stopTest()  override;
     void stopAll()   override;
@@ -199,7 +199,7 @@ public:
     bool saveConfig(const QString &filepath) override;
     bool saveBatchResults(const QString &filepath) override;
 
-    // Static helper — write the results CSV without a live engine instance.
+    // Static helper - write the results CSV without a live engine instance.
     // Used by saveBatchResults() and directly by unit tests.
     static bool writeBatchResultsCsv(const QString &filepath,
                                      const QVector<WorkerResult> &results,

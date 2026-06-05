@@ -31,11 +31,11 @@ public slots:
     void refreshWorkerAssignments();
 
 signals:
-    void nextSpecRequested();   // BigMeter "Next >>" button — advance to next spec
+    void nextSpecRequested();   // BigMeter "Next >>" button - advance to next spec
 
 private slots:
     void onMetricButtonClicked(int row);  // popup menu to switch metric
-    void onMetricRowClicked(int row);     // ">" button — open BigMeter
+    void onMetricRowClicked(int row);     // ">" button - open BigMeter
 
 private:
     // One display row (matches original "Total I/Os per Second" row etc.)

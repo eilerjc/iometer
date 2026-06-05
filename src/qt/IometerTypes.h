@@ -73,8 +73,8 @@ inline QStringList resultTypeNames() {
 // ---- Disk target descriptor (for the Disk Targets tab target list) ----------
 
 enum class TargetKind {
-    PhysicalDisk,   // raw device (\\.\PhysicalDriveN) — always directly testable
-    LogicalDisk,    // mounted volume — needs iobw.tst to be "prepared"
+    PhysicalDisk,   // raw device (\\.\PhysicalDriveN) - always directly testable
+    LogicalDisk,    // mounted volume - needs iobw.tst to be "prepared"
     TcpServer,
     TcpClient
 };
@@ -121,7 +121,7 @@ struct WorkerResult {
             case RESULT_CPU_USER:           return cpuUser;
             case RESULT_CPU_KERNEL:         return cpuKernel;
             case RESULT_ERRORS:             return errors;
-            // Fields not collected yet — return 0 so the row still works
+            // Fields not collected yet - return 0 so the row still works
             default:                        return 0.0;
         }
     }

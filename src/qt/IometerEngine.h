@@ -85,7 +85,7 @@ public:
             specs.append(s);
         };
 
-        // ── Idle (size = 0) ───────────────────────────────────────────────
+        // -- Idle (size = 0) -----------------------------------------------
         {
             AccessSpec s;
             s.name = "Idle";
@@ -95,7 +95,7 @@ public:
             specs.append(s);
         }
 
-        // ── Default (64 KiB, 100% read, sequential) ───────────────────────
+        // -- Default (64 KiB, 100% read, sequential) -----------------------
         {
             AccessSpec s;
             s.name = "Default"; s.defaultSpec = true;
@@ -103,8 +103,8 @@ public:
             specs.append(s);
         }
 
-        // ── Collect all patterns in order — used for both individual specs
-        //    and for building "All in one" ──────────────────────────────────
+        // -- Collect all patterns in order - used for both individual specs
+        //    and for building "All in one" ----------------------------------
         struct Pat { const char *name; AccessSpecLine l; };
         QList<Pat> patterns = {
             // 512 B sequential
@@ -149,7 +149,7 @@ public:
         for (const auto &p : patterns)
             addOne(QString::fromLatin1(p.name), p.l);
 
-        // ── "All in one" — all patterns with equal % access distribution ──
+        // -- "All in one" - all patterns with equal % access distribution --
         {
             AccessSpec s;
             s.name = "All in one";

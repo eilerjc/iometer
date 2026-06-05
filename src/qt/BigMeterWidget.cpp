@@ -1,10 +1,10 @@
 // BigMeterWidget.cpp
-// Qt port of CBigMeter — Iometer "Presentation Meter" window.
+// Qt port of CBigMeter - Iometer "Presentation Meter" window.
 //
 // Layout (top to bottom) matches the original:
-//   1. Speedometer gauge — fills most of the window
+//   1. Speedometer gauge - fills most of the window
 //   2. Large numeric value with units  (blue, ~22pt bold)
-//   3. Subtitle "All Managers — <metric name>"  (plain, smaller)
+//   3. Subtitle "All Managers - <metric name>"  (plain, smaller)
 //   4. Separator
 //   5. Two side-by-side groups: [Settings] | [Test Controls]
 
@@ -24,15 +24,15 @@
 #include <QFrame>
 #include <QPalette>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Construction
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 BigMeterWidget::BigMeterWidget(QWidget *parent)
     : QWidget(parent)
 {
     setupUi();
-    setWindowTitle("Iometer — Presentation Meter");
+    setWindowTitle("Iometer - Presentation Meter");
     resize(600, 580);
 }
 
@@ -42,23 +42,23 @@ void BigMeterWidget::setupUi()
     root->setSpacing(4);
     root->setContentsMargins(8, 8, 8, 8);
 
-    // ── 1. Speedometer (takes up most of the space) ──────────────────────
+    // -- 1. Speedometer (takes up most of the space) ----------------------
     m_meter = new MeterWidget;
     m_meter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     root->addWidget(m_meter, 1);
 
-    // ── 2. Large numeric readout with units ──────────────────────────────
+    // -- 2. Large numeric readout with units ------------------------------
     m_valueLabel = new QLabel("0");
     QFont vf("Arial", 22, QFont::Bold);
     m_valueLabel->setFont(vf);
     m_valueLabel->setAlignment(Qt::AlignCenter);
-    // Use palette for colour — avoids a global stylesheet
+    // Use palette for colour - avoids a global stylesheet
     QPalette vp = m_valueLabel->palette();
     vp.setColor(QPalette::WindowText, QColor(0x44, 0x88, 0xbb));
     m_valueLabel->setPalette(vp);
     root->addWidget(m_valueLabel);
 
-    // ── 3. Subtitle: "All Managers — <metric>" ───────────────────────────
+    // -- 3. Subtitle: "All Managers - <metric>" ---------------------------
     // m_titleLabel kept as a (hidden) member for setTitle() back-compat;
     // setTitle() now routes to setWindowTitle() so we don't add it to the layout.
     m_titleLabel  = new QLabel;
@@ -68,13 +68,13 @@ void BigMeterWidget::setupUi()
     m_workerLabel->setAlignment(Qt::AlignCenter);
     root->addWidget(m_workerLabel);
 
-    // ── 4. Separator ─────────────────────────────────────────────────────
+    // -- 4. Separator -----------------------------------------------------
     auto *sep = new QFrame;
     sep->setFrameShape(QFrame::HLine);
     sep->setFrameShadow(QFrame::Sunken);
     root->addWidget(sep);
 
-    // ── 5. Bottom: [Settings] | [Test Controls] ──────────────────────────
+    // -- 5. Bottom: [Settings] | [Test Controls] --------------------------
     auto *bottomRow = new QHBoxLayout;
 
     // Settings group
@@ -127,7 +127,7 @@ void BigMeterWidget::setupUi()
 
     root->addLayout(bottomRow);
 
-    // ── Wire up signals ───────────────────────────────────────────────────
+    // -- Wire up signals ---------------------------------------------------
     connect(m_startNextBtn, &QPushButton::clicked,
             this,           &BigMeterWidget::onStartNextClicked);
     connect(m_stopBtn,      &QPushButton::clicked,
@@ -144,14 +144,14 @@ void BigMeterWidget::setupUi()
     updateButtons();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Public API
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void BigMeterWidget::setTitle(const QString &testTitle)
 {
-    // Route to the OS window title bar — no separate in-window title label.
-    setWindowTitle(testTitle.isEmpty() ? "Iometer — Presentation Meter" : testTitle);
+    // Route to the OS window title bar - no separate in-window title label.
+    setWindowTitle(testTitle.isEmpty() ? "Iometer - Presentation Meter" : testTitle);
 }
 
 void BigMeterWidget::setWorkerResult(const QString &workerName,
@@ -165,7 +165,7 @@ void BigMeterWidget::setWorkerResult(const QString &workerName,
     else if (resultName.isEmpty())
         m_workerLabel->setText(workerName);
     else
-        m_workerLabel->setText(workerName + " — " + resultName);  // em-dash
+        m_workerLabel->setText(workerName + " - " + resultName);  // em-dash
 
     // Sync the combo box without triggering the resultTypeChanged signal
     if (!resultName.isEmpty()) {
@@ -199,9 +199,9 @@ void BigMeterWidget::setButtonState(bool canStart, bool canStop, bool canStopAll
     updateButtons();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Private helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void BigMeterWidget::updateButtons()
 {
@@ -221,9 +221,9 @@ void BigMeterWidget::updateButtons()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Slots
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void BigMeterWidget::onStartNextClicked()
 {

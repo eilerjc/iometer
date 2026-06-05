@@ -14,7 +14,7 @@
 #include <cstring>
 #include <cmath>
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// --- Helpers ------------------------------------------------------------------
 
 // Compute IOps / MBps from a single target's Raw_Result delta + elapsed seconds.
 static void accumulateRaw(const DyRawResult &r, double elapsed,
@@ -39,9 +39,9 @@ static void accumulateRaw(const DyRawResult &r, double elapsed,
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // DySession
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 DySession::DySession(QTcpSocket *loginSocket, QObject *parent)
     : QObject(parent), m_loginSocket(loginSocket)
@@ -54,7 +54,7 @@ DySession::DySession(QTcpSocket *loginSocket, QObject *parent)
     connect(m_loginSocket, &QTcpSocket::disconnected,
             this, [this]{ m_loginSocket->deleteLater(); m_loginSocket = nullptr; });
 
-    // Prime the state machine — expect 8-byte login Message
+    // Prime the state machine - expect 8-byte login Message
     m_expecting   = DY_MSG_SIZE;
     m_afterExpect = State::WaitLoginMsg;
 
@@ -70,7 +70,7 @@ DySession::~DySession()
     if (m_mainSocket)  m_mainSocket->abort();
 }
 
-// ── Low-level socket helpers ──────────────────────────────────────────────────
+// -- Low-level socket helpers --------------------------------------------------
 
 void DySession::sendMsg(int32_t purpose, int32_t data)
 {
@@ -104,7 +104,7 @@ QByteArray DySession::take(int bytes)
     return chunk;
 }
 
-// ── Login socket handler ──────────────────────────────────────────────────────
+// -- Login socket handler ------------------------------------------------------
 
 void DySession::onLoginData()
 {
@@ -161,7 +161,7 @@ void DySession::processLoginData()
     if (dm->size != DY_DATAMSG_SIZE) {
         qWarning() << "DySession: Data_Message size mismatch: got" << dm->size
                    << "expected" << DY_DATAMSG_SIZE;
-        // Be lenient — continue anyway (might be a different build)
+        // Be lenient - continue anyway (might be a different build)
     }
 
     const DyManagerInfo &mi = dm->data.manager_info;
@@ -183,7 +183,7 @@ void DySession::processLoginData()
     m_loginSocket->write(reinterpret_cast<const char*>(&reply), sizeof(reply));
     m_loginSocket->flush();
 
-    // Login socket is done — disconnect it
+    // Login socket is done - disconnect it
     disconnect(m_loginSocket, &QTcpSocket::readyRead, this, &DySession::onLoginData);
     m_loginSocket->disconnectFromHost();
 
@@ -199,7 +199,7 @@ void DySession::processLoginData()
     m_buf.clear();  // reset buffer for main-socket data
 }
 
-// ── Main socket handlers ──────────────────────────────────────────────────────
+// -- Main socket handlers ------------------------------------------------------
 
 void DySession::onMainConnected()
 {
@@ -233,7 +233,7 @@ void DySession::dispatchMainData()
 
         switch (m_state) {
 
-        // ── Target discovery ──────────────────────────────────────────────────
+        // -- Target discovery --------------------------------------------------
         case State::WaitTargetsDisk:
             if (m_buf.size() >= DY_DATAMSG_SIZE) {
                 processTargetList(0); progress = true;
@@ -250,14 +250,14 @@ void DySession::dispatchMainData()
             }
             break;
 
-        // ── ADD_WORKERS confirmation ──────────────────────────────────────────
+        // -- ADD_WORKERS confirmation ------------------------------------------
         case State::WaitAddWorkers:
             if (m_buf.size() >= DY_MSG_SIZE) {
                 processAddWorkersReply(); progress = true;
             }
             break;
 
-        // ── Worker setup ──────────────────────────────────────────────────────
+        // -- Worker setup ------------------------------------------------------
         case State::SetupAccess:
             // Waiting for 8-byte reply to SET_ACCESS
             if (m_buf.size() >= DY_MSG_SIZE) {
@@ -275,7 +275,7 @@ void DySession::dispatchMainData()
             }
             break;
 
-        // ── Start sequence ────────────────────────────────────────────────────
+        // -- Start sequence ----------------------------------------------------
         case State::WaitStartReply:
             if (m_buf.size() >= DY_MSG_SIZE) {
                 processStartReply(); progress = true;
@@ -287,7 +287,7 @@ void DySession::dispatchMainData()
             }
             break;
 
-        // ── Results during test ───────────────────────────────────────────────
+        // -- Results during test -----------------------------------------------
         case State::WaitUpdateMgr:
             if (m_buf.size() >= DY_DATAMSG_SIZE) {
                 processUpdateMgr(); progress = true;
@@ -299,7 +299,7 @@ void DySession::dispatchMainData()
             }
             break;
 
-        // ── Stop sequence ─────────────────────────────────────────────────────
+        // -- Stop sequence -----------------------------------------------------
         case State::WaitRecordOff:
             if (m_buf.size() >= DY_MSG_SIZE) {
                 processRecordOffReply(); progress = true;
@@ -327,7 +327,7 @@ void DySession::dispatchMainData()
     }
 }
 
-// ── Target discovery handlers ─────────────────────────────────────────────────
+// -- Target discovery handlers -------------------------------------------------
 
 void DySession::processTargetList(int phase)
 {
@@ -353,7 +353,7 @@ void DySession::processTargetList(int phase)
         for (int i = 0; i < count; ++i)
             m_viTargets.append(dm->data.targets[i]);
 
-        // All targets discovered — create one disk worker per CPU core, matching
+        // All targets discovered - create one disk worker per CPU core, matching
         // the original Iometer AddDefaultWorkers() behaviour (disk_worker_count=-1
         // → use manager->processors).  Workers are named "Worker 1", "Worker 2", …
         // None have targets pre-assigned; the user assigns them via Disk Targets tab.
@@ -378,7 +378,7 @@ void DySession::processTargetList(int phase)
     }
 }
 
-// ── ADD_WORKERS reply ─────────────────────────────────────────────────────────
+// -- ADD_WORKERS reply ---------------------------------------------------------
 
 void DySession::processAddWorkersReply()
 {
@@ -394,12 +394,12 @@ void DySession::processAddWorkersReply()
     emit managerConnected(this);
 }
 
-// ── Worker setup handlers ─────────────────────────────────────────────────────
+// -- Worker setup handlers -----------------------------------------------------
 
 void DySession::beginSetupWorker(int idx)
 {
     if (idx >= m_workers.size()) {
-        // All workers configured — start the test
+        // All workers configured - start the test
         beginStartSequence();
         return;
     }
@@ -407,7 +407,7 @@ void DySession::beginSetupWorker(int idx)
     const WorkerInfo &w = m_workers[idx];
     const int wIdx      = idx;  // worker index passed to Dynamo
 
-    // ── SET_ACCESS ──
+    // -- SET_ACCESS --
     DyDataMessage *dm = new DyDataMessage;
     std::memset(dm, 0, sizeof(*dm));
     buildTestSpec(dm, m_accessSpecs.isEmpty()
@@ -430,7 +430,7 @@ void DySession::processSetAccessReply()
         qWarning() << "DySession: SET_ACCESS failed for worker" << m_setupWorkerIdx;
     }
 
-    // ── SET_TARGETS ──
+    // -- SET_TARGETS --
     const WorkerInfo &w = m_workers[m_setupWorkerIdx];
     DyDataMessage *dm = new DyDataMessage;
     std::memset(dm, 0, sizeof(*dm));
@@ -467,7 +467,7 @@ void DySession::advanceSetupWorkers()
     beginSetupWorker(0);
 }
 
-// ── Start sequence ────────────────────────────────────────────────────────────
+// -- Start sequence ------------------------------------------------------------
 
 void DySession::beginStartSequence()
 {
@@ -493,7 +493,7 @@ void DySession::processBeginIoReply()
     qDebug() << "DySession: test started on" << m_managerName;
 }
 
-// ── Update timer — request results while running ──────────────────────────────
+// -- Update timer - request results while running ------------------------------
 
 void DySession::onUpdateTimer()
 {
@@ -534,7 +534,7 @@ void DySession::processUpdateWorker()
 
     ++m_workerResultIdx;
     if (m_workerResultIdx >= m_activeWorkerCount) {
-        // All worker results received — back to Running state
+        // All worker results received - back to Running state
         m_state = State::Running;
         if (m_stopRequested) {
             m_stopRequested = false;
@@ -547,7 +547,7 @@ void DySession::processUpdateWorker()
     }
 }
 
-// ── Stop sequence ─────────────────────────────────────────────────────────────
+// -- Stop sequence -------------------------------------------------------------
 
 void DySession::stopTest()
 {
@@ -620,7 +620,7 @@ void DySession::processFinalWorker()
     }
 }
 
-// ── Test control (called by DynamoEngine) ─────────────────────────────────────
+// -- Test control (called by DynamoEngine) -------------------------------------
 
 void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSpec> &specs)
 {
@@ -641,7 +641,7 @@ void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSp
 
     if (m_workers.isEmpty()) {
         qWarning() << "DySession: no workers for" << m_managerName
-                   << "— creating" << m_processorCount << "default workers";
+                   << "- creating" << m_processorCount << "default workers";
         for (int i = 0; i < m_processorCount; ++i) {
             WorkerInfo w;
             w.id          = QString("%1-disk-%2").arg(m_managerName).arg(i);
@@ -662,7 +662,7 @@ void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSp
     advanceSetupWorkers();
 }
 
-// ── Result decoding ───────────────────────────────────────────────────────────
+// -- Result decoding -----------------------------------------------------------
 
 WorkerResult DySession::decodeWorkerResults(const DyWorkerResults &wr,
                                              const QString &mgrName,
@@ -748,7 +748,7 @@ WorkerResult DySession::decodeWorkerResults(const DyWorkerResults &wr,
     return r;
 }
 
-// ── Build protocol messages ───────────────────────────────────────────────────
+// -- Build protocol messages ---------------------------------------------------
 
 void DySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &spec)
 {
@@ -806,9 +806,9 @@ void DySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // DynamoEngine
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
     : IometerEngine(parent)
@@ -820,7 +820,7 @@ DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
 
     if (startListening) {
         if (m_server->listen(QHostAddress::Any, DY_PORT)) {
-            emit statusMessage(QString("Listening for Dynamo on port %1 — start Dynamo.exe to connect")
+            emit statusMessage(QString("Listening for Dynamo on port %1 - start Dynamo.exe to connect")
                                .arg(DY_PORT));
         } else {
             emit errorOccurred(QString("Cannot listen on port %1: %2")
@@ -835,7 +835,7 @@ DynamoEngine::~DynamoEngine()
     m_server->close();
 }
 
-// ── New Dynamo connection ─────────────────────────────────────────────────────
+// -- New Dynamo connection -----------------------------------------------------
 
 void DynamoEngine::onNewConnection()
 {
@@ -858,7 +858,7 @@ void DynamoEngine::onNewConnection()
     }
 }
 
-// ── Session event handlers ────────────────────────────────────────────────────
+// -- Session event handlers ----------------------------------------------------
 
 void DynamoEngine::onSessionConnected(DySession *s)
 {
@@ -935,7 +935,7 @@ void DynamoEngine::onSessionError(DySession *s, const QString &msg)
     emit errorOccurred(QString("[%1] %2").arg(s->managerName(), msg));
 }
 
-// ── IometerEngine interface ───────────────────────────────────────────────────
+// -- IometerEngine interface ---------------------------------------------------
 
 void DynamoEngine::startTest()
 {
@@ -954,7 +954,7 @@ void DynamoEngine::startTest()
 
     // In batch mode the ICF specifies an exact worker count.  Trim the list so
     // that extra Dynamo workers (beyond what the ICF defines) never receive
-    // DY_SET_ACCESS / DY_SET_TARGETS and stay idle — matching original behaviour.
+    // DY_SET_ACCESS / DY_SET_TARGETS and stay idle - matching original behaviour.
     if (!m_batchWorkers.isEmpty() && allWorkers.size() > m_batchWorkers.size())
         allWorkers = allWorkers.mid(0, m_batchWorkers.size());
 
@@ -984,7 +984,7 @@ void DynamoEngine::stopTest()
 
 void DynamoEngine::stopAll()
 {
-    // Stop tests only — do NOT exit Dynamo workers; managers stay connected
+    // Stop tests only - do NOT exit Dynamo workers; managers stay connected
     for (auto *s : m_sessions)
         s->stopTest();
     m_running = false;
@@ -1024,7 +1024,7 @@ bool DynamoEngine::loadConfig(const QString &filepath)
     for (int i = 0; i < lines.size(); ++i) {
         const QString t = lines[i].trimmed();
 
-        // ── Test Setup ─────────────────────────────────────────────────────
+        // -- Test Setup -----------------------------------------------------
         if (t == "'Run Time") {
             // Two lines follow: a sub-comment then the data
             QString data;
@@ -1044,12 +1044,12 @@ bool DynamoEngine::loadConfig(const QString &filepath)
             const QString data = dataAfter(i);
             cfg.rampSeconds = data.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).value(0).toInt();
         } else if (t == "'Test Description") {
-            // Description may be blank — take the very next line as-is
+            // Description may be blank - take the very next line as-is
             if (i + 1 < lines.size())
                 cfg.description = lines[i + 1].trimmed();
         }
 
-        // ── Access Specifications ──────────────────────────────────────────
+        // -- Access Specifications ------------------------------------------
         else if (t.startsWith("'Access specification name")) {
             // First non-comment data line is "name,assignment"
             AccessSpec spec;
@@ -1088,7 +1088,7 @@ bool DynamoEngine::loadConfig(const QString &filepath)
                 specs.append(spec);
         }
 
-        // ── Manager / Worker ───────────────────────────────────────────────
+        // -- Manager / Worker -----------------------------------------------
         // State machine: collect per-worker spec+target assignments.
         else if (t == "'Worker") {
             // Start a new worker config; name is the next data line
@@ -1128,7 +1128,7 @@ bool DynamoEngine::saveConfig(const QString &filepath)
 
     out << "Version 1.1.0 \n";
 
-    // ── Test Setup ────────────────────────────────────────────────────────
+    // -- Test Setup --------------------------------------------------------
     out << "'TEST SETUP ====================================================================\n";
     out << "'Test Description\n";
     out << "\t" << m_testConfig.description << "\n";
@@ -1148,7 +1148,7 @@ bool DynamoEngine::saveConfig(const QString &filepath)
     out << "'Test Type\n\tNORMAL\n";
     out << "'END test setup\n";
 
-    // ── Results Display ───────────────────────────────────────────────────
+    // -- Results Display ---------------------------------------------------
     out << "'RESULTS DISPLAY ===============================================================\n";
     out << "'Record Last Update Results,Update Frequency,Update Type\n";
     out << "\tDISABLED,1,LAST_UPDATE\n";
@@ -1160,7 +1160,7 @@ bool DynamoEngine::saveConfig(const QString &filepath)
     out << "'Bar chart 6 statistic\n\tTotal Error Count\n";
     out << "'END results display\n";
 
-    // ── Access Specifications ─────────────────────────────────────────────
+    // -- Access Specifications ---------------------------------------------
     out << "'ACCESS SPECIFICATIONS =========================================================\n";
     for (const auto &s : m_specs) {
         out << "'Access specification name,default assignment\n";
@@ -1179,7 +1179,7 @@ bool DynamoEngine::saveConfig(const QString &filepath)
     }
     out << "'END access specifications\n";
 
-    // ── Manager List ──────────────────────────────────────────────────────
+    // -- Manager List ------------------------------------------------------
     out << "'MANAGER LIST ==================================================================\n";
 
     // Lambda that writes a single worker section
@@ -1214,7 +1214,7 @@ bool DynamoEngine::saveConfig(const QString &filepath)
     };
 
     if (!m_managers.isEmpty()) {
-        // Live Dynamo connection — write actual connected state
+        // Live Dynamo connection - write actual connected state
         int mgrid = 1;
         for (const auto &mgr : m_managers) {
             out << "'Manager ID, manager name\n\t" << mgrid++ << "," << mgr.name << "\n";
@@ -1228,7 +1228,7 @@ bool DynamoEngine::saveConfig(const QString &filepath)
             out << "'End manager\n";
         }
     } else if (!m_batchWorkers.isEmpty()) {
-        // No live connection — preserve the batch worker config from the loaded ICF
+        // No live connection - preserve the batch worker config from the loaded ICF
         out << "'Manager ID, manager name\n\t1,MANAGER\n";
         out << "'Manager network address\n\t\n";
         for (const auto &bw : m_batchWorkers)
@@ -1255,7 +1255,7 @@ bool DynamoEngine::writeBatchResultsCsv(const QString &filepath,
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
     QTextStream out(&f);
 
-    // ── File header (matches original ManagerList output) ─────────────────
+    // -- File header (matches original ManagerList output) -----------------
     out << "'Iometer Output File\n";
     out << "Version 1.1.0 \n";
     out << "'Test Description\n\t" << cfg.description << "\n";
@@ -1267,7 +1267,7 @@ bool DynamoEngine::writeBatchResultsCsv(const QString &filepath,
         << "          " << cfg.runSeconds << "\n";
     out << "'Ramp Up Time (s)\n\t" << cfg.rampSeconds << "\n";
 
-    // ── Column headers (exact original order, 60+ columns) ────────────────
+    // -- Column headers (exact original order, 60+ columns) ----------------
     // The smoke test cares only that: field[0]=="ALL", [6]=IOps, [12]=MBps(Dec), [27]=Errors
     out << "'Results\n";
     out << "'Target Type,Target Name,Manager,Workers,Managers,Targets,"
@@ -1312,7 +1312,7 @@ bool DynamoEngine::writeBatchResultsCsv(const QString &filepath,
     if (workerCount > 0) agg.avgLatencyMs /= workerCount;
     mgCount = managers.size();
 
-    // Write the ALL aggregate row — column positions must match the header above
+    // Write the ALL aggregate row - column positions must match the header above
     // [0]ALL [1]All [2]manager [3]workers [4]managers [5]targets
     // [6]IOps [7]ReadIOps [8]WriteIOps
     // [9]MBpsBin [10]ReadMBpsBin [11]WriteMBpsBin
@@ -1365,7 +1365,7 @@ void DynamoEngine::newConfig()
 
 void DynamoEngine::connectManager(const QString &, const QString &)
 {
-    // Managers connect by launching Dynamo.exe — this is a no-op here
+    // Managers connect by launching Dynamo.exe - this is a no-op here
     emit statusMessage(QString("To connect a manager: run Dynamo.exe -i <this-host> on the target machine"));
 }
 
@@ -1421,7 +1421,7 @@ void DynamoEngine::setAccessSpecs(const QList<AccessSpec> &specs)
     m_specs = specs;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// -- Helpers -------------------------------------------------------------------
 
 void DynamoEngine::rebuildManagers()
 {

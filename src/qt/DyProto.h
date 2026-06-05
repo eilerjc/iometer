@@ -1,4 +1,4 @@
-// DyProto.h — Iometer/Dynamo TCP wire-protocol structures
+// DyProto.h - Iometer/Dynamo TCP wire-protocol structures
 //
 // Structs match the Windows Dynamo build (msvs11) which defines:
 //   FORCE_STRUCT_ALIGN → #pragma pack(push,1)  (no natural padding)
@@ -15,7 +15,7 @@
 #pragma once
 #include <cstdint>
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// --- Constants ---------------------------------------------------------------
 
 static constexpr uint16_t DY_PORT           = 1066;
 static constexpr int32_t  DY_VERSION        = (1 << 24) | (1 << 8);  // 1.1.0 = 0x01000100
@@ -67,17 +67,17 @@ static constexpr int DY_MAX_VERSION_LEN     = 80;
 static constexpr int DY_FIRST_SNAP         = 0;
 static constexpr int DY_LAST_SNAP          = 1;
 
-// ─── #pragma pack(push,1) ── matches FORCE_STRUCT_ALIGN ─────────────────────
+// --- #pragma pack(push,1) -- matches FORCE_STRUCT_ALIGN ---------------------
 #pragma pack(push, 1)
 
-// ── 8-byte control message ───────────────────────────────────────────────────
+// -- 8-byte control message ---------------------------------------------------
 struct DyMsg {
     int32_t purpose;
     int32_t data;
 };
 static_assert(sizeof(DyMsg) == 8, "DyMsg size mismatch");
 
-// ── Manager_Info (sent by Dynamo at login) ───────────────────────────────────
+// -- Manager_Info (sent by Dynamo at login) -----------------------------------
 struct DyManagerInfo {
     char     version[DY_MAX_VERSION_LEN];       // "1.1.0"
     char     names[2][DY_MAX_NETWORK_NAME];     // [0]=hostname [1]=main-port host
@@ -88,7 +88,7 @@ struct DyManagerInfo {
 // 80 + 256 + 2 + 4 + 8 = 350 bytes
 static_assert(sizeof(DyManagerInfo) == 350, "DyManagerInfo size mismatch");
 
-// ── Access_Spec ──────────────────────────────────────────────────────────────
+// -- Access_Spec --------------------------------------------------------------
 struct DyAccessSpec {
     int32_t  of_size;    // percentage of total size for this entry
     int32_t  reads;      // read percentage
@@ -101,7 +101,7 @@ struct DyAccessSpec {
 };
 static_assert(sizeof(DyAccessSpec) == 32, "DyAccessSpec size mismatch");
 
-// ── Test_Spec ────────────────────────────────────────────────────────────────
+// -- Test_Spec ----------------------------------------------------------------
 struct DyTestSpec {
     char        name[DY_MAX_WORKER_NAME];
     int32_t     default_assignment;
@@ -110,7 +110,7 @@ struct DyTestSpec {
 // 128 + 4 + 100*32 = 3332 bytes
 static_assert(sizeof(DyTestSpec) == 3332, "DyTestSpec size mismatch");
 
-// ── Disk_Spec (USE_NEW_DISCOVERY_MECHANISM) ──────────────────────────────────
+// -- Disk_Spec (USE_NEW_DISCOVERY_MECHANISM) ----------------------------------
 struct DyDiskSpec {
     uint32_t disk_reserved[5];    // 20 bytes
     int32_t  has_partitions;
@@ -123,7 +123,7 @@ struct DyDiskSpec {
 // 20 + 4 + 4 + 4 + 4 + 8 + 8 = 52 bytes
 static_assert(sizeof(DyDiskSpec) == 52, "DyDiskSpec size mismatch");
 
-// ── TCP_Spec ─────────────────────────────────────────────────────────────────
+// -- TCP_Spec -----------------------------------------------------------------
 struct DyTcpSpec {
     uint32_t local_port;
     char     remote_address[DY_MAX_NAME];
@@ -132,7 +132,7 @@ struct DyTcpSpec {
 // 4 + 80 + 4 = 88 bytes
 static_assert(sizeof(DyTcpSpec) == 88, "DyTcpSpec size mismatch");
 
-// ── VI_Spec (Virtual Interface — legacy, rarely used) ────────────────────────
+// -- VI_Spec (Virtual Interface - legacy, rarely used) ------------------------
 struct DyViNetAddr {
     uint16_t host_addr_len;
     uint16_t discrim_len;
@@ -157,7 +157,7 @@ struct DyViSpec {
 // 8 + 19 + 80 + 8 + 19 + 4 + 4 + 4 = 146 bytes
 static_assert(sizeof(DyViSpec) == 146, "DyViSpec size mismatch");
 
-// ── Target_Spec (USE_NEW_DISCOVERY_MECHANISM) ────────────────────────────────
+// -- Target_Spec (USE_NEW_DISCOVERY_MECHANISM) --------------------------------
 struct DyTargetSpec {
     char      name[DY_MAX_NAME];          // display name
     char      actual_name[DY_MAX_NAME];   // real device path (USE_NEW_DISCOVERY)
@@ -177,7 +177,7 @@ struct DyTargetSpec {
     int32_t  queue_depth;
     int32_t  data_pattern;
     int32_t  trans_per_conn;
-    // NO char padding[4] — removed by FORCE_STRUCT_ALIGN
+    // NO char padding[4] - removed by FORCE_STRUCT_ALIGN
     uint64_t random;
     int32_t  use_fixed_seed;
     uint64_t fixed_seed_value;
@@ -185,13 +185,13 @@ struct DyTargetSpec {
 // 80+80+80 + 4+4 + 4+4 + 146 + 4+4+4 + 8+4+8 = 434 bytes
 static_assert(sizeof(DyTargetSpec) == 434, "DyTargetSpec size mismatch");
 
-// ── TargetType constants ─────────────────────────────────────────────────────
+// -- TargetType constants -----------------------------------------------------
 static constexpr int32_t DY_PHYSICAL_DISK  = static_cast<int32_t>(0x8C000000);
 static constexpr int32_t DY_LOGICAL_DISK   = static_cast<int32_t>(0x8A000000);
 static constexpr int32_t DY_TCP_SERVER     = static_cast<int32_t>(0x800C8000);
 static constexpr int32_t DY_TCP_CLIENT     = static_cast<int32_t>(0x800A8000);
 
-// ── Raw_Result ───────────────────────────────────────────────────────────────
+// -- Raw_Result ---------------------------------------------------------------
 struct DyRawResult {
     uint64_t bytes_read;
     uint64_t bytes_written;
@@ -217,16 +217,16 @@ struct DyRawResult {
 // = 48+8+64+8+168 = 296
 static_assert(sizeof(DyRawResult) == 296, "DyRawResult size mismatch");
 
-// ── Target_Results ──────────────────────────────────────────────────────────
+// -- Target_Results ----------------------------------------------------------
 struct DyTargetResults {
     int32_t     count;
-    // NO char pad[4] — removed by FORCE_STRUCT_ALIGN
+    // NO char pad[4] - removed by FORCE_STRUCT_ALIGN
     DyRawResult result[DY_MAX_TARGETS];
 };
 // 4 + 2048*296 = 4 + 606208 = 606212
 static_assert(sizeof(DyTargetResults) == 606212, "DyTargetResults size mismatch");
 
-// ── Worker_Results ───────────────────────────────────────────────────────────
+// -- Worker_Results -----------------------------------------------------------
 struct DyWorkerResults {
     uint64_t        time[DY_MAX_SNAPSHOTS];  // 16
     DyTargetResults target_results;          // 606212
@@ -234,7 +234,7 @@ struct DyWorkerResults {
 // 16 + 606212 = 606228
 static_assert(sizeof(DyWorkerResults) == 606228, "DyWorkerResults size mismatch");
 
-// ── CPU_Results ──────────────────────────────────────────────────────────────
+// -- CPU_Results --------------------------------------------------------------
 struct DyCpuResults {
     int32_t count;
     // NO char pad[4]
@@ -243,7 +243,7 @@ struct DyCpuResults {
 // 4 + 64*6*8 = 4 + 3072 = 3076
 static_assert(sizeof(DyCpuResults) == 3076, "DyCpuResults size mismatch");
 
-// ── Net_Results ──────────────────────────────────────────────────────────────
+// -- Net_Results --------------------------------------------------------------
 struct DyNetResults {
     double  tcp_stats[DY_TCP_RESULTS];       // 8
     int32_t ni_count;                         // 4
@@ -253,7 +253,7 @@ struct DyNetResults {
 // 8 + 4 + 64*3*8 = 12 + 1536 = 1548
 static_assert(sizeof(DyNetResults) == 1548, "DyNetResults size mismatch");
 
-// ── Manager_Results ──────────────────────────────────────────────────────────
+// -- Manager_Results ----------------------------------------------------------
 struct DyManagerResults {
     int64_t     time_counter[DY_MAX_SNAPSHOTS];  // 16
     DyCpuResults cpu_results;                     // 3076
@@ -262,7 +262,7 @@ struct DyManagerResults {
 // 16 + 3076 + 1548 = 4640
 static_assert(sizeof(DyManagerResults) == 4640, "DyManagerResults size mismatch");
 
-// ── Message_Data union ───────────────────────────────────────────────────────
+// -- Message_Data union -------------------------------------------------------
 // sizeof(DyTargetSpec) = 434; 2048 × 434 = 888,832 (dominant member)
 union DyMessageData {
     DyManagerInfo    manager_info;                   // 350
@@ -274,11 +274,11 @@ union DyMessageData {
 };
 static_assert(sizeof(DyMessageData) == 888832, "DyMessageData size mismatch");
 
-// ── Data_Message ─────────────────────────────────────────────────────────────
+// -- Data_Message -------------------------------------------------------------
 struct DyDataMessage {
     int32_t      size;   // should equal sizeof(DyDataMessage)
     int32_t      count;
-    // NO char pad[4] — removed by FORCE_STRUCT_ALIGN
+    // NO char pad[4] - removed by FORCE_STRUCT_ALIGN
     DyMessageData data;
 };
 // 4 + 4 + 888832 = 888840

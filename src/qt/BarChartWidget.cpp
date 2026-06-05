@@ -130,12 +130,12 @@ void BarChartWidget::paintEvent(QPaintEvent *)
 
     const int barW = m_barRight - m_barLeft;
 
-    // ── Background track ──
+    // -- Background track --
     p.setPen(Qt::NoPen);
     p.setBrush(QColor(0x18, 0x24, 0x30));
     p.drawRoundedRect(m_barLeft, m_barTop, barW, m_barHeight, 3, 3);
 
-    // ── Filled portion ──
+    // -- Filled portion --
     const double fraction = (m_maxRange > 0) ? std::min(1.0, m_value / m_maxRange) : 0.0;
     if (fraction > 0.001) {
         const int fillW = static_cast<int>(barW * fraction);
@@ -149,14 +149,14 @@ void BarChartWidget::paintEvent(QPaintEvent *)
         p.drawRoundedRect(m_barLeft, m_barTop, fillW, m_barHeight, 3, 3);
     }
 
-    // ── Peak marker ──
+    // -- Peak marker --
     if (m_peak > 0 && m_maxRange > 0) {
         const int peakX = m_barLeft + static_cast<int>(barW * std::min(1.0, m_peak / m_maxRange));
         p.setPen(QPen(QColor(0xff, 0xff, 0xff, 180), 2));
         p.drawLine(peakX, m_barTop, peakX, m_barTop + m_barHeight);
     }
 
-    // ── Max range label (right side) ──
+    // -- Max range label (right side) --
     p.setPen(QColor(0x44, 0x66, 0x88));
     QFont sf = p.font();
     sf.setPixelSize(9);
@@ -167,7 +167,7 @@ void BarChartWidget::paintEvent(QPaintEvent *)
     else                        rangeStr = QString::number(static_cast<int>(m_maxRange));
     p.drawText(m_barRight - 30, m_barTop - 1, 30, 12, Qt::AlignRight, rangeStr);
 
-    // ── Border ──
+    // -- Border --
     p.setPen(QColor(0x2a, 0x3a, 0x4a));
     p.setBrush(Qt::NoBrush);
     p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 4, 4);

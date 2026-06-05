@@ -1,5 +1,5 @@
 // MeterWidget.h
-// Qt port of CMeterCtrl — the Iometer speedometer gauge control.
+// Qt port of CMeterCtrl - the Iometer speedometer gauge control.
 //
 // Drop-in replacement geometry: same NEEDLE_SWEEP, PIVOT_ARC_ANGLE, and
 // CalculatePoint() math as the original MFC control, rewritten with QPainter.
@@ -24,7 +24,7 @@ class MeterWidget : public QWidget
 public:
     explicit MeterWidget(QWidget *parent = nullptr);
 
-    // ── API matching CMeterCtrl ───────────────────────────────────────────
+    // -- API matching CMeterCtrl -------------------------------------------
     void setRange(int range1, int range2, bool autoRange = false);
     void setValue(double newValue);
     void resetWatermark();
@@ -38,26 +38,26 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    // ── Constants (match MeterCtrl.h) ────────────────────────────────────
+    // -- Constants (match MeterCtrl.h) ------------------------------------
     static constexpr int NEEDLE_SWEEP       = 270;                    // degrees
     static constexpr int PIVOT_ARC_ANGLE    = (360 - NEEDLE_SWEEP) / 2; // 45°
     static constexpr int NEEDLE_SENSITIVITY = 3;                      // degrees
 
-    // ── Range / value ────────────────────────────────────────────────────
+    // -- Range / value ----------------------------------------------------
     int    m_minRange  = 0;
     int    m_maxRange  = 100;
     bool   m_autoRange = true;
     double m_value     = 0.0;
 
-    // ── Watermark ────────────────────────────────────────────────────────
+    // -- Watermark --------------------------------------------------------
     double m_lowValue  = -1.0;   // < 0 means "not set yet"
     double m_highValue =  0.0;
 
-    // ── Needle angles (meter-space: 0=min, NEEDLE_SWEEP=max) ─────────────
+    // -- Needle angles (meter-space: 0=min, NEEDLE_SWEEP=max) -------------
     int m_actualAngle = 0;
     int m_shownAngle  = 0;
 
-    // ── Geometry (recalculated on resize) ─────────────────────────────────
+    // -- Geometry (recalculated on resize) ---------------------------------
     QPointF m_pivot;
     int     m_outerRadius  = 0;
     int     m_innerRadius  = 0;
@@ -66,10 +66,10 @@ private:
     int     m_tickRadius   = 0;
     int     m_labelBoxSize = 0;
 
-    // ── Needle triangle (3 vertices) ─────────────────────────────────────
+    // -- Needle triangle (3 vertices) -------------------------------------
     QPointF m_needle[3];
 
-    // ── Label / tick-mark cache ───────────────────────────────────────────
+    // -- Label / tick-mark cache -------------------------------------------
     struct LabelInfo {
         QRectF  box;
         QString text;
@@ -79,7 +79,7 @@ private:
     std::vector<LabelInfo> m_labels;
     QString m_scaleText;          // e.g. "x1,000"
 
-    // ── Private helpers ───────────────────────────────────────────────────
+    // -- Private helpers ---------------------------------------------------
     void recalcGeometry();
     void updateScaleInfo();
     void updateLabelInfo();

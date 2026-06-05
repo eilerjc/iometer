@@ -73,7 +73,7 @@ private:
     void setRunningState(bool running);
     void updateTopologyButtons();   // enable/disable per-selection buttons
 
-    // Icon helpers — pixel-faithful replicas of the original toolbar bitmaps
+    // Icon helpers - pixel-faithful replicas of the original toolbar bitmaps
     static QIcon makeOpenIcon();
     static QIcon makeSaveIcon();
     static QIcon makeNewDynamoIcon();
@@ -82,10 +82,10 @@ private:
     static QIcon makeCopyWorkerIcon();
     static QIcon makeStartIcon();
     static QIcon makeStopIcon(bool all);
-    static QIcon makeResetIcon();        // tlb10 — curved yellow arrow
-    static QIcon makeExitOneIcon();      // tlb11 — inward red arrows
-    static QIcon makeExitIcon();         // tlb12 — green door
-    static QIcon makeHelpIcon();         // tlb13 — yellow "?"
+    static QIcon makeResetIcon();        // tlb10 - curved yellow arrow
+    static QIcon makeExitOneIcon();      // tlb11 - inward red arrows
+    static QIcon makeExitIcon();         // tlb12 - green door
+    static QIcon makeHelpIcon();         // tlb13 - yellow "?"
 
     // ---- Engine ---------------------------------------------------------------
     IometerEngine *m_engine = nullptr;

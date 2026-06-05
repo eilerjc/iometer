@@ -1,8 +1,8 @@
 // MeterWidget.cpp
-// Qt port of CMeterCtrl — Iometer speedometer gauge.
+// Qt port of CMeterCtrl - Iometer speedometer gauge.
 //
 // Geometry notes
-// ──────────────
+// --------------
 // The sweep runs 270° from lower-left (value=0) clockwise through 12-o'clock
 // (value=max/2) to lower-right (value=max).  The 90° "notch" at the bottom
 // is where the scale text lives.
@@ -23,9 +23,9 @@
 
 static constexpr double PI = 3.14159265358979323846;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Construction
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 MeterWidget::MeterWidget(QWidget *parent)
     : QWidget(parent)
@@ -39,9 +39,9 @@ QSize MeterWidget::sizeHint() const
     return {320, 240};
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Geometry helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 QPointF MeterWidget::calcPt(int angle, int radius) const
 {
@@ -75,9 +75,9 @@ void MeterWidget::recalcGeometry()
     setNeedlePoints();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Scale text  (e.g. "x1,000")
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void MeterWidget::updateScaleInfo()
 {
@@ -97,9 +97,9 @@ void MeterWidget::updateScaleInfo()
     m_scaleText = "x" + num;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Label / tick-mark positions (matches CMeterCtrl::UpdateLabelInfo)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void MeterWidget::updateLabelInfo()
 {
@@ -142,9 +142,9 @@ void MeterWidget::updateLabelInfo()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Needle geometry
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void MeterWidget::setNeedlePoints()
 {
@@ -155,9 +155,9 @@ void MeterWidget::setNeedlePoints()
     m_shownAngle = m_actualAngle;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Qt events
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void MeterWidget::resizeEvent(QResizeEvent *event)
 {
@@ -166,9 +166,9 @@ void MeterWidget::resizeEvent(QResizeEvent *event)
     update();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Public API
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void MeterWidget::setRange(int range1, int range2, bool autoRange)
 {
@@ -229,9 +229,9 @@ void MeterWidget::setValue(double newValue)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Paint
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 void MeterWidget::paintEvent(QPaintEvent *)
 {
@@ -243,12 +243,12 @@ void MeterWidget::paintEvent(QPaintEvent *)
     const QRectF meterBox(m_pivot.x() - m_outerRadius, m_pivot.y() - m_outerRadius,
                           m_outerRadius * 2.0,          m_outerRadius * 2.0);
 
-    // ── 1. Dial circle (filled black) ──
+    // -- 1. Dial circle (filled black) --
     p.setPen(Qt::black);
     p.setBrush(Qt::black);
     p.drawEllipse(meterBox);
 
-    // ── 2. Scale text in the "notch" at the bottom  ──
+    // -- 2. Scale text in the "notch" at the bottom  --
     if (!m_scaleText.isEmpty()) {
         // The notch spans horizontally between the two sweep endpoints
         // (angle=0 and angle=NEEDLE_SWEEP on the inner radius) and vertically
@@ -269,7 +269,7 @@ void MeterWidget::paintEvent(QPaintEvent *)
         p.drawText(scaleRect, Qt::AlignCenter, m_scaleText);
     }
 
-    // ── 3. Labels and tick marks ──
+    // -- 3. Labels and tick marks --
     {
         QFont lf("Arial", -1);
         lf.setPixelSize(std::max(8, static_cast<int>(m_outerRadius * 0.16)));
@@ -281,7 +281,7 @@ void MeterWidget::paintEvent(QPaintEvent *)
         }
     }
 
-    // ── 4. Watermark arc (red, on inner_radius) ──
+    // -- 4. Watermark arc (red, on inner_radius) --
     if (showWatermark && m_lowValue >= 0.0 && m_highValue > m_lowValue) {
         const double span = m_maxRange - m_minRange;
         auto toAngle = [&](double v) -> int {
@@ -305,7 +305,7 @@ void MeterWidget::paintEvent(QPaintEvent *)
         }
     }
 
-    // ── 5. Needle (blue triangle + grey pivot hub) ──
+    // -- 5. Needle (blue triangle + grey pivot hub) --
     {
         const QPolygonF poly = QPolygonF()
             << m_needle[0] << m_needle[1] << m_needle[2];

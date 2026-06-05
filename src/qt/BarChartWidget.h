@@ -1,4 +1,4 @@
-// BarChartWidget.h — Horizontal performance bar chart, one worker/metric slot.
+// BarChartWidget.h - Horizontal performance bar chart, one worker/metric slot.
 // Equivalent to CBargraph in the MFC GUI.
 #pragma once
 

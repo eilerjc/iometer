@@ -103,7 +103,7 @@ void PageDisplay::setupUi()
         DisplayRow &row = m_rows[r];
         row.resultType = ROWS[r].type;
 
-        // ── Metric button (left, spans the full 2-line height) ────────────
+        // -- Metric button (left, spans the full 2-line height) ------------
         row.metricBtn = new QPushButton(ROWS[r].label);
         row.metricBtn->setFlat(false);
         row.metricBtn->setFixedWidth(230);
@@ -112,7 +112,7 @@ void PageDisplay::setupUi()
         connect(row.metricBtn, &QPushButton::clicked, this,
                 [this, capturedRow]{ onMetricButtonClicked(capturedRow); });
 
-        // ── Inner VBox: text line above bar line ──────────────────────────
+        // -- Inner VBox: text line above bar line --------------------------
         auto *innerLay = new QVBoxLayout;
         innerLay->setSpacing(2);
         innerLay->setContentsMargins(0, 0, 0, 0);
@@ -138,7 +138,7 @@ void PageDisplay::setupUi()
         auto *botLine = new QHBoxLayout;
         botLine->setSpacing(4);
 
-        // Progress bar — solid blue fill, no text overlay.
+        // Progress bar - solid blue fill, no text overlay.
         // A minimal stylesheet is needed: Windows 11 native Vista-style draws
         // a thin animated chunk regardless of widget height; this overrides it.
         row.bar = new QProgressBar;
@@ -151,13 +151,13 @@ void PageDisplay::setupUi()
             "QProgressBar::chunk { background: #0078d7; margin: 0px; }");
         botLine->addWidget(row.bar, 1);   // stretch = 1 so bar fills remaining width
 
-        // Scale label — current power-of-10 ceiling, right of bar
-        row.refLbl = new QLabel("—");
+        // Scale label - current power-of-10 ceiling, right of bar
+        row.refLbl = new QLabel("-");
         row.refLbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         row.refLbl->setFixedWidth(65);
         botLine->addWidget(row.refLbl);
 
-        // Expand button — opens BigMeter for this metric
+        // Expand button - opens BigMeter for this metric
         row.expandBtn = new QPushButton(">");
         row.expandBtn->setFixedWidth(22);
         row.expandBtn->setFlat(false);
@@ -168,7 +168,7 @@ void PageDisplay::setupUi()
 
         innerLay->addLayout(botLine);
 
-        // ── Outer HBox: metric button | inner ────────────────────────────
+        // -- Outer HBox: metric button | inner ----------------------------
         auto *outerRow = new QHBoxLayout;
         outerRow->setSpacing(4);
         outerRow->addWidget(row.metricBtn);
@@ -223,7 +223,7 @@ void PageDisplay::updateResults(const QVector<WorkerResult> &results)
         DisplayRow &row = m_rows[i];
         const double val = agg.get(row.resultType);
 
-        // ── Format numeric value for the value label ───────────────────────
+        // -- Format numeric value for the value label -----------------------
         QString txt;
         switch (row.resultType) {
         case RESULT_MBPS_DEC:
@@ -256,7 +256,7 @@ void PageDisplay::updateResults(const QVector<WorkerResult> &results)
         }
         row.valueLbl->setText(txt);
 
-        // ── Units-qualified text for BigMeter ──────────────────────────────
+        // -- Units-qualified text for BigMeter ------------------------------
         QString bigTxt = txt;
         switch (row.resultType) {
         case RESULT_IOPS: case RESULT_READ_IOPS: case RESULT_WRITE_IOPS:
@@ -271,7 +271,7 @@ void PageDisplay::updateResults(const QVector<WorkerResult> &results)
         if (i == m_activeMeterRow)
             activeBigMeterTxt = bigTxt;
 
-        // ── Log-scale bar fill ─────────────────────────────────────────────
+        // -- Log-scale bar fill ---------------------------------------------
         if (val > 0.0) {
             const double needed = logCeiling(val);
             if (needed > row.maxSeen) row.maxSeen = needed;
@@ -298,7 +298,7 @@ void PageDisplay::onTestStarted()
         m_rows[i].refValue = 0.0;
         m_rows[i].maxSeen  = 0.0;
         m_rows[i].valueLbl->setText("0");
-        m_rows[i].refLbl->setText("—");
+        m_rows[i].refLbl->setText("-");
         m_rows[i].bar->setValue(0);
     }
     if (m_bigMeter) m_bigMeter->setButtonState(false, true, true);
@@ -334,7 +334,7 @@ void PageDisplay::onMetricButtonClicked(int row)
         act->setChecked(cur == type);
     };
 
-    // ── Operations per Second ──────────────────────────────────────────────
+    // -- Operations per Second ----------------------------------------------
     QMenu *ops = menu.addMenu("Operations per Second");
     add(ops, "Total I/Os per Second",       RESULT_IOPS);
     add(ops, "Read I/Os per Second",         RESULT_READ_IOPS);
@@ -343,7 +343,7 @@ void PageDisplay::onMetricButtonClicked(int row)
     add(ops, "Transactions per Second",      RESULT_TRANS_PS);
     add(ops, "Connections per Second",       RESULT_CONN_PS);
 
-    // ── Megabytes per Second ───────────────────────────────────────────────
+    // -- Megabytes per Second -----------------------------------------------
     QMenu *mbs = menu.addMenu("Megabytes per Second");
     add(mbs, "Total MBs per Second (Decimal)",  RESULT_MBPS_DEC);
     add(mbs, "Read MBs per Second (Decimal)",   RESULT_READ_MBPS_DEC);
@@ -353,7 +353,7 @@ void PageDisplay::onMetricButtonClicked(int row)
     add(mbs, "Read MBs per Second (Binary)",    RESULT_READ_MBPS_BIN);
     add(mbs, "Write MBs per Second (Binary)",   RESULT_WRITE_MBPS_BIN);
 
-    // ── Average Latency ────────────────────────────────────────────────────
+    // -- Average Latency ----------------------------------------------------
     QMenu *avg = menu.addMenu("Average Latency");
     add(avg, "Average I/O Response Time (ms)",  RESULT_AVG_LATENCY_MS);
     add(avg, "Avg. Read Response Time (ms)",    RESULT_AVG_READ_LATENCY_MS);
@@ -362,7 +362,7 @@ void PageDisplay::onMetricButtonClicked(int row)
     add(avg, "Avg. Transaction Time (ms)",      RESULT_AVG_TRANS_LATENCY_MS);
     add(avg, "Avg. Connection Time (ms)",       RESULT_AVG_CONN_LATENCY_MS);
 
-    // ── Maximum Latency ────────────────────────────────────────────────────
+    // -- Maximum Latency ----------------------------------------------------
     QMenu *mx = menu.addMenu("Maximum Latency");
     add(mx, "Maximum I/O Response Time (ms)",   RESULT_MAX_LATENCY_MS);
     add(mx, "Max. Read Response Time (ms)",     RESULT_MAX_READ_LATENCY_MS);
@@ -371,7 +371,7 @@ void PageDisplay::onMetricButtonClicked(int row)
     add(mx, "Max. Transaction Time (ms)",       RESULT_MAX_TRANS_LATENCY_MS);
     add(mx, "Max. Connection Time (ms)",        RESULT_MAX_CONN_LATENCY_MS);
 
-    // ── CPU ────────────────────────────────────────────────────────────────
+    // -- CPU ----------------------------------------------------------------
     QMenu *cpu = menu.addMenu("CPU");
     add(cpu, "% CPU Utilization (total)",   RESULT_CPU_UTIL);
     add(cpu, "% User Time",                 RESULT_CPU_USER);
@@ -382,14 +382,14 @@ void PageDisplay::onMetricButtonClicked(int row)
     add(cpu, "Interrupts per Second",       RESULT_CPU_INTERRUPTS_PS);
     add(cpu, "CPU Effectiveness",           RESULT_CPU_EFFECTIVENESS);
 
-    // ── Network ────────────────────────────────────────────────────────────
+    // -- Network ------------------------------------------------------------
     QMenu *net = menu.addMenu("Network");
     add(net, "Network Packets per Second",      RESULT_NET_PACKETS_PS);
     net->addSeparator();
     add(net, "Packet Errors",                   RESULT_NET_PACKET_ERRORS);
     add(net, "TCP Segments Retrans. per Sec.",  RESULT_NET_RETRANS_PS);
 
-    // ── Errors ─────────────────────────────────────────────────────────────
+    // -- Errors -------------------------------------------------------------
     QMenu *err = menu.addMenu("Errors");
     add(err, "Total Error Count",   RESULT_ERRORS);
     add(err, "Read Error Count",    RESULT_READ_ERRORS);
@@ -405,13 +405,13 @@ void PageDisplay::onMetricButtonClicked(int row)
     m_rows[row].metricBtn->setText(chosen->text());
     m_rows[row].maxSeen  = 0.0;
     m_rows[row].valueLbl->setText("0");
-    m_rows[row].refLbl->setText("—");
+    m_rows[row].refLbl->setText("-");
     m_rows[row].bar->setValue(0);
 }
 
 void PageDisplay::onMetricRowClicked(int row)
 {
-    // ">" button — open BigMeter for this row's current metric
+    // ">" button - open BigMeter for this row's current metric
     m_activeMeterRow = row;
     onBigMeterClicked();
 }

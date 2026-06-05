@@ -37,7 +37,7 @@
 #include <QCoreApplication>
 
 // =============================================================================
-// Icon helpers — load directly from the original Toolbar.bmp resource strip.
+// Icon helpers - load directly from the original Toolbar.bmp resource strip.
 // The strip is 403×31 px, 13 icons each 31 px wide.
 // Background colour (Windows button-face grey) is made transparent.
 // =============================================================================
@@ -136,31 +136,31 @@ void MainWindow::setupToolBar()
     tb->setIconSize(QSize(24, 24));
     tb->setToolButtonStyle(Qt::ToolButtonIconOnly);
 
-    // ── Group 1: File operations (Open / Save) ────────────────────────────────
+    // -- Group 1: File operations (Open / Save) --------------------------------
     m_actOpen            = tb->addAction(makeOpenIcon(),           "Open");
     m_actSave            = tb->addAction(makeSaveIcon(),           "Save");
     tb->addSeparator();
 
-    // ── Group 2: Topology operations (matches original BNew*/BCopyWorker) ─────
+    // -- Group 2: Topology operations (matches original BNew*/BCopyWorker) -----
     m_actNewDynamo       = tb->addAction(makeNewDynamoIcon(),      "New Manager");
     m_actNewDiskWorker   = tb->addAction(makeNewDiskWorkerIcon(),  "New Disk Worker");
     m_actNewNetWorker    = tb->addAction(makeNewNetWorkerIcon(),   "New Net Worker");
     m_actCopyWorker      = tb->addAction(makeCopyWorkerIcon(),     "Copy Worker");
     tb->addSeparator();
 
-    // ── Group 3: Test control (BStart / BStop / BStopAll) ─────────────────────
+    // -- Group 3: Test control (BStart / BStop / BStopAll) ---------------------
     m_actStart           = tb->addAction(makeStartIcon(),          "Start");
     m_actStop            = tb->addAction(makeStopIcon(false),      "Stop");
     m_actStopAll         = tb->addAction(makeStopIcon(true),       "Stop All");
     tb->addSeparator();
 
-    // ── Group 4: Config reset / remove item / exit / help ────────────────────
+    // -- Group 4: Config reset / remove item / exit / help --------------------
     m_actNew             = tb->addAction(makeResetIcon(),          "Reset");
     m_actExitOne         = tb->addAction(makeExitOneIcon(),        "Delete Selected");
     m_actExit            = tb->addAction(makeExitIcon(),           "Exit");
     m_actHelp            = tb->addAction(makeHelpIcon(),           "About");
 
-    // ── Tooltips ──────────────────────────────────────────────────────────────
+    // -- Tooltips --------------------------------------------------------------
     m_actOpen->setToolTip("Open .icf configuration file (Ctrl+O)");
     m_actSave->setToolTip("Save .icf configuration file (Ctrl+S)");
     m_actNewDynamo->setToolTip("Launch a new local Dynamo manager");
@@ -170,19 +170,19 @@ void MainWindow::setupToolBar()
     m_actStart->setToolTip("Start test (F5)");
     m_actStop->setToolTip("Stop current test (F6)");
     m_actStopAll->setToolTip("Stop all tests and reset");
-    m_actNew->setToolTip("Reset — clear all workers and start over (Ctrl+N)");
+    m_actNew->setToolTip("Reset - clear all workers and start over (Ctrl+N)");
     m_actExitOne->setToolTip("Delete selected worker or disconnect selected manager");
     m_actExit->setToolTip("Exit Iometer");
     m_actHelp->setToolTip("About Iometer");
 
-    // ── Keyboard shortcuts ────────────────────────────────────────────────────
+    // -- Keyboard shortcuts ----------------------------------------------------
     m_actOpen->setShortcut(QKeySequence::Open);
     m_actSave->setShortcut(QKeySequence::Save);
     m_actStart->setShortcut(Qt::Key_F5);
     m_actStop->setShortcut(Qt::Key_F6);
     m_actNew->setShortcut(QKeySequence::New);
 
-    // ── Connections ───────────────────────────────────────────────────────────
+    // -- Connections -----------------------------------------------------------
     connect(m_actOpen,          &QAction::triggered, this, &MainWindow::onOpen);
     connect(m_actSave,          &QAction::triggered, this, &MainWindow::onSave);
     connect(m_actNewDynamo,     &QAction::triggered, this, &MainWindow::onNewDynamo);
@@ -199,7 +199,7 @@ void MainWindow::setupToolBar()
     });
     connect(m_actHelp,          &QAction::triggered, this, &MainWindow::onAbout);
 
-    // ── Menu bar ─────────────────────────────────────────────────────────────
+    // -- Menu bar -------------------------------------------------------------
     auto *fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(m_actNew);
     fileMenu->addAction(m_actOpen);
@@ -313,7 +313,7 @@ void MainWindow::rebuildWorkerTree()
 {
     // Save current selection so we can restore it after the rebuild.
     // m_workerTree->clear() fires currentItemChanged with no item, which would
-    // call clearSelection() on all tab pages — we suppress that with blockSignals.
+    // call clearSelection() on all tab pages - we suppress that with blockSignals.
     const QString savedMgr    = m_selManagerName;
     const QString savedWorker = m_selWorkerId;
 
@@ -377,7 +377,7 @@ void MainWindow::rebuildWorkerTree()
                         }
                     }
                     if (!toSelect) {
-                        // Worker was deleted — land on the worker at the same
+                        // Worker was deleted - land on the worker at the same
                         // position, or the last worker if it was the last one.
                         const int nw = mgrItem->childCount();
                         if (m_deletedWorkerPos >= 0 && nw > 0)
@@ -394,7 +394,7 @@ void MainWindow::rebuildWorkerTree()
     if (toSelect)
         m_workerTree->setCurrentItem(toSelect);   // fires onWorkerTreeSelectionChanged
     else
-        onWorkerTreeSelectionChanged();            // nothing to restore — notify pages
+        onWorkerTreeSelectionChanged();            // nothing to restore - notify pages
 }
 
 void MainWindow::onWorkerTreeSelectionChanged()
@@ -568,7 +568,7 @@ void MainWindow::onNewDynamo()
             "To connect a remote manager, run on the target machine:\n"
             "  Dynamo.exe -i <this_machine_ip> -m <hostname>");
     } else {
-        m_statusLeft->setText("Launching local Dynamo — waiting for connection...");
+        m_statusLeft->setText("Launching local Dynamo - waiting for connection...");
     }
 }
 
@@ -650,7 +650,7 @@ void MainWindow::onExitOne()
             break;
         }
         m_engine->removeWorker(m_selManagerName, m_selWorkerId);
-        // Do NOT clear m_selWorkerId here — removeWorker() fires configChanged
+        // Do NOT clear m_selWorkerId here - removeWorker() fires configChanged
         // synchronously, which calls rebuildWorkerTree() → setCurrentItem() →
         // onWorkerTreeSelectionChanged(), which already sets m_selWorkerId to
         // the next worker. Clearing it here would wipe that correct value.
@@ -702,7 +702,7 @@ void MainWindow::onTestStopped()
             QString("Running spec %1/%2: %3")
                 .arg(nextIdx + 1).arg(m_runQueue.size())
                 .arg(m_runQueue[nextIdx].name));
-        return;   // stay in running state — don't update toolbar
+        return;   // stay in running state - don't update toolbar
     }
 
     // Full stop (last spec finished, or Stop All was used)

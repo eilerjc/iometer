@@ -23,7 +23,7 @@
 // =============================================================================
 
 // Build the "unprepared logical disk" icon: take a standard HD icon and
-// paint a red diagonal slash across it — matches the original MFC red-slash.
+// paint a red diagonal slash across it - matches the original MFC red-slash.
 static QIcon makeUnpreparedDiskIcon()
 {
     const int sz = 16;
