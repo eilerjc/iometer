@@ -3,8 +3,8 @@
 
 #include "IometerEngine.h"
 #include "DyProto.h"
-#include "../core/WorkerPool.h"
-#include "../core/TestRunner.h"
+#include "QtTestRunnerAdapter.h"
+#include "QtWorkerPoolAdapter.h"
 #include <QObject>
 #include <QList>
 #include <QVector>
@@ -213,7 +213,7 @@ public:
                                      const TestConfig &cfg);
     void newConfig()  override;
 
-    QList<ManagerInfo>   managers()     const override { return m_workerPool->managerInfos(); }
+    QList<ManagerInfo>   managers()     const override;  // Conversion from std::vector to QList
     void connectManager(const QString &address, const QString &name = {}) override;
     void disconnectManager(const QString &mgrName)                        override;
     void addWorker(const QString &mgrName, const WorkerInfo &w)           override;
@@ -246,11 +246,11 @@ private:
     void rebuildManagers();
     void computeAggregate();
 
-    QTcpServer           *m_server   = nullptr;
-    QList<DySession*>     m_sessions;
-    WorkerPool           *m_workerPool = nullptr;  // Manages manager/worker lifecycle
-    TestRunner           *m_testRunner = nullptr;  // Manages test state machine
-    QList<AccessSpec>     m_specs;
+    QTcpServer                *m_server        = nullptr;
+    QList<DySession*>         m_sessions;
+    QtWorkerPoolAdapter       *m_workerPoolAdapter = nullptr;  // Qt wrapper around WorkerPool
+    QtTestRunnerAdapter       *m_testRunnerAdapter = nullptr;  // Qt wrapper around TestRunner
+    QList<AccessSpec>         m_specs;
     AccessSpec            m_currentTestSpec;
     bool                  m_hasCurrentTestSpec = false;
     // Per-worker configuration loaded from ICF for batch mode

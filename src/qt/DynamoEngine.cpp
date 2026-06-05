@@ -1,9 +1,10 @@
 // DynamoEngine.cpp
 #include "DynamoEngine.h"
+#include "QtTestRunnerAdapter.h"
+#include "QtWorkerPoolAdapter.h"
 #include "IometerEngine.h"
 #include "../core/ResultsWriter.h"
 #include "../core/IcfFile.h"
-#include "../core/WorkerPool.h"
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QHostAddress>
@@ -18,6 +19,39 @@
 #include <cmath>
 
 // --- Helpers ------------------------------------------------------------------
+
+// Qt ↔ std type conversions
+static std::vector<WorkerInfo> qlistToStdVector(const QList<WorkerInfo> &qlist)
+{
+    std::vector<WorkerInfo> vec;
+    for (const auto &item : qlist)
+        vec.push_back(item);
+    return vec;
+}
+
+static std::vector<AccessSpec> qlistToStdVector(const QList<AccessSpec> &qlist)
+{
+    std::vector<AccessSpec> vec;
+    for (const auto &item : qlist)
+        vec.push_back(item);
+    return vec;
+}
+
+static QList<ManagerInfo> stdVectorToQList(const std::vector<ManagerInfo> &vec)
+{
+    QList<ManagerInfo> qlist;
+    for (const auto &item : vec)
+        qlist.append(item);
+    return qlist;
+}
+
+static QList<WorkerInfo> stdVectorToQList(const std::vector<WorkerInfo> &vec)
+{
+    QList<WorkerInfo> qlist;
+    for (const auto &item : vec)
+        qlist.append(item);
+    return qlist;
+}
 
 // Compute IOps / MBps from a single target's Raw_Result delta + elapsed seconds.
 static void accumulateRaw(const DyRawResult &r, double elapsed,
@@ -818,13 +852,13 @@ DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
 {
     m_specs = IometerEngine::builtinAccessSpecs();
 
-    m_workerPool = new WorkerPool(this);
-    m_testRunner = new TestRunner(this);
+    m_workerPoolAdapterAdapter = new QtWorkerPoolAdapter(this);
+    m_testRunnerAdapterAdapter = new QtTestRunnerAdapter(this);
 
-    // Forward TestRunner signals to IometerEngine signals
-    connect(m_testRunner, &TestRunner::statusMessage,
+    // Forward Qt adapter signals to IometerEngine signals
+    connect(m_testRunnerAdapterAdapter, QOverload<const QString&>::of(&QtTestRunnerAdapter::statusMessage),
             this, &DynamoEngine::statusMessage);
-    connect(m_testRunner, &TestRunner::errorOccurred,
+    connect(m_testRunnerAdapterAdapter, QOverload<const QString&>::of(&QtTestRunnerAdapter::errorOccurred),
             this, &DynamoEngine::errorOccurred);
 
     m_server = new QTcpServer(this);
@@ -961,9 +995,9 @@ void DynamoEngine::startTest()
     m_savedResults.clear();
 
     QList<WorkerInfo> allWorkers;
-    auto managers = m_workerPool->managerInfos();
+    auto managers = m_workerPoolAdapter->managerInfos();
     for (const auto &mgr : managers)
-        allWorkers += m_workerPool->workers(mgr.name);
+        allWorkers += m_workerPoolAdapter->workers(mgr.name);
 
     // In batch mode the ICF specifies an exact worker count.  Trim the list so
     // that extra Dynamo workers (beyond what the ICF defines) never receive
@@ -976,10 +1010,12 @@ void DynamoEngine::startTest()
         ? QList<AccessSpec>{m_currentTestSpec}
         : m_specs;
 
-    // Delegate to TestRunner to manage test state machine
-    if (!m_testRunner->startTest(m_testConfig, allWorkers, specs)) {
+    // Delegate to TestRunner (convert Qt types to std types)
+    auto stdWorkers = qlistToStdVector(allWorkers);
+    auto stdSpecs = qlistToStdVector(specs);
+    if (!m_testRunnerAdapter->startTest(m_testConfig, stdWorkers, stdSpecs)) {
         m_running = false;
-        emit errorOccurred(m_testRunner->lastError());
+        emit errorOccurred(m_testRunnerAdapter->lastError());
         return;
     }
 
@@ -997,7 +1033,7 @@ void DynamoEngine::stopTest()
     if (!m_running) return;
 
     // Stop test in TestRunner (state machine)
-    m_testRunner->stopTest();
+    m_testRunnerAdapter->stopTest();
 
     // Stop protocol-level test on all sessions
     for (auto *s : m_sessions)
@@ -1012,7 +1048,7 @@ void DynamoEngine::stopTest()
 void DynamoEngine::stopAll()
 {
     // Stop tests only - do NOT exit Dynamo workers; managers stay connected
-    m_testRunner->stopAll();
+    m_testRunnerAdapter->stopAll();
 
     for (auto *s : m_sessions)
         s->stopTest();
@@ -1059,11 +1095,11 @@ bool DynamoEngine::saveConfig(const QString &filepath)
     // Convert DynamoEngine BatchWorkerConfig to IcfFile BatchWorker
     QList<IcfFile::BatchWorker> batchWorkers;
 
-    auto managers = m_workerPool->managerInfos();
+    auto managers = m_workerPoolAdapter->managerInfos();
     if (!managers.isEmpty()) {
         // Live Dynamo connection - write actual connected state
         for (const auto &mgr : managers) {
-            auto workers = m_workerPool->workers(mgr.name);
+            auto workers = m_workerPoolAdapter->workers(mgr.name);
             for (const auto &w : workers) {
                 IcfFile::BatchWorker bw;
                 bw.name = w.name;
@@ -1104,11 +1140,16 @@ void DynamoEngine::newConfig()
 {
     for (auto *s : m_sessions) s->deleteLater();
     m_sessions.clear();
-    m_workerPool->clear();
-    m_testRunner->stopAll();  // Reset test state machine
+    m_workerPoolAdapter->clear();
+    m_testRunnerAdapter->stopAll();  // Reset test state machine
     m_currentResults.clear();
     m_running = false;
     emit configChanged();
+}
+
+QList<ManagerInfo> DynamoEngine::managers() const
+{
+    return stdVectorToQList(m_workerPoolAdapter->managerInfos());
 }
 
 void DynamoEngine::connectManager(const QString &, const QString &)
@@ -1129,19 +1170,19 @@ void DynamoEngine::disconnectManager(const QString &mgrName)
 
 void DynamoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
 {
-    m_workerPool->addWorker(mgrName, w);
+    m_workerPoolAdapter->addWorker(mgrName, w);
     emit configChanged();
 }
 
 void DynamoEngine::removeWorker(const QString &mgrName, const QString &workerId)
 {
-    m_workerPool->removeWorker(mgrName, workerId);
+    m_workerPoolAdapter->removeWorker(mgrName, workerId);
     emit configChanged();
 }
 
 void DynamoEngine::updateWorker(const WorkerInfo &w)
 {
-    m_workerPool->updateWorker(w);
+    m_workerPoolAdapter->updateWorker(w);
     emit configChanged();
 }
 
@@ -1154,25 +1195,29 @@ void DynamoEngine::setAccessSpecs(const QList<AccessSpec> &specs)
 
 void DynamoEngine::rebuildManagers()
 {
-    m_workerPool->clear();
+    m_workerPoolAdapter->clear();
     for (const auto *s : m_sessions) {
         if (s->state() == DySession::State::Ready ||
             s->state() == DySession::State::Running ||
             s->isRunning()) {
             ManagerInfo mgr;
-            mgr.name             = s->managerName();
-            mgr.address          = s->address();
+            mgr.name             = s->managerName().toStdString();
+            mgr.address          = s->address().toStdString();
             mgr.connected        = true;
             mgr.processorCount   = s->processorCount();
-            mgr.workers          = s->workers();
-            mgr.availableTargets = s->diskTargetInfos();
+            // Convert QList to std::vector
+            for (const auto &w : s->workers())
+                mgr.workers.push_back(w);
+            // Convert QList to std::vector
+            for (const auto &t : s->diskTargetInfos())
+                mgr.availableTargets.push_back(t);
 
             // Add manager to WorkerPool
-            m_workerPool->addManager(mgr);
+            m_workerPoolAdapter->addManager(mgr);
 
             // Add workers from this session
             for (const auto &w : s->workers()) {
-                m_workerPool->addWorker(mgr.name, w);
+                m_workerPoolAdapter->addWorker(mgr.name, w);
             }
         }
     }
