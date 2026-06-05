@@ -1,71 +1,57 @@
 #pragma once
 
-#include <QString>
-#include <QList>
-#include <QObject>
-#include "../qt/IometerTypes.h"
+#include <string>
+#include <vector>
+#include "IometerTypes.h"
 
-// Forward declarations (included via IometerTypes.h above, repeated here for clarity)
-// struct WorkerInfo;
-// struct ManagerInfo;
-
-// Manages multiple manager/worker configurations across Dynamo instances
+// Manages multiple manager/worker configurations (platform-agnostic)
 // Handles:
 //   - Add/remove managers (Dynamo connections)
 //   - Add/remove workers per manager
 //   - Worker validation
 //   - Worker lifecycle queries
-// Used by both MFC (ManagerList) and Qt (DynamoEngine) implementations
+// Used by both MFC and Qt implementations
 
-class WorkerPool : public QObject {
-    Q_OBJECT
-
+class WorkerPool {
 public:
-    explicit WorkerPool(QObject *parent = nullptr);
-    ~WorkerPool() override;
+    WorkerPool();
+    ~WorkerPool();
 
     // Manager operations
     bool addManager(const ManagerInfo &info);
-    bool removeManager(const QString &managerName);
-    bool hasManager(const QString &managerName) const;
+    bool removeManager(const std::string &managerName);
+    bool hasManager(const std::string &managerName) const;
     int managerCount() const;
 
     // Worker operations
-    bool addWorker(const QString &managerName, const WorkerInfo &info);
-    bool removeWorker(const QString &managerName, const QString &workerId);
+    bool addWorker(const std::string &managerName, const WorkerInfo &info);
+    bool removeWorker(const std::string &managerName, const std::string &workerId);
     bool updateWorker(const WorkerInfo &info);
-    bool hasWorker(const QString &managerName, const QString &workerId) const;
-    int workerCount(const QString &managerName = QString()) const;
+    bool hasWorker(const std::string &managerName, const std::string &workerId) const;
+    int workerCount(const std::string &managerName = "") const;
     int totalWorkerCount() const;
 
     // Query operations
-    const QList<WorkerInfo>& workers(const QString &managerName) const;
+    const std::vector<WorkerInfo>& workers(const std::string &managerName) const;
 
     // Get list of all manager infos (for UI/display)
-    QList<ManagerInfo> managerInfos() const;
+    std::vector<ManagerInfo> managerInfos() const;
 
     // Validation
     bool isValid() const;
-    QString lastError() const;
+    std::string lastError() const;
 
     // Clear all
     void clear();
 
-signals:
-    void managerAdded(const QString &managerName);
-    void managerRemoved(const QString &managerName);
-    void workerAdded(const QString &managerName, const QString &workerId);
-    void workerRemoved(const QString &managerName, const QString &workerId);
-    void error(const QString &message);
-
 private:
     struct ManagerEntry {
         ManagerInfo info;
-        QList<WorkerInfo> workers;
+        std::vector<WorkerInfo> workers;
     };
 
-    QList<ManagerEntry> m_managers;
-    QString m_lastError;
+    std::vector<ManagerEntry> m_managers;
+    std::string m_lastError;
 
     ManagerEntry* findManager(const QString &managerName);
     const ManagerEntry* findManagerConst(const QString &managerName) const;

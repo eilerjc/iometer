@@ -1,8 +1,6 @@
 #include "WorkerPool.h"
-#include "../qt/IometerTypes.h"
 
-WorkerPool::WorkerPool(QObject *parent)
-    : QObject(parent)
+WorkerPool::WorkerPool()
 {
 }
 
@@ -14,35 +12,30 @@ WorkerPool::~WorkerPool()
 bool WorkerPool::addManager(const ManagerInfo &info)
 {
     if (hasManager(info.name)) {
-        m_lastError = QString("Manager '%1' already exists").arg(info.name);
-        emit error(m_lastError);
+        m_lastError = "Manager '" + info.name + "' already exists";
         return false;
     }
 
     ManagerEntry entry;
     entry.info = info;
-    m_managers.append(entry);
-
-    emit managerAdded(info.name);
+    m_managers.push_back(entry);
     return true;
 }
 
-bool WorkerPool::removeManager(const QString &managerName)
+bool WorkerPool::removeManager(const std::string &managerName)
 {
-    for (int i = 0; i < m_managers.size(); ++i) {
+    for (size_t i = 0; i < m_managers.size(); ++i) {
         if (m_managers[i].info.name == managerName) {
-            m_managers.removeAt(i);
-            emit managerRemoved(managerName);
+            m_managers.erase(m_managers.begin() + i);
             return true;
         }
     }
 
-    m_lastError = QString("Manager '%1' not found").arg(managerName);
-    emit error(m_lastError);
+    m_lastError = "Manager '" + managerName + "' not found";
     return false;
 }
 
-bool WorkerPool::hasManager(const QString &managerName) const
+bool WorkerPool::hasManager(const std::string &managerName) const
 {
     return findManagerConst(managerName) != nullptr;
 }
@@ -52,49 +45,42 @@ int WorkerPool::managerCount() const
     return m_managers.size();
 }
 
-bool WorkerPool::addWorker(const QString &managerName, const WorkerInfo &info)
+bool WorkerPool::addWorker(const std::string &managerName, const WorkerInfo &info)
 {
     ManagerEntry *mgr = findManager(managerName);
     if (!mgr) {
-        m_lastError = QString("Manager '%1' not found").arg(managerName);
-        emit error(m_lastError);
+        m_lastError = "Manager '" + managerName + "' not found";
         return false;
     }
 
     // Check for duplicate worker ID
     for (const auto &w : mgr->workers) {
         if (w.id == info.id) {
-            m_lastError = QString("Worker '%1' already exists in manager '%2'")
-                .arg(info.id, managerName);
-            emit error(m_lastError);
+            m_lastError = "Worker '" + info.id + "' already exists in manager '" + managerName + "'";
             return false;
         }
     }
 
-    mgr->workers.append(info);
-    emit workerAdded(managerName, info.id);
+    mgr->workers.push_back(info);
     return true;
 }
 
-bool WorkerPool::removeWorker(const QString &managerName, const QString &workerId)
+bool WorkerPool::removeWorker(const std::string &managerName, const std::string &workerId)
 {
     ManagerEntry *mgr = findManager(managerName);
     if (!mgr) {
-        m_lastError = QString("Manager '%1' not found").arg(managerName);
+        m_lastError = "Manager '" + managerName + "' not found";
         return false;
     }
 
-    for (int i = 0; i < mgr->workers.size(); ++i) {
+    for (size_t i = 0; i < mgr->workers.size(); ++i) {
         if (mgr->workers[i].id == workerId) {
-            mgr->workers.removeAt(i);
-            emit workerRemoved(managerName, workerId);
+            mgr->workers.erase(mgr->workers.begin() + i);
             return true;
         }
     }
 
-    m_lastError = QString("Worker '%1' not found in manager '%2'")
-        .arg(workerId, managerName);
-    emit error(m_lastError);
+    m_lastError = "Worker '" + workerId + "' not found in manager '" + managerName + "'";
     return false;
 }
 
@@ -102,7 +88,7 @@ bool WorkerPool::updateWorker(const WorkerInfo &info)
 {
     ManagerEntry *mgr = findManager(info.managerName);
     if (!mgr) {
-        m_lastError = QString("Manager '%1' not found").arg(info.managerName);
+        m_lastError = "Manager '" + info.managerName + "' not found";
         return false;
     }
 
@@ -113,11 +99,11 @@ bool WorkerPool::updateWorker(const WorkerInfo &info)
         }
     }
 
-    m_lastError = QString("Worker '%1' not found").arg(info.id);
+    m_lastError = "Worker '" + info.id + "' not found";
     return false;
 }
 
-bool WorkerPool::hasWorker(const QString &managerName, const QString &workerId) const
+bool WorkerPool::hasWorker(const std::string &managerName, const std::string &workerId) const
 {
     const ManagerEntry *mgr = findManagerConst(managerName);
     if (!mgr) return false;
@@ -128,9 +114,9 @@ bool WorkerPool::hasWorker(const QString &managerName, const QString &workerId) 
     return false;
 }
 
-int WorkerPool::workerCount(const QString &managerName) const
+int WorkerPool::workerCount(const std::string &managerName) const
 {
-    if (managerName.isEmpty()) {
+    if (managerName.empty()) {
         return totalWorkerCount();
     }
 
@@ -147,30 +133,30 @@ int WorkerPool::totalWorkerCount() const
     return count;
 }
 
-const QList<WorkerInfo>& WorkerPool::workers(const QString &managerName) const
+const std::vector<WorkerInfo>& WorkerPool::workers(const std::string &managerName) const
 {
-    static const QList<WorkerInfo> emptyList;
+    static const std::vector<WorkerInfo> emptyList;
     const ManagerEntry *mgr = findManagerConst(managerName);
     return mgr ? mgr->workers : emptyList;
 }
 
-QList<ManagerInfo> WorkerPool::managerInfos() const
+std::vector<ManagerInfo> WorkerPool::managerInfos() const
 {
-    QList<ManagerInfo> infos;
+    std::vector<ManagerInfo> infos;
     for (const auto &mgr : m_managers) {
-        infos.append(mgr.info);
+        infos.push_back(mgr.info);
     }
     return infos;
 }
 
 bool WorkerPool::isValid() const
 {
-    if (m_managers.isEmpty()) {
+    if (m_managers.empty()) {
         return false;  // Need at least one manager
     }
 
     for (const auto &mgr : m_managers) {
-        if (mgr.workers.isEmpty()) {
+        if (mgr.workers.empty()) {
             return false;  // Each manager needs at least one worker
         }
     }
@@ -178,7 +164,7 @@ bool WorkerPool::isValid() const
     return true;
 }
 
-QString WorkerPool::lastError() const
+std::string WorkerPool::lastError() const
 {
     return m_lastError;
 }
@@ -189,7 +175,7 @@ void WorkerPool::clear()
     m_lastError.clear();
 }
 
-WorkerPool::ManagerEntry* WorkerPool::findManager(const QString &managerName)
+WorkerPool::ManagerEntry* WorkerPool::findManager(const std::string &managerName)
 {
     for (auto &mgr : m_managers) {
         if (mgr.info.name == managerName) {
@@ -199,7 +185,7 @@ WorkerPool::ManagerEntry* WorkerPool::findManager(const QString &managerName)
     return nullptr;
 }
 
-const WorkerPool::ManagerEntry* WorkerPool::findManagerConst(const QString &managerName) const
+const WorkerPool::ManagerEntry* WorkerPool::findManagerConst(const std::string &managerName) const
 {
     for (const auto &mgr : m_managers) {
         if (mgr.info.name == managerName) {

@@ -1,19 +1,17 @@
 #pragma once
 
-#include <QString>
-#include <QVector>
+#include <string>
+#include <vector>
+#include "IometerTypes.h"
 
-// Forward declarations
-struct WorkerResult;
-struct TestConfig;
-
-// CSV column indices (0-based) - documented for both MFC and Qt
+// CSV output generation (platform-agnostic)
+// Shared interface for MFC and Qt implementations
 class ResultsWriter {
 public:
     // Write Iometer results to CSV file (ICF 1.1.0 output format)
     // Both MFC and Qt use this interface for consistent CSV generation
-    static bool writeBatchResultsCsv(const QString &filepath,
-                                     const QVector<WorkerResult> &results,
+    static bool writeBatchResultsCsv(const std::string &filepath,
+                                     const std::vector<WorkerResult> &results,
                                      const TestConfig &cfg);
 
     // CSV column indices - shared with MFC equivalent

@@ -1,26 +1,22 @@
 #pragma once
 
-#include <QString>
-#include <QObject>
-#include <QAbstractSocket>
+#include <string>
 #include <cstdint>
+#include <functional>
 
 // Forward declarations
-class QTcpSocket;
 struct DyMsg;
 struct DyDataMessage;
 
-// Encapsulates TCP connection and protocol handshake with a single Dynamo instance
+// Encapsulates TCP connection and protocol handshake (platform-agnostic)
 // Handles:
 //   - TCP socket on port 1066
 //   - DY_LOGIN message exchange
 //   - Manager_Info data reception
-//   - Message framing and dispatch
-// Used by both Qt (DySession wrapper) and MFC (IOTest equivalent)
+//   - Message framing
+// Used by both Qt (DySession wrapper) and MFC implementations
 
-class DynamoConnection : public QObject {
-    Q_OBJECT
-
+class DynamoConnection {
 public:
     enum class State {
         Disconnected,
@@ -30,13 +26,11 @@ public:
         Error
     };
 
-    explicit DynamoConnection(QTcpSocket *socket, QObject *parent = nullptr);
-    ~DynamoConnection() override;
+    DynamoConnection();
+    ~DynamoConnection();
 
     // Initiate login handshake with Dynamo
-    // Sends: DY_LOGIN message with version + manager info
-    // Waits for: Manager_Info data message
-    bool startLogin(const QString &managerName, int timeoutMs = 30000);
+    bool startLogin(const std::string &managerName, int timeoutMs = 30000);
 
     // Send raw 8-byte message (e.g., DY_LOGIN, START, STOP, RECORD_ON/OFF)
     bool sendMessage(const DyMsg &msg);
@@ -50,32 +44,26 @@ public:
     bool isConnected() const { return m_state == State::Connected; }
 
     // Get connection details
-    QString remoteAddress() const;
+    std::string remoteAddress() const;
     int remotePort() const;
 
     // Close connection gracefully
     void disconnect();
 
-signals:
-    void connected(const QString &managerName);
-    void disconnected();
-    void dataReceived(DyDataMessage *data);
-    void error(const QString &message);
-
-private slots:
-    void onSocketConnected();
-    void onSocketDisconnected();
-    void onSocketError(QAbstractSocket::SocketError error);
-    void onSocketReadyRead();
+    // Optional callbacks (for Qt/MFC integration)
+    std::function<void(const std::string&)> onConnected;
+    std::function<void()> onDisconnected;
+    std::function<void(DyDataMessage*)> onDataReceived;
+    std::function<void(const std::string&)> onError;
 
 private:
     bool waitForBytes(int count, int timeoutMs);
     bool receiveExactly(int count);
 
-    QTcpSocket *m_socket;
+    void *m_socket;  // Opaque pointer to platform-specific socket (QTcpSocket* on Qt)
     State m_state;
-    QString m_managerName;
-    QByteArray m_buffer;  // Input buffer for partial messages
+    std::string m_managerName;
+    std::string m_buffer;  // Input buffer for partial messages
 
     static constexpr int DYNAMO_PORT = 1066;
     static constexpr int MESSAGE_SIZE = 8;

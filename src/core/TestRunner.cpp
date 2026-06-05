@@ -1,12 +1,8 @@
 #include "TestRunner.h"
-#include "../qt/IometerTypes.h"
-#include <QDateTime>
+#include <chrono>
 
-TestRunner::TestRunner(QObject *parent)
-    : QObject(parent),
-      m_state(State::Idle),
-      m_startTime(0),
-      m_elapsed(0)
+TestRunner::TestRunner()
+    : m_state(State::Idle), m_startTime(0), m_elapsed(0)
 {
 }
 
@@ -18,20 +14,20 @@ TestRunner::~TestRunner()
 }
 
 bool TestRunner::startTest(const TestConfig &cfg,
-                           const QList<WorkerInfo> &workers,
-                           const QList<AccessSpec> &specs)
+                           const std::vector<WorkerInfo> &workers,
+                           const std::vector<AccessSpec> &specs)
 {
     if (!isIdle()) {
         recordError("Cannot start test - runner is not idle");
         return false;
     }
 
-    if (workers.isEmpty()) {
+    if (workers.empty()) {
         recordError("Cannot start test - no workers configured");
         return false;
     }
 
-    if (specs.isEmpty()) {
+    if (specs.empty()) {
         recordError("Cannot start test - no access specs configured");
         return false;
     }
@@ -44,13 +40,12 @@ bool TestRunner::startTest(const TestConfig &cfg,
 
     // Start test
     setState(State::Starting);
-    emit statusMessage(QString("Starting test with %1 workers").arg(workers.size()));
+    if (onStatusMessage) onStatusMessage("Starting test with " + std::to_string(workers.size()) + " workers");
 
-    // In real implementation, this would send setup messages to Dynamo
-    // For now, just transition to running
-    m_startTime = QDateTime::currentMSecsSinceEpoch();
+    // Transition to running
+    auto now = std::chrono::high_resolution_clock::now();
+    m_startTime = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
     setState(State::Running);
-    emit testStarted();
 
     return true;
 }
@@ -63,12 +58,10 @@ bool TestRunner::stopTest()
     }
 
     setState(State::Stopping);
-    emit statusMessage("Stopping test gracefully");
+    if (onStatusMessage) onStatusMessage("Stopping test gracefully");
 
-    // In real implementation, this would send STOP to Dynamo
-    // For now, just transition to stopped
+    // Transition to stopped
     setState(State::Stopped);
-    emit testStopped();
 
     return true;
 }
@@ -80,9 +73,8 @@ bool TestRunner::stopAll()
     }
 
     setState(State::Stopping);
-    emit statusMessage("Emergency shutdown");
+    if (onStatusMessage) onStatusMessage("Emergency shutdown");
 
-    // In real implementation, this would send STOP_ALL to Dynamo
     setState(State::Stopped);
 
     return true;
@@ -104,40 +96,14 @@ double TestRunner::elapsedSeconds() const
         return m_elapsed / 1000.0;
     }
 
-    qint64 now = QDateTime::currentMSecsSinceEpoch();
-    return (now - m_startTime) / 1000.0;
+    auto now = std::chrono::high_resolution_clock::now();
+    auto currentMs = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    return (currentMs - m_startTime) / 1000.0;
 }
 
 int TestRunner::activeWorkers() const
 {
     return isRunning() ? m_workers.size() : 0;
-}
-
-const QList<WorkerResult>& TestRunner::results() const
-{
-    return m_results;
-}
-
-QString TestRunner::lastError() const
-{
-    return m_lastError;
-}
-
-void TestRunner::onStartupComplete()
-{
-    if (m_state == State::Starting) {
-        setState(State::Running);
-        emit testStarted();
-    }
-}
-
-void TestRunner::onShutdownComplete()
-{
-    if (m_state == State::Stopping) {
-        m_elapsed = QDateTime::currentMSecsSinceEpoch() - m_startTime;
-        setState(State::Stopped);
-        emit testStopped();
-    }
 }
 
 void TestRunner::setState(State newState)
@@ -147,12 +113,12 @@ void TestRunner::setState(State newState)
     }
 
     m_state = newState;
-    emit stateChanged(m_state);
+    if (onStateChanged) onStateChanged(m_state);
 }
 
-void TestRunner::recordError(const QString &message)
+void TestRunner::recordError(const std::string &message)
 {
     m_lastError = message;
     setState(State::Error);
-    emit errorOccurred(message);
+    if (onErrorOccurred) onErrorOccurred(message);
 }

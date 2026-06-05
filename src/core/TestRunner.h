@@ -1,9 +1,9 @@
 #pragma once
 
-#include <QString>
-#include <QObject>
+#include <string>
+#include <vector>
 #include <functional>
-#include "../qt/IometerTypes.h"
+#include "IometerTypes.h"
 
 // Forward declarations (included via IometerTypes.h above, repeated here for clarity)
 // struct TestConfig;
@@ -19,8 +19,7 @@
 //   - Progress tracking
 // Used by both MFC and Qt implementations
 
-class TestRunner : public QObject {
-    Q_OBJECT
+class TestRunner {
 
 public:
     enum class State {
@@ -32,13 +31,13 @@ public:
         Error           // Error occurred
     };
 
-    explicit TestRunner(QObject *parent = nullptr);
-    ~TestRunner() override;
+    TestRunner();
+    ~TestRunner();
 
     // Test control
     bool startTest(const TestConfig &cfg,
-                   const QList<WorkerInfo> &workers,
-                   const QList<AccessSpec> &specs);
+                   const std::vector<WorkerInfo> &workers,
+                   const std::vector<AccessSpec> &specs);
     bool stopTest();
     bool stopAll();
 
@@ -52,22 +51,18 @@ public:
     int activeWorkers() const;
 
     // Results (only valid when stopped or error)
-    const QList<WorkerResult>& results() const;
-    QString lastError() const;
+    const std::vector<WorkerResult>& results() const { return m_results; }
+    std::string lastError() const { return m_lastError; }
 
     // Configuration
     const TestConfig& config() const { return m_config; }
-    const QList<WorkerInfo>& workers() const { return m_workers; }
-    const QList<AccessSpec>& specs() const { return m_specs; }
+    const std::vector<WorkerInfo>& workers() const { return m_workers; }
+    const std::vector<AccessSpec>& specs() const { return m_specs; }
 
-signals:
-    void stateChanged(State newState);
-    void statusMessage(const QString &message);
-    void resultsUpdated(const QList<WorkerResult> &results);
-    void errorOccurred(const QString &message);
-    void testStarted();
-    void testStopped();
-    void progressUpdated(double elapsedSeconds, int activeWorkers);
+    // Optional callbacks (for Qt/MFC signal integration)
+    std::function<void(State)> onStateChanged;
+    std::function<void(const std::string&)> onStatusMessage;
+    std::function<void(const std::string&)> onErrorOccurred;
 
 private slots:
     void onStartupComplete();
@@ -79,10 +74,10 @@ private:
 
     State m_state;
     TestConfig m_config;
-    QList<WorkerInfo> m_workers;
-    QList<AccessSpec> m_specs;
-    QList<WorkerResult> m_results;
-    QString m_lastError;
+    std::vector<WorkerInfo> m_workers;
+    std::vector<AccessSpec> m_specs;
+    std::vector<WorkerResult> m_results;
+    std::string m_lastError;
 
     // Timing
     qint64 m_startTime;
