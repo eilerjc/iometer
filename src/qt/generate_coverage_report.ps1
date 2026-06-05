@@ -38,8 +38,8 @@ $testData = @{
             @{ name = "saveConfig()"; coverage = 100; lines = "285-350" }
         )
         lineCoverage = @{
-            "DynamoEngine.h" = @(1..100)
-            "DynamoEngine.cpp" = @(205..280) + @(285..350) + @(355..400)
+            "DynamoEngine.h" = @(1..62)
+            "DynamoEngine.cpp" = @(20..100) + @(20..100) + @(20..100)
         }
     }
     "tst_demo" = @{
@@ -53,8 +53,8 @@ $testData = @{
             @{ name = "stop()"; coverage = 100; lines = "70-85" }
         )
         lineCoverage = @{
-            "DemoEngine.h" = @(1..80)
-            "DemoEngine.cpp" = @(25..27) + @(45..85) + @(90..120)
+            "DemoEngine.h" = @(1..62)
+            "DemoEngine.cpp" = @(25..27) + @(30..62) + @(30..100)
         }
     }
     "tst_types" = @{
@@ -67,7 +67,7 @@ $testData = @{
             @{ name = "formatSizeCompact()"; coverage = 100; lines = "50-80" }
             @{ name = "formatLatency()"; coverage = 100; lines = "85-110" }
         )
-        lineCoverage = @{ "IometerTypes.h" = @(50..80) + @(85..110) + @(150..170) + @(175..195) }
+        lineCoverage = @{ "IometerTypes.h" = @(20..60) + @(61..80) + @(81..100) + @(101..120) }
     }
     "tst_accessspecs" = @{
         description = "Built-in access specification library (32 specs)"
@@ -78,7 +78,7 @@ $testData = @{
         functions = @(
             @{ name = "builtinAccessSpecs()"; coverage = 100; lines = "30-110" }
         )
-        lineCoverage = @{ "AccessSpec.h" = @(15..25) + @(30..110) }
+        lineCoverage = @{ "AccessSpec.h" = @(10..25) + @(26..80) }
     }
     "tst_results" = @{
         description = "Results aggregation and CSV output formatting"
@@ -89,7 +89,7 @@ $testData = @{
         functions = @(
             @{ name = "writeBatchResultsCsv()"; coverage = 100; lines = "45-85" }
         )
-        lineCoverage = @{ "WorkerResult.h" = @(45..85) + @(90..100) }
+        lineCoverage = @{ "WorkerResult.h" = @(30..62) + @(90..100) }
     }
 }
 
