@@ -126,7 +126,10 @@ Get-ChildItem -Filter "*.cpp" -File | ForEach-Object {
 
 Write-Host "Read $($sourceFilesContent.Count) source files" -ForegroundColor Cyan
 
-# Count only code lines (exclude comments and whitespace) for ALL files
+# Count code lines for ALL files
+# Code = anything that's not a pure comment line or blank line
+# Includes: #include, #pragma, static const, function definitions, etc.
+# Excludes: comment-only lines and blank lines
 $codeLineCount = @{}
 foreach ($file in $sourceFilesContent.Keys) {
     $lines = $sourceFilesContent[$file]
@@ -134,13 +137,14 @@ foreach ($file in $sourceFilesContent.Keys) {
 
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
-        # Count as code if not empty and not a comment-only line
+        # Skip: empty lines and comment-only lines
+        # Include: #include, #pragma, static const, function defs, etc.
         if ($trimmed.Length -gt 0 -and -not $trimmed.StartsWith("//")) {
             $codeLines++
         }
     }
 
-    $codeLineCount[$file] = [Math]::Max($codeLines, 1)  # At least 1 to avoid division by zero
+    $codeLineCount[$file] = [Math]::Max($codeLines, 1)
 }
 
 # Build file list with coverage data for ALL files
@@ -626,11 +630,13 @@ $html += @'
                     sourceLines.forEach((line, idx) => {
                         const lineNum = idx + 1;
                         const trimmed = line.trim();
-                        const isComment = trimmed.length === 0 || trimmed.startsWith('//');
+                        // Skip: blank lines and comment-only lines
+                        // Include: #include, #pragma, static const, function defs, etc.
+                        const isNonCode = trimmed.length === 0 || trimmed.startsWith('//');
                         let lineClass = 'non-code-line';
 
-                        if (!isComment) {
-                            // Only color actual code lines
+                        if (!isNonCode) {
+                            // Color actual code lines (including preprocessor directives and definitions)
                             lineClass = 'uncovered-line';
                             if (coveredSet.has(lineNum)) {
                                 lineClass = 'covered-line';
