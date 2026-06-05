@@ -185,11 +185,12 @@ foreach ($test in $testData.Values) {
 
 # Auto-mark #include and #pragma directives as covered
 # Rationale: These are validated at compile-time (file compiles = they're "covered")
+# static const: only marked covered if explicitly included in test line coverage (requires actual usage)
 foreach ($file in $sourceFilesContent.Keys) {
     if (-not $fileCoverageDetails.ContainsKey($file)) {
         $fileCoverageDetails[$file] = @{
             coveredLines = @()
-            tests = @("compile")  # Mark as validated by compilation
+            tests = @()
         }
     }
 
@@ -199,6 +200,8 @@ foreach ($file in $sourceFilesContent.Keys) {
         if ($trimmed.StartsWith("#include") -or $trimmed.StartsWith("#pragma")) {
             $fileCoverageDetails[$file].coveredLines += ($i + 1)  # Line numbers are 1-based
         }
+        # Note: static const lines are NOT auto-covered; they need explicit test coverage
+        # (covered only if code using them is tested)
     }
 }
 
