@@ -173,7 +173,7 @@ $overallCoverage = if ($totalFiles -gt 0) { [Math]::Round(($coveredFiles / $tota
 $testDataJson = $testData | ConvertTo-Json -Depth 10
 $fileListJson = $fileListJson | ConvertTo-Json -Depth 10
 
-# For source files, create a simple key-value map
+# For source files, create a simple key-value map with proper escaping
 $sourceFilesJson = "{"
 $first = $true
 foreach ($file in $sourceFilesContent.Keys) {
@@ -191,8 +191,30 @@ foreach ($file in $sourceFilesContent.Keys) {
         if (-not $lineFirst) { $sourceFilesJson += ",`r`n" }
         $lineFirst = $false
 
-        # Escape special characters in line content
-        $escapedLine = $line.Replace('\', '\\').Replace('"', '\"').Replace("`n", '\n').Replace("`r", '\r')
+        # Escape special characters in line content for JSON/JavaScript
+        # Convert to JSON-safe format with unicode escapes
+        $jsonLine = ""
+        foreach ($char in $line.ToCharArray()) {
+            $code = [int][char]$char
+            if ($char -eq '\') {
+                $jsonLine += '\\'
+            } elseif ($char -eq '"') {
+                $jsonLine += '\"'
+            } elseif ($char -eq [char]0x0D) {  # CR
+                $jsonLine += '\r'
+            } elseif ($char -eq [char]0x0A) {  # LF
+                $jsonLine += '\n'
+            } elseif ($char -eq [char]0x09) {  # Tab
+                $jsonLine += '\t'
+            } elseif ($code -lt 32 -or $code -gt 126) {
+                # Escape non-ASCII and control characters as unicode escapes
+                $jsonLine += "\u{0:x4}" -f $code
+            } else {
+                $jsonLine += $char
+            }
+        }
+        $escapedLine = $jsonLine
+
         $sourceFilesJson += "    `"$escapedLine`""
     }
     $sourceFilesJson += "`r`n  ]"
@@ -612,9 +634,15 @@ $html += @'
 </html>
 '@
 
-# Write HTML with proper encoding
+# Write HTML with proper UTF-8 encoding (no BOM)
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText("$OutputDir\index.html", $html, $utf8NoBom)
+
+# Verify file was written correctly
+if (Test-Path "$OutputDir\index.html") {
+    $fileSize = (Get-Item "$OutputDir\index.html").Length
+    Write-Host "  Written: $fileSize bytes (UTF-8 no BOM)" -ForegroundColor Gray
+}
 
 Write-Host "Report generated: $OutputDir\index.html" -ForegroundColor Green
 Write-Host "  [1] Test suite view - drill down by test" -ForegroundColor Cyan
