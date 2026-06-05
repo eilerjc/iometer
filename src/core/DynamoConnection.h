@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QObject>
+#include <QAbstractSocket>
 #include <cstdint>
 
 // Forward declarations

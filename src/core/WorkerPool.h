@@ -3,10 +3,11 @@
 #include <QString>
 #include <QList>
 #include <QObject>
+#include "../qt/IometerTypes.h"
 
-// Forward declarations
-struct WorkerInfo;
-struct ManagerInfo;
+// Forward declarations (included via IometerTypes.h above, repeated here for clarity)
+// struct WorkerInfo;
+// struct ManagerInfo;
 
 // Manages multiple manager/worker configurations across Dynamo instances
 // Handles:
@@ -38,7 +39,6 @@ public:
     int totalWorkerCount() const;
 
     // Query operations
-    const QList<ManagerInfo>& managers() const { return m_managers; }
     const QList<WorkerInfo>& workers(const QString &managerName) const;
 
     // Validation

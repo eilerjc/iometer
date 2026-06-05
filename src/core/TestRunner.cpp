@@ -1,5 +1,5 @@
 #include "TestRunner.h"
-#include "../IometerTypes.h"
+#include "../qt/IometerTypes.h"
 #include <QDateTime>
 
 TestRunner::TestRunner(QObject *parent)
@@ -121,21 +121,6 @@ const QList<WorkerResult>& TestRunner::results() const
 QString TestRunner::lastError() const
 {
     return m_lastError;
-}
-
-const TestConfig& TestRunner::config() const
-{
-    return m_config;
-}
-
-const QList<WorkerInfo>& TestRunner::workers() const
-{
-    return m_workers;
-}
-
-const QList<AccessSpec>& TestRunner::specs() const
-{
-    return m_specs;
 }
 
 void TestRunner::onStartupComplete()

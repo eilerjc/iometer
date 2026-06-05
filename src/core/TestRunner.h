@@ -3,12 +3,13 @@
 #include <QString>
 #include <QObject>
 #include <functional>
+#include "../qt/IometerTypes.h"
 
-// Forward declarations
-struct TestConfig;
-struct AccessSpec;
-struct WorkerInfo;
-struct WorkerResult;
+// Forward declarations (included via IometerTypes.h above, repeated here for clarity)
+// struct TestConfig;
+// struct AccessSpec;
+// struct WorkerInfo;
+// struct WorkerResult;
 
 // Platform-agnostic test runner managing test lifecycle
 // Handles:

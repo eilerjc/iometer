@@ -2,6 +2,7 @@
 #include "DynamoEngine.h"
 #include "IometerEngine.h"
 #include "../core/ResultsWriter.h"
+#include "../core/IcfFile.h"
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QHostAddress>
@@ -1000,119 +1001,23 @@ void DynamoEngine::stopAll()
 
 bool DynamoEngine::loadConfig(const QString &filepath)
 {
-    QFile f(filepath);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
-
-    QStringList lines;
-    QTextStream in(&f);
-    while (!in.atEnd()) lines.append(in.readLine());
-
     TestConfig cfg;
     QList<AccessSpec> specs;
+    QList<IcfFile::BatchWorker> batchWorkers;
+
+    // Use IcfFile to parse entire ICF format
+    if (!IcfFile::load(filepath, cfg, specs, batchWorkers)) {
+        return false;
+    }
+
+    // Convert IcfFile BatchWorker to DynamoEngine BatchWorkerConfig
     m_batchWorkers.clear();
-
-    // Returns the first non-comment, non-empty data line after line i, trimmed.
-    // Returns "" if none found before a section boundary.
-    auto dataAfter = [&](int i) -> QString {
-        for (int j = i + 1; j < lines.size(); ++j) {
-            QString t = lines[j].trimmed();
-            if (t.isEmpty() || t.startsWith("'")) continue;
-            return t;
-        }
-        return {};
-    };
-
-    for (int i = 0; i < lines.size(); ++i) {
-        const QString t = lines[i].trimmed();
-
-        // -- Test Setup -----------------------------------------------------
-        if (t == "'Run Time") {
-            // Two lines follow: a sub-comment then the data
-            QString data;
-            for (int j = i + 1; j < lines.size(); ++j) {
-                QString d = lines[j].trimmed();
-                if (d.isEmpty()) continue;
-                if (d.startsWith("'")) continue;   // skip the format comment
-                data = d; break;
-            }
-            const QStringList p = data.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-            if (p.size() >= 3) {
-                cfg.runHours   = p[0].toInt();
-                cfg.runMinutes = p[1].toInt();
-                cfg.runSeconds = p[2].toInt();
-            }
-        } else if (t == "'Ramp Up Time (s)") {
-            const QString data = dataAfter(i);
-            cfg.rampSeconds = data.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).value(0).toInt();
-        } else if (t == "'Test Description") {
-            // Description may be blank - take the very next line as-is
-            if (i + 1 < lines.size())
-                cfg.description = lines[i + 1].trimmed();
-        }
-
-        // -- Access Specifications ------------------------------------------
-        else if (t.startsWith("'Access specification name")) {
-            // First non-comment data line is "name,assignment"
-            AccessSpec spec;
-            int j = i + 1;
-            while (j < lines.size()) {
-                const QString d = lines[j++].trimmed();
-                if (d.isEmpty() || d.startsWith("'")) continue;
-                spec.name = d.split(',').value(0).trimmed();
-                break;
-            }
-            // Collect all spec data lines (skip 'size,... comment, read until
-            // next comment/blank that signals end of this spec)
-            while (j < lines.size()) {
-                const QString d = lines[j].trimmed();
-                if (d.startsWith("'Access specification name") ||
-                    d.startsWith("'END access")) break;
-                ++j;
-                if (d.isEmpty()) continue;
-                if (d.startsWith("'")) continue;  // skip format comments
-                // Data line: size,%ofSize,%reads,%random,delay,burst,align,reply
-                const QStringList p = d.split(',');
-                if (p.size() >= 8) {
-                    AccessSpecLine l;
-                    l.sizeBytes   = p[0].toInt();
-                    l.ofSize      = p[1].toInt();
-                    l.readPercent = p[2].toInt();
-                    l.seqPercent  = 100 - p[3].toInt();  // %random → %sequential
-                    l.delayMs     = p[4].toInt();
-                    l.burstLength = p[5].toInt();
-                    l.alignBytes  = p[6].toInt();
-                    l.replyBytes  = p[7].toInt();
-                    spec.lines.append(l);
-                }
-            }
-            if (!spec.name.isEmpty() && !spec.lines.isEmpty())
-                specs.append(spec);
-        }
-
-        // -- Manager / Worker -----------------------------------------------
-        // State machine: collect per-worker spec+target assignments.
-        else if (t == "'Worker") {
-            // Start a new worker config; name is the next data line
-            BatchWorkerConfig wc;
-            wc.name = dataAfter(i);
-            // Scan forward for this worker's assigned specs and targets
-            for (int j = i + 1; j < lines.size(); ++j) {
-                const QString d = lines[j].trimmed();
-                if (d == "'End worker") { i = j; break; }
-                if (d == "'Assigned access specs") {
-                    for (int k = j + 1; k < lines.size(); ++k) {
-                        const QString s = lines[k].trimmed();
-                        if (s.startsWith("'End assigned access")) { j = k; break; }
-                        if (!s.isEmpty() && !s.startsWith("'"))
-                            wc.assignedSpecs.append(s);
-                    }
-                } else if (d == "'Target") {
-                    const QString tgt = dataAfter(j);
-                    if (!tgt.isEmpty()) wc.targets.append(tgt);
-                }
-            }
-            m_batchWorkers.append(wc);
-        }
+    for (const auto &bw : batchWorkers) {
+        BatchWorkerConfig wc;
+        wc.name = bw.name;
+        wc.assignedSpecs = bw.assignedSpecs;
+        wc.targets = bw.targets;
+        m_batchWorkers.append(wc);
     }
 
     setAccessSpecs(specs.isEmpty() ? builtinAccessSpecs() : specs);
@@ -1123,124 +1028,32 @@ bool DynamoEngine::loadConfig(const QString &filepath)
 
 bool DynamoEngine::saveConfig(const QString &filepath)
 {
-    QFile f(filepath);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return false;
-    QTextStream out(&f);
-
-    out << "Version 1.1.0 \n";
-
-    // -- Test Setup --------------------------------------------------------
-    out << "'TEST SETUP ====================================================================\n";
-    out << "'Test Description\n";
-    out << "\t" << m_testConfig.description << "\n";
-    out << "'Run Time\n";
-    out << "'\thours      minutes    seconds\n";
-    out << "\t" << m_testConfig.runHours
-        << "          " << m_testConfig.runMinutes
-        << "          " << m_testConfig.runSeconds << "\n";
-    out << "'Ramp Up Time (s)\n";
-    out << "\t" << m_testConfig.rampSeconds << "\n";
-    out << "'Default Disk Workers to Spawn\n\tNUMBER_OF_CPUS\n";
-    out << "'Default Network Workers to Spawn\n\t0\n";
-    out << "'Record Results\n\tALL\n";
-    out << "'Worker Cycling\n'\tstart      step       step type\n\t1          1          LINEAR\n";
-    out << "'Disk Cycling\n'\tstart      step       step type\n\t1          1          LINEAR\n";
-    out << "'Queue Depth Cycling\n'\tstart      end        step       step type\n\t1          32         2          EXPONENTIAL\n";
-    out << "'Test Type\n\tNORMAL\n";
-    out << "'END test setup\n";
-
-    // -- Results Display ---------------------------------------------------
-    out << "'RESULTS DISPLAY ===============================================================\n";
-    out << "'Record Last Update Results,Update Frequency,Update Type\n";
-    out << "\tDISABLED,1,LAST_UPDATE\n";
-    out << "'Bar chart 1 statistic\n\tTotal I/Os per Second\n";
-    out << "'Bar chart 2 statistic\n\tTotal MBs per Second (Decimal)\n";
-    out << "'Bar chart 3 statistic\n\tAverage I/O Response Time (ms)\n";
-    out << "'Bar chart 4 statistic\n\tMaximum I/O Response Time (ms)\n";
-    out << "'Bar chart 5 statistic\n\t% CPU Utilization (total)\n";
-    out << "'Bar chart 6 statistic\n\tTotal Error Count\n";
-    out << "'END results display\n";
-
-    // -- Access Specifications ---------------------------------------------
-    out << "'ACCESS SPECIFICATIONS =========================================================\n";
-    for (const auto &s : m_specs) {
-        out << "'Access specification name,default assignment\n";
-        out << "\t" << s.name << ",NONE\n";
-        out << "'size,% of size,% reads,% random,delay,burst,align,reply\n";
-        for (const auto &l : s.lines) {
-            out << "\t" << l.sizeBytes
-                << "," << l.ofSize
-                << "," << l.readPercent
-                << "," << (100 - l.seqPercent)   // seqPct → randomPct
-                << "," << l.delayMs
-                << "," << l.burstLength
-                << "," << l.alignBytes
-                << "," << l.replyBytes << "\n";
-        }
-    }
-    out << "'END access specifications\n";
-
-    // -- Manager List ------------------------------------------------------
-    out << "'MANAGER LIST ==================================================================\n";
-
-    // Lambda that writes a single worker section
-    auto writeWorker = [&](const QString &name, const QString &type,
-                           const QStringList &assignedSpecs,
-                           const QStringList &targets,
-                           int qd=1, bool tcr=false, int tpc=1,
-                           bool ufs=false, qint64 fsv=0,
-                           qint64 maxSz=0, qint64 startSec=0, int dataPat=0) {
-        out << "'Worker\n\t" << name << "\n";
-        out << "'Worker type\n\t" << type << "\n";
-        out << "'Default target settings for worker\n";
-        out << "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value\n";
-        out << "\t" << qd << "," << (tcr?"ENABLED":"DISABLED") << ","
-            << tpc << "," << (ufs?"ENABLED":"DISABLED") << "," << fsv << "\n";
-        out << "'Disk maximum size,starting sector,Data pattern\n";
-        out << "\t" << maxSz << "," << startSec << "," << dataPat << "\n";
-        out << "'End default target settings for worker\n";
-        out << "'Assigned access specs\n";
-        for (const auto &sn : assignedSpecs) out << "\t" << sn << "\n";
-        if (assignedSpecs.isEmpty() && !m_specs.isEmpty())
-            out << "\t" << m_specs.first().name << "\n";
-        out << "'End assigned access specs\n";
-        out << "'Target assignments\n";
-        for (const auto &tgt : targets) {
-            out << "'Target\n\t" << tgt << "\n";
-            out << "'Target type\n\tDISK\n";
-            out << "'End target\n";
-        }
-        out << "'End target assignments\n";
-        out << "'End worker\n";
-    };
+    // Convert DynamoEngine BatchWorkerConfig to IcfFile BatchWorker
+    QList<IcfFile::BatchWorker> batchWorkers;
 
     if (!m_managers.isEmpty()) {
         // Live Dynamo connection - write actual connected state
-        int mgrid = 1;
         for (const auto &mgr : m_managers) {
-            out << "'Manager ID, manager name\n\t" << mgrid++ << "," << mgr.name << "\n";
-            out << "'Manager network address\n\t\n";
-            for (const auto &w : mgr.workers)
-                writeWorker(w.name, (w.type=="Network"?"NET":"DISK"),
-                            w.assignedSpecs, w.targets,
-                            w.queueDepth, w.testConnRate, w.transPerConn,
-                            w.useFixedSeed, w.fixedSeedValue,
-                            w.maxDiskSize, w.startingSector, w.dataPattern);
-            out << "'End manager\n";
+            for (const auto &w : mgr.workers) {
+                IcfFile::BatchWorker bw;
+                bw.name = w.name;
+                bw.assignedSpecs = w.assignedSpecs;
+                bw.targets = w.targets;
+                batchWorkers.append(bw);
+            }
         }
-    } else if (!m_batchWorkers.isEmpty()) {
-        // No live connection - preserve the batch worker config from the loaded ICF
-        out << "'Manager ID, manager name\n\t1,MANAGER\n";
-        out << "'Manager network address\n\t\n";
-        for (const auto &bw : m_batchWorkers)
-            writeWorker(bw.name.isEmpty() ? "Worker 1" : bw.name,
-                        "DISK", bw.assignedSpecs, bw.targets);
-        out << "'End manager\n";
+    } else {
+        // No live connection - use batch config from loaded ICF
+        for (const auto &bw : m_batchWorkers) {
+            IcfFile::BatchWorker ibw;
+            ibw.name = bw.name;
+            ibw.assignedSpecs = bw.assignedSpecs;
+            ibw.targets = bw.targets;
+            batchWorkers.append(ibw);
+        }
     }
 
-    out << "'END manager list\n";
-    out << "Version 1.1.0 \n";
-    return true;
+    return IcfFile::save(filepath, m_testConfig, m_specs, batchWorkers);
 }
 bool DynamoEngine::saveBatchResults(const QString &filepath)
 {

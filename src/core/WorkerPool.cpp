@@ -1,5 +1,5 @@
 #include "WorkerPool.h"
-#include "../IometerTypes.h"
+#include "../qt/IometerTypes.h"
 
 WorkerPool::WorkerPool(QObject *parent)
     : QObject(parent)

@@ -1,5 +1,5 @@
 #include "ResultsWriter.h"
-#include "../IometerTypes.h"  // WorkerResult, TestConfig
+#include "../qt/IometerTypes.h"  // WorkerResult, TestConfig
 
 #include <QFile>
 #include <QTextStream>

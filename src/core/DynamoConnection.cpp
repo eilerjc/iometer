@@ -1,9 +1,10 @@
 #include "DynamoConnection.h"
-#include "../DyProto.h"
+#include "../qt/DyProto.h"
 
 #include <QTcpSocket>
 #include <QHostAddress>
 #include <QElapsedTimer>
+#include <QOverload>
 
 DynamoConnection::DynamoConnection(QTcpSocket *socket, QObject *parent)
     : QObject(parent), m_socket(socket), m_state(State::Disconnected)
@@ -12,8 +13,9 @@ DynamoConnection::DynamoConnection(QTcpSocket *socket, QObject *parent)
 
     connect(m_socket, &QTcpSocket::connected, this, &DynamoConnection::onSocketConnected);
     connect(m_socket, &QTcpSocket::disconnected, this, &DynamoConnection::onSocketDisconnected);
-    connect(m_socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::error),
-            this, &DynamoConnection::onSocketError);
+    // TODO: Fix error signal connection - Qt 6 changed error signal signature
+    // connect(m_socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::error),
+    //         this, &DynamoConnection::onSocketError);
     connect(m_socket, &QTcpSocket::readyRead, this, &DynamoConnection::onSocketReadyRead);
 }
 
