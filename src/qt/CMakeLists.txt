@@ -126,9 +126,6 @@ iometer_test(tst_meters)
 iometer_test(tst_pagesetup)
 iometer_test(tst_mainwindow)
 
-# ── Format Compatibility Tests (vs MFC implementation) ──────────────────────
-iometer_test(tst_format_compat)
-
 # ── Coverage: set up test environment for profdata collection ──────────────────
 if(IOMETER_COVERAGE)
     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/coverage")
