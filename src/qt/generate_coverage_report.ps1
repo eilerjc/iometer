@@ -94,10 +94,11 @@ $testData = @{
 }
 
 # Read actual source files and build file cache
+# Use -Encoding UTF8 to properly handle unicode characters like em-dashes
 $sourceFilesContent = @{}
 Get-ChildItem -Filter "*.h" -File | ForEach-Object {
     $fileName = $_.Name
-    $content = @(Get-Content $_.FullName -ErrorAction SilentlyContinue)
+    $content = @(Get-Content $_.FullName -Encoding UTF8 -ErrorAction SilentlyContinue)
 
     # Handle case where file is empty or single line
     if ($null -eq $content) {
@@ -111,7 +112,7 @@ Get-ChildItem -Filter "*.h" -File | ForEach-Object {
 
 Get-ChildItem -Filter "*.cpp" -File | ForEach-Object {
     $fileName = $_.Name
-    $content = @(Get-Content $_.FullName -ErrorAction SilentlyContinue)
+    $content = @(Get-Content $_.FullName -Encoding UTF8 -ErrorAction SilentlyContinue)
 
     # Handle case where file is empty or single line
     if ($null -eq $content) {
@@ -192,28 +193,14 @@ foreach ($file in $sourceFilesContent.Keys) {
         $lineFirst = $false
 
         # Escape special characters in line content for JSON/JavaScript
-        # Convert to JSON-safe format with unicode escapes
-        $jsonLine = ""
-        foreach ($char in $line.ToCharArray()) {
-            $code = [int][char]$char
-            if ($char -eq '\') {
-                $jsonLine += '\\'
-            } elseif ($char -eq '"') {
-                $jsonLine += '\"'
-            } elseif ($char -eq [char]0x0D) {  # CR
-                $jsonLine += '\r'
-            } elseif ($char -eq [char]0x0A) {  # LF
-                $jsonLine += '\n'
-            } elseif ($char -eq [char]0x09) {  # Tab
-                $jsonLine += '\t'
-            } elseif ($code -lt 32 -or $code -gt 126) {
-                # Escape non-ASCII and control characters as unicode escapes
-                $jsonLine += "\u{0:x4}" -f $code
-            } else {
-                $jsonLine += $char
-            }
-        }
-        $escapedLine = $jsonLine
+        # Only escape what's needed for JSON strings
+        $escapedLine = $line
+        $escapedLine = $escapedLine.Replace('\', '\\')     # Backslash first (important!)
+        $escapedLine = $escapedLine.Replace('"', '\"')     # Quotes
+        $escapedLine = $escapedLine.Replace("`r", '\r')    # Carriage return
+        $escapedLine = $escapedLine.Replace("`n", '\n')    # Newline
+        $escapedLine = $escapedLine.Replace("`t", '\t')    # Tab
+        # Unicode characters (like em-dash) are preserved as-is in UTF-8
 
         $sourceFilesJson += "    `"$escapedLine`""
     }
