@@ -1,143 +1,176 @@
-# compare_guis.ps1 — Behavioral equivalence tests between MFC and Qt implementations
-#
-# Feeds identical inputs to both Iometer (MFC) and IometerQt (Qt) and compares outputs.
-# This validates that both implementations produce equivalent results despite implementation differences.
-#
-# Exit code: 0 = all tests passed, 1 = differences found
+# Compare GUI Implementations (Layer 3: Behavioral Equivalence)
+# Runs same config on Original (MFC) and Qt engines, compares CSV results
 
 param(
-    [string]$OriginalExe = "src/Release/Iometer.exe",
-    [string]$QtExe = "src/qt/build/Release/IometerQt.exe",
-    [string]$TestDir = "test/compare_output"
+    [string]$ConfigFile = "$PSScriptRoot\smoke_test.icf",
+    [string]$ResultsDir = $PSScriptRoot,
+    [string]$OriginalBin = "$PSScriptRoot\..\src\msvs11\Release\x64",
+    [string]$QtBin = "$PSScriptRoot\..\src\qt\build\Release",
+    [string]$DynamoBin = "$PSScriptRoot\..\src\msvs11\Release\x64",
+    [int]$LoginTimeout = 60,
+    [switch]$KeepResults
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "Behavioral Equivalence Tests: MFC vs Qt Iometer" -ForegroundColor Cyan
-Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host ""
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
-# Verify both executables exist
-if (-not (Test-Path $OriginalExe)) {
-    Write-Host "ERROR: Original Iometer not found at $OriginalExe" -ForegroundColor Red
-    exit 1
-}
-if (-not (Test-Path $QtExe)) {
-    Write-Host "ERROR: Qt IometerQt not found at $QtExe" -ForegroundColor Red
-    exit 1
+function Require-File([string]$Path, [string]$Desc) {
+    if (-not (Test-Path $Path)) {
+        Write-Error "$Desc not found: $Path"; exit 1
+    }
 }
 
-Write-Host "Original (MFC): $OriginalExe" -ForegroundColor Yellow
-Write-Host "Qt version:     $QtExe" -ForegroundColor Yellow
+function Check-Elevation {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $p = New-Object Security.Principal.WindowsPrincipal($id)
+    if (-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Warning "Relaunching elevated..."
+        $args = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+        foreach ($kv in $PSBoundParameters.GetEnumerator()) {
+            if ($kv.Key -notmatch "^(PipelinePosition|CommandRuntime)$") {
+                $args += " -$($kv.Key) `"$($kv.Value)`""
+            }
+        }
+        Start-Process powershell.exe -Verb RunAs -ArgumentList $args -Wait; exit
+    }
+}
+
+function Get-CSVAllRow([string]$File) {
+    if (-not (Test-Path $File)) { return $null }
+    $inResults = $false
+    foreach ($line in Get-Content $File) {
+        if ($line -match "^'Results") { $inResults = $true; continue }
+        if (-not $inResults -or $line -match "^'") { continue }
+        $fields = $line -split ","
+        if ($fields.Count -gt 27 -and $fields[0].Trim() -eq "ALL") { return $fields }
+    }
+    return $null
+}
+
+function Run-Engine([string]$Eng, [string]$Cfg, [string]$Out, [int]$TimeOut) {
+    Write-Host "Running $Eng..." -ForegroundColor Yellow
+    
+    if ($Eng -eq "Original") {
+        $exe = Join-Path $OriginalBin "IOmeter.exe"
+        $dyn = Join-Path $DynamoBin "Dynamo.exe"
+        Require-File $exe "IOmeter.exe"
+        Require-File $dyn "Dynamo.exe"
+
+        Get-Process IOmeter,Dynamo -ErrorAction SilentlyContinue | Stop-Process -Force
+        Start-Sleep 1
+
+        $p = Start-Process -FilePath $exe -ArgumentList "/c `"$Cfg`" /r `"$Out`" /t $TimeOut" -PassThru
+        Start-Sleep 3
+        $dp = Start-Process -FilePath $dyn -ArgumentList "-i 127.0.0.1 -m $env:COMPUTERNAME" -PassThru
+
+        $waited = 0
+        while (-not $p.HasExited -and $waited -lt $TimeOut) {
+            Start-Sleep 2; $waited += 2; Write-Host "  ...${waited}s" -NoNewline
+        }
+        Write-Host ""
+        
+        if (-not $dp.HasExited) { Stop-Process -Id $dp.Id -Force -ErrorAction SilentlyContinue }
+        if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; return $false }
+        return $true
+    }
+    else {
+        $exe = Join-Path $QtBin "IometerQt.exe"
+        $dyn = Join-Path $DynamoBin "Dynamo.exe"
+        Require-File $exe "IometerQt.exe"
+        Require-File $dyn "Dynamo.exe"
+
+        Get-Process IometerQt,Dynamo -ErrorAction SilentlyContinue | Stop-Process -Force
+        Start-Sleep 1
+
+        $p = Start-Process -FilePath $exe -ArgumentList "/c `"$Cfg`" /r `"$Out`" /t $TimeOut" -PassThru
+        Start-Sleep 3
+        $dp = Start-Process -FilePath $dyn -ArgumentList "-i 127.0.0.1 -m $env:COMPUTERNAME" -PassThru
+
+        $waited = 0
+        while (-not $p.HasExited -and $waited -lt $TimeOut) {
+            Start-Sleep 2; $waited += 2; Write-Host "  ...${waited}s" -NoNewline
+        }
+        Write-Host ""
+        
+        if (-not $dp.HasExited) { Stop-Process -Id $dp.Id -Force -ErrorAction SilentlyContinue }
+        if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; return $false }
+        return $p.ExitCode -eq 0
+    }
+}
+
+function Compare-Field($orig, $qt, [int]$Col) {
+    try {
+        $ov = [double]$orig[$Col].Trim()
+        $qv = [double]$qt[$Col].Trim()
+        if ($ov -eq 0 -and $qv -eq 0) { return $true, "Both=0" }
+        if ($ov -ne 0) {
+            $diff = [Math]::Abs(($qv - $ov) / $ov)
+            return ($diff -le 0.01), "O=$ov Q=$qv D=$([Math]::Round($diff*100))%"
+        }
+        return ([Math]::Abs($qv - $ov) -lt 0.001), "O=$ov Q=$qv"
+    } catch {
+        return $false, "Parse error"
+    }
+}
+
+Write-Host ""
+Write-Host "=== GUI Behavioral Equivalence Comparison ===" -ForegroundColor Cyan
 Write-Host ""
 
-# Create test output directory
-New-Item -ItemType Directory -Path $TestDir -Force | Out-Null
+Require-File $ConfigFile "Config file"
+Check-Elevation
 
-$testsPassed = 0
-$testsFailed = 0
+$origFile = Join-Path $ResultsDir "results_${timestamp}_original.csv"
+$qtFile = Join-Path $ResultsDir "results_${timestamp}_qt.csv"
 
-# Test 1: Both can load the same ICF file
-Write-Host "TEST 1: Load smoke_test.icf" -ForegroundColor Cyan
-Write-Host "─────────────────────────────" -ForegroundColor Cyan
-
-# This would require the executables to support a --load-config --output-config mode
-# For now, we document what should be tested
-
-Write-Host "Test case: Load test/smoke_test.icf and output config to CSV"
-Write-Host "Expected: Both load identically (can be verified by hash or field-by-field comparison)"
-Write-Host "Status: SKIPPED (requires CLI support)" -ForegroundColor Yellow
+Write-Host "Config  : $ConfigFile"
+Write-Host ""
+Write-Host "Step 1: Running engines..." -ForegroundColor Cyan
 Write-Host ""
 
-# Test 2: Batch mode results comparison
-Write-Host "TEST 2: Batch mode results equivalence" -ForegroundColor Cyan
-Write-Host "───────────────────────────────────────" -ForegroundColor Cyan
-
-Write-Host "Test case: Both run with -Engine Original and -Engine Qt -Batch on same config"
-Write-Host "Expected: Results CSV has identical column layout and aggregation"
-Write-Host "Status: Already verified by smoke_test.ps1" -ForegroundColor Green
-$testsPassed++
+$origOK = Run-Engine "Original" $ConfigFile $origFile ($LoginTimeout + 30)
+Write-Host ""
+$qtOK = Run-Engine "Qt" $ConfigFile $qtFile ($LoginTimeout + 30)
 Write-Host ""
 
-# Test 3: Access spec parsing
-Write-Host "TEST 3: Access spec parsing equivalence" -ForegroundColor Cyan
-Write-Host "────────────────────────────────────────" -ForegroundColor Cyan
+if (-not ($origOK -and $qtOK)) { Write-Host "FAIL: Engines failed" -ForegroundColor Red; exit 1 }
 
-Write-Host "Test case: Built-in access spec library"
-Write-Host "Expected: Both have 32 specs, same names, same parameters"
-Write-Host "Status: Qt verified via tst_accessspecs.cpp" -ForegroundColor Green
-Write-Host "        MFC equivalence via smoke_test.icf round-trip" -ForegroundColor Green
-$testsPassed++
+Write-Host "Step 2: Comparing results..." -ForegroundColor Cyan
 Write-Host ""
 
-# Test 4: Protocol compatibility
-Write-Host "TEST 4: Dynamo protocol compatibility" -ForegroundColor Cyan
-Write-Host "──────────────────────────────────────" -ForegroundColor Cyan
+$origRow = Get-CSVAllRow $origFile
+$qtRow = Get-CSVAllRow $qtFile
+if (-not ($origRow -and $qtRow)) { Write-Host "FAIL: Missing rows" -ForegroundColor Red; exit 1 }
 
-Write-Host "Test case: Both communicate with Dynamo on port 1066"
-Write-Host "Expected: Message sizes, command codes, version all identical"
-Write-Host "Status: Verified via tst_protocol.cpp (struct sizes, constants)" -ForegroundColor Green
-Write-Host "        Empirically validated by both connecting to Dynamo" -ForegroundColor Green
-$testsPassed++
+$passed = 0
+$tests = @(
+    @{ Name = "IOps"; Col = 6 }
+    @{ Name = "MBps"; Col = 12 }
+    @{ Name = "Errors"; Col = 27 }
+)
+
+foreach ($t in $tests) {
+    $ok, $msg = Compare-Field $origRow $qtRow $t.Col
+    if ($ok) {
+        Write-Host "  ✓ $($t.Name): $msg" -ForegroundColor Green; $passed++
+    } else {
+        Write-Host "  ✗ $($t.Name): $msg" -ForegroundColor Red
+    }
+}
+
 Write-Host ""
-
-# Test 5: Results aggregation
-Write-Host "TEST 5: Results aggregation equivalence" -ForegroundColor Cyan
-Write-Host "───────────────────────────────────────" -ForegroundColor Cyan
-
-Write-Host "Test case: Both aggregate worker results identically"
-Write-Host "Expected: Sum IOps, sum errors, average latency calculations match"
-Write-Host "Status: Qt verified via tst_results.cpp (aggregation logic)" -ForegroundColor Green
-Write-Host "        Empirically validated by smoke_test.ps1 result comparison" -ForegroundColor Green
-$testsPassed++
-Write-Host ""
-
-# Test 6: CSV format compatibility
-Write-Host "TEST 6: CSV format compatibility" -ForegroundColor Cyan
-Write-Host "────────────────────────────────" -ForegroundColor Cyan
-
-Write-Host "Test case: Both output CSV with identical column positions"
-Write-Host "Expected: Field[0]=ALL, [6]=IOps, [12]=MBps(Dec), [27]=Errors"
-Write-Host "Status: Qt verified via tst_results.cpp (CSV field positions)" -ForegroundColor Green
-Write-Host "        Empirically validated by smoke_test.ps1 parsing" -ForegroundColor Green
-$testsPassed++
-Write-Host ""
-
-# Test 7: Round-trip fidelity
-Write-Host "TEST 7: ICF round-trip fidelity" -ForegroundColor Cyan
-Write-Host "────────────────────────────────" -ForegroundColor Cyan
-
-Write-Host "Test case: Load ICF, save it, reload it, verify data unchanged"
-Write-Host "Expected: Load → Save → Reload produces identical config"
-Write-Host "Status: Qt verified via tst_icf.cpp::roundTrip tests" -ForegroundColor Green
-Write-Host "        Empirically validated by both versions on smoke_test.icf" -ForegroundColor Green
-$testsPassed++
-Write-Host ""
-
-# Summary
-Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "Test Results" -ForegroundColor Cyan
-Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "Passed: $testsPassed" -ForegroundColor Green
-Write-Host "Failed: $testsFailed" -ForegroundColor $(if($testsFailed -gt 0) {"Red"} else {"Green"})
-Write-Host ""
-
-Write-Host "Summary:" -ForegroundColor Cyan
-Write-Host "--------"
-Write-Host ""
-Write-Host "Behavioral equivalence between MFC (Original) and Qt implementations:"
-Write-Host "✓ Protocol compatibility (Dynamo wire protocol)"
-Write-Host "✓ Format compatibility (ICF 1.1.0, CSV output)"
-Write-Host "✓ Algorithm equivalence (access specs, aggregation)"
-Write-Host "✓ Round-trip fidelity (load/save/reload produces identical data)"
-Write-Host ""
-Write-Host "Validation approach:"
-Write-Host "1. Qt implementation tested against published specs via unit tests"
-Write-Host "2. Both implementations empirically tested on identical inputs (smoke_test.ps1)"
-Write-Host "3. Outputs compared programmatically (CSV format matching)"
-Write-Host ""
-Write-Host "Result: Both implementations are behaviorally equivalent" -ForegroundColor Green
-Write-Host ""
-
-exit $testsFailed
+if ($passed -eq $tests.Count) {
+    if (-not $KeepResults) {
+        Remove-Item -Path $origFile -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $qtFile -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "PASS: Engines equivalent ($passed/$($tests.Count))" -ForegroundColor Green
+    exit 0
+} else {
+    Write-Host "FAIL: Engines differ ($passed/$($tests.Count))" -ForegroundColor Red
+    Write-Host "  Original: $origFile"
+    Write-Host "  Qt      : $qtFile"
+    exit 1
+}
