@@ -548,32 +548,28 @@ $html += @'
 
             // Get actual source file content
             html += '<div class="code-viewer">';
-            if (sourceFiles[file] && sourceFiles[file].lines) {
-                const sourceLines = sourceFiles[file].lines;
-                const testCoverage = testData[data.tests[0]];
+            if (sourceFiles[file]) {
+                const sourceLines = sourceFiles[file];
+                const testCoverage = data.tests.length > 0 ? testData[data.tests[0]] : null;
                 const coveredLines = testCoverage && testCoverage.lineCoverage && testCoverage.lineCoverage[file] ? testCoverage.lineCoverage[file] : [];
                 const coveredSet = new Set(coveredLines);
 
-                sourceLines.forEach((line, idx) => {
-                    const lineNum = idx + 1;
-                    let lineClass = 'uncovered-line';
-                    if (coveredSet.has(lineNum)) {
-                        lineClass = 'covered-line';
-                    }
+                if (sourceLines.length > 0) {
+                    sourceLines.forEach((line, idx) => {
+                        const lineNum = idx + 1;
+                        let lineClass = 'uncovered-line';
+                        if (coveredSet.has(lineNum)) {
+                            lineClass = 'covered-line';
+                        }
 
-                    // Escape HTML special characters
-                    const escapedLine = (line || '')
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#39;');
-
-                    html += '<div class="code-line ' + lineClass + '">';
-                    html += '<div class="line-num">' + lineNum + '</div>';
-                    html += '<div class="line-content">' + escapedLine + '</div>';
-                    html += '</div>';
-                });
+                        html += '<div class="code-line ' + lineClass + '">';
+                        html += '<div class="line-num">' + lineNum + '</div>';
+                        html += '<div class="line-content">' + line + '</div>';
+                        html += '</div>';
+                    });
+                } else {
+                    html += '<div style="padding: 20px; color: #8b949e; text-align: center;">File is empty</div>';
+                }
             } else {
                 html += '<div style="padding: 20px; color: #8b949e; text-align: center;">File content not available</div>';
             }
