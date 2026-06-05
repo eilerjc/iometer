@@ -126,6 +126,23 @@ Get-ChildItem -Filter "*.cpp" -File | ForEach-Object {
 
 Write-Host "Read $($sourceFilesContent.Count) source files" -ForegroundColor Cyan
 
+# Count only code lines (exclude comments and whitespace) for ALL files
+$codeLineCount = @{}
+foreach ($file in $sourceFilesContent.Keys) {
+    $lines = $sourceFilesContent[$file]
+    $codeLines = 0
+
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        # Count as code if not empty and not a comment-only line
+        if ($trimmed.Length -gt 0 -and -not $trimmed.StartsWith("//")) {
+            $codeLines++
+        }
+    }
+
+    $codeLineCount[$file] = [Math]::Max($codeLines, 1)  # At least 1 to avoid division by zero
+}
+
 # Build file list with coverage data for ALL files
 $fileListJson = @{}
 
@@ -134,7 +151,7 @@ foreach ($file in $sourceFilesContent.Keys) {
     $fileListJson[$file] = @{
         tests = @()
         coverage = 0
-        lineCount = $sourceFilesContent[$file].Count
+        lineCount = $codeLineCount[$file]  # Total CODE lines, not file lines
         coveredLines = 0
     }
 }
@@ -160,23 +177,6 @@ foreach ($test in $testData.Values) {
             }
         }
     }
-}
-
-# Count only code lines (exclude comments and whitespace)
-$codeLineCount = @{}
-foreach ($file in $sourceFilesContent.Keys) {
-    $lines = $sourceFilesContent[$file]
-    $codeLines = 0
-
-    foreach ($line in $lines) {
-        $trimmed = $line.Trim()
-        # Count as code if not empty and not a comment-only line
-        if ($trimmed.Length -gt 0 -and -not $trimmed.StartsWith("//")) {
-            $codeLines++
-        }
-    }
-
-    $codeLineCount[$file] = [Math]::Max($codeLines, 1)  # At least 1 to avoid division by zero
 }
 
 # De-duplicate covered lines and calculate coverage percentage (excluding comments/whitespace)
