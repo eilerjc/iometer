@@ -271,6 +271,7 @@
     <ClCompile Include="..\IOPerformanceLinux.cpp" />
     <ClCompile Include="..\IOPerformanceNetware.cpp" />
     <ClCompile Include="..\IOPerformanceOSX.cpp" />
+    <ClCompile Include="..\TestDataGenerator.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\IOAccess.h" />
@@ -308,6 +309,7 @@
     <ClInclude Include="..\vipl.h" />
     <ClInclude Include="..\Worker.h" />
     <ClInclude Include="..\PulsarRC.h" />
+    <ClInclude Include="..\TestDataGenerator.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\Pulsar.rc" />

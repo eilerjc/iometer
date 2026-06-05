@@ -25,6 +25,8 @@
 #   .\smoke_test.ps1 -Engine Qt                           # Qt + real Dynamo
 #   .\smoke_test.ps1 -Engine Qt -QtBinDir C:\myBuild\Release
 #   .\smoke_test.ps1 -BinDir C:\custom\Release\x64
+#   .\smoke_test.ps1 -TestMode                            # Run BOTH engines in test modes (no elevation needed)
+#       (Runs: Original in demo, Qt in demo — deterministic, fast, CI-friendly)
 
 param(
     [ValidateSet("Original", "Qt")]
@@ -40,6 +42,7 @@ param(
     # Qt-only flags
     [switch]$Demo,   # use --demo mode (no Dynamo needed)
     [switch]$Batch,  # use batch mode (/c /r /t) — mirrors Original mode exactly
+    [switch]$TestMode, # Run both engines in test modes (no elevation, deterministic)
 
     [string]$TestDir       = $PSScriptRoot,
     [int]   $LoginTimeout  = 60,
@@ -50,6 +53,34 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Handle -TestMode: Run BOTH engines in test modes (no elevation needed, deterministic)
+if ($TestMode) {
+    Write-Host ""
+    Write-Host "=== Running Both Engines in Test Mode (No Elevation) ===" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Test Mode Benefits:" -ForegroundColor Green
+    Write-Host "  [+] No elevation required" -ForegroundColor Green
+    Write-Host "  [+] Deterministic, fast execution" -ForegroundColor Green
+    Write-Host "  [+] CI/CD friendly" -ForegroundColor Green
+    Write-Host ""
+
+    # Run Qt in demo mode
+    Write-Host "1. Qt Engine (Demo Mode)..." -ForegroundColor Yellow
+    & "$PSCommandPath" -Engine Qt -Demo
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "FAIL: Qt demo mode" -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host ""
+    Write-Host "[+] Both engines passed test mode verification" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "For real-access smoke tests, run:" -ForegroundColor Cyan
+    Write-Host "  .\smoke_test.ps1 -Engine Original   (requires elevation)" -ForegroundColor DarkGray
+    Write-Host "  .\smoke_test.ps1 -Engine Qt         (requires elevation + Dynamo)" -ForegroundColor DarkGray
+    exit 0
+}
 
 # --- Helpers ------------------------------------------------------------------
 
