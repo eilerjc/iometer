@@ -139,18 +139,36 @@ foreach ($file in $sourceFilesContent.Keys) {
     }
 }
 
-# Then calculate actual line coverage for files that have test coverage
+# Build line-by-line coverage map for each file
+$fileCoverageDetails = @{}
 foreach ($test in $testData.Values) {
     foreach ($file in $test.files) {
         if ($fileListJson.ContainsKey($file)) {
+            if (-not $fileCoverageDetails.ContainsKey($file)) {
+                $fileCoverageDetails[$file] = @{
+                    coveredLines = @()
+                    tests = @()
+                }
+            }
+
+            $fileCoverageDetails[$file].tests += $test.name
             $fileListJson[$file].tests += $test.name
 
-            # Count covered lines for this file from this test
+            # Collect all covered lines for this file from all tests
             if ($test.lineCoverage.ContainsKey($file)) {
-                $coveredCount = @($test.lineCoverage[$file]).Count
-                $fileListJson[$file].coveredLines = [Math]::Max($fileListJson[$file].coveredLines, $coveredCount)
+                $fileCoverageDetails[$file].coveredLines += $test.lineCoverage[$file]
             }
         }
+    }
+}
+
+# De-duplicate covered lines and calculate coverage percentage
+foreach ($file in $fileCoverageDetails.Keys) {
+    $uniqueCoveredLines = @($fileCoverageDetails[$file].coveredLines | Sort-Object -Unique)
+    $fileListJson[$file].coveredLines = $uniqueCoveredLines.Count
+    $lineCount = $fileListJson[$file].lineCount
+    if ($lineCount -gt 0) {
+        $fileListJson[$file].coverage = [Math]::Round(($uniqueCoveredLines.Count / $lineCount) * 100)
     }
 }
 
@@ -386,6 +404,26 @@ $html += "var fileList = " + $fileListJson + ";"
 $html += "var sourceFiles = " + $sourceFilesJson + ";"
 $html += "var coverageStats = { covered: $coveredFiles, total: $totalFiles, percent: $overallCoverage };"
 
+# Build fileCoverageDetails as JSON for line-by-line highlighting
+$html += "var fileCoverageMap = {"
+$firstFile = $true
+foreach ($file in $fileCoverageDetails.Keys) {
+    if (-not $firstFile) { $html += "," }
+    $firstFile = $false
+
+    $coveredLinesJson = "["
+    $firstLine = $true
+    foreach ($lineNum in ($fileCoverageDetails[$file].coveredLines | Sort-Object -Unique)) {
+        if (-not $firstLine) { $coveredLinesJson += "," }
+        $firstLine = $false
+        $coveredLinesJson += $lineNum
+    }
+    $coveredLinesJson += "]"
+
+    $html += "`"$file`":$coveredLinesJson"
+}
+$html += "};"
+
 # Append JavaScript
 $html += @'
 
@@ -555,12 +593,11 @@ $html += @'
             html += '<div class="section">';
             html += '<div class="section-title">Source Code</div>';
 
-            // Get actual source file content
+            // Get actual source file content with line-by-line coverage
             html += '<div class="code-viewer">';
             if (sourceFiles[file]) {
                 const sourceLines = sourceFiles[file];
-                const testCoverage = data.tests.length > 0 ? testData[data.tests[0]] : null;
-                const coveredLines = testCoverage && testCoverage.lineCoverage && testCoverage.lineCoverage[file] ? testCoverage.lineCoverage[file] : [];
+                const coveredLines = fileCoverageMap[file] || [];
                 const coveredSet = new Set(coveredLines);
 
                 if (sourceLines.length > 0) {
