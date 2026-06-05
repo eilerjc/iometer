@@ -125,22 +125,32 @@ Get-ChildItem -Filter "*.cpp" -File | ForEach-Object {
 
 Write-Host "Read $($sourceFilesContent.Count) source files" -ForegroundColor Cyan
 
-# Build file list with coverage data and actual content
+# Build file list with coverage data for ALL files
 $fileListJson = @{}
-$sourceFilesWithContent = @{}
 
-foreach ($test in $testData.Values) {
-    foreach ($file in $test.files) {
-        if (-not $fileListJson.ContainsKey($file)) {
-            $fileListJson[$file] = @{
-                tests = @()
-                coverage = 100
-                lineCount = $sourceFilesContent[$file].Count
-            }
-        }
-        $fileListJson[$file].tests += $test.name
+# First, add ALL source files (covered and uncovered)
+foreach ($file in $sourceFilesContent.Keys) {
+    $fileListJson[$file] = @{
+        tests = @()
+        coverage = 0
+        lineCount = $sourceFilesContent[$file].Count
     }
 }
+
+# Then mark files that have test coverage
+foreach ($test in $testData.Values) {
+    foreach ($file in $test.files) {
+        if ($fileListJson.ContainsKey($file)) {
+            $fileListJson[$file].coverage = 100
+            $fileListJson[$file].tests += $test.name
+        }
+    }
+}
+
+# Calculate overall coverage
+$totalFiles = $fileListJson.Count
+$coveredFiles = ($fileListJson.Values | Where-Object { $_.coverage -gt 0 }).Count
+$overallCoverage = if ($totalFiles -gt 0) { [Math]::Round(($coveredFiles / $totalFiles) * 100) } else { 0 }
 
 # Convert to JSON - just the basic structures
 $testDataJson = $testData | ConvertTo-Json -Depth 10
@@ -248,16 +258,16 @@ $html = @'
                     <div class="stat-label">Tests Passing</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-value">~85%</div>
-                    <div class="stat-label">Lines Covered</div>
+                    <div class="stat-value" id="coveragePercent">0%</div>
+                    <div class="stat-label">Files Covered</div>
                 </div>
                 <div class="stat">
                     <div class="stat-value">6</div>
                     <div class="stat-label">Test Suites</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-value">100%</div>
-                    <div class="stat-label">Core Logic</div>
+                    <div class="stat-value" id="fileCount">26</div>
+                    <div class="stat-label">Source Files</div>
                 </div>
             </div>
         </header>
@@ -344,10 +354,11 @@ $html = @'
     <script>
 '@
 
-# Append JSON data
+# Append JSON data and coverage stats
 $html += "var testData = " + $testDataJson + ";"
 $html += "var fileList = " + $fileListJson + ";"
 $html += "var sourceFiles = " + $sourceFilesJson + ";"
+$html += "var coverageStats = { covered: $coveredFiles, total: $totalFiles, percent: $overallCoverage };"
 
 # Append JavaScript
 $html += @'
@@ -395,9 +406,16 @@ $html += @'
             files.forEach(file => {
                 const data = fileList[file];
                 const active = selectedFile === file ? ' active' : '';
+                const badgeColor = data.coverage === 100 ? '#238636' : '#da3633';
+                const badgeText = data.coverage > 0 ? 'Covered' : 'Uncovered';
+
                 html += '<div class="item' + active + '" onclick="selectFile(\'' + file.replace(/'/g, "\\'") + '\')">';
-                html += '<div class="name">' + file + '<span class="badge">' + data.coverage + '%</span></div>';
-                html += '<div class="meta">' + data.tests.length + ' tests cover this</div>';
+                html += '<div class="name">' + file + '<span class="badge" style="background: ' + badgeColor + ';">' + badgeText + '</span></div>';
+                if (data.coverage === 100) {
+                    html += '<div class="meta">' + data.tests.length + ' tests cover this</div>';
+                } else {
+                    html += '<div class="meta" style="color: #f85149;">No test coverage</div>';
+                }
                 html += '</div>';
             });
 
@@ -568,6 +586,10 @@ $html += @'
         }
 
         renderTests();
+
+        // Update header stats
+        document.getElementById('coveragePercent').textContent = coverageStats.percent + '%';
+        document.getElementById('fileCount').textContent = coverageStats.total;
     </script>
 </body>
 </html>
