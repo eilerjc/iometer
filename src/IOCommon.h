@@ -817,6 +817,8 @@ struct dynamo_param {
 	int login_port_number;
 	int timer_type;           // control timer used from cmdline
 	int disk_control;         // control what disk get displayed in iometer from cmdline
+	int test_read_delay_us;   // dynamotest only: per-read delay (us) via --rdelay
+	int test_write_delay_us;  // dynamotest only: per-write delay (us) via --wdelay
 };
 
 // ----------------------------------------------------------------------------

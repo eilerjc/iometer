@@ -1,64 +1,56 @@
 # Dynamo Test Mode Implementation
 
-## Status
+## Status: implemented as a separate `dynamotest` binary (compile-time)
 
-Created foundation files for test mode:
-- `src/TestDataGenerator.h` - Interface for synthetic test data
-- `src/TestDataGenerator.cpp` - Implementation of synthetic responses
-- `src/msvs11/Dynamo.vcxproj` - Updated to include new files
+Test mode is a **compile-time** decision, not a runtime flag. A dedicated
+project, `src/msvs11/Dynamotest.vcxproj`, builds the same Dynamo sources with
+`IOMTR_TEST_MODE` defined and produces `dynamotest.exe`. The production
+`Dynamo.exe` contains **none** of the test code and keeps its
+`RequireAdministrator` manifest (so real device discovery works as users
+expect). `dynamotest.exe` uses an `AsInvoker` manifest and runs **non-elevated**.
 
-## What's Done
+### What test mode does
 
-✅ Created TestDataGenerator class with:
-- getManagerInfo() - Synthetic Manager_Info
-- getTargets() - Synthetic disk targets (C: and D:)
-- getWorkerResults() - Synthetic I/O results with deterministic variation
+It keeps as much real Dynamo code in use as possible — protocol exchange,
+manager/grunt scheduling, results aggregation and reporting all run unchanged.
+Only the device boundary is synthetic:
 
-✅ Updated Dynamo.vcxproj to compile new files
+- `Manager::Report_Disks` (IOManagerWin.cpp) reports a single synthetic logical
+  target and skips real enumeration (the physical-drive probe opens
+  `\\.\PhysicalDriveN`, which needs elevation).
+- `TargetDisk::Initialize` assigns synthetic geometry (no device query).
+- `TargetDisk::Open` / `Prepare` / `Close` use a sentinel handle (no `CreateFile`).
+- `TargetDisk::Read` / `Write` complete synchronously and synthetically
+  (`ReturnSuccess`), so `Grunt::Do_IOs` records each I/O through the normal
+  `Record_IO` path — real result accounting, no completion queue.
 
-## What Remains (Phase 2 Option)
+### Targetable performance (`--rdelay` / `--wdelay`)
 
-To fully integrate test mode (-test flag support) requires modifying:
+By default synthetic I/Os complete instantly (effectively unbounded IOPS).
+`dynamotest` accepts per-I/O delays in microseconds so a run can target a chosen
+latency/IOPS:
 
-1. **Pulsar.cpp** (main/ParseParam)
-   - Add `-test` flag parsing to ParseParam() function
-   - Set global `g_test_mode` flag
+```
+dynamotest --rdelay 100 --wdelay 200 -i 127.0.0.1 -m <managername>
+```
 
-2. **IOPort.cpp** / **IOTarget.cpp** / **IOManager.cpp**
-   - Add conditionals: `if (g_test_mode) { use TestDataGenerator; }`
-   - Minimal 50-70 LOC total scattered across files
+`--rdelay 100` makes each read take 100 us (busy-wait on the high-resolution
+counter), yielding ~10,000 IOPS per outstanding read and an average latency of
+~0.100 ms. These options are compiled only into `dynamotest` (guarded by
+`IOMTR_TEST_MODE` in `Pulsar.cpp`); production Dynamo does not have them.
 
-## Alternative: Use Qt Test Mode Instead
+### Validated
 
-Since we've just completed Qt refactoring with ResultsWriter, DynamoConnection, and IcfFile extractions, the **Qt test mode is already more practical**:
+`dynamotest.exe` connects to `IometerQt` (batch mode) over TCP with **no
+elevation**, completes the full login -> target report -> worker setup -> test ->
+results cycle, and writes a results CSV. With `--rdelay 100 --wdelay 200`:
+IOps ~9,937, MBps ~651, AvgLatency 0.1004 ms, Errors 0.
 
-✅ Qt already has test infrastructure
-✅ No elevation needed (DemoEngine mode)
-✅ No legacy code modifications
-✅ Easier to iterate
+### Notes
 
-## Recommendation
-
-**For immediate CI/CD testing:**
-1. Use Qt DemoEngine mode (already works, no elevation)
-2. Keep MFC real-access smoke tests (when elevation available)
-3. Implement Dynamo test mode as Phase 2 enhancement (if needed)
-
-**If Dynamo test mode is desired:**
-- Requires ~100-150 LOC in Pulsar/IOManager/IOPort files
-- Would unify both engines under same test infrastructure
-- Worth doing if test suite grows significantly
-
-## Files Ready for Integration
-
-Test data generator is compiled into Dynamo (via vcxproj update).
-Ready to integrate into:
-- IOManager::Initialize() 
-- IOPort::ReceiveData()
-- IOTarget::Enumerate()
-
-Just needs the flag parsing and conditional checks.
-
----
-
-**Verdict**: Foundation laid. Full integration optional based on testing needs.
+- The old `TestDataGenerator.{h,cpp}` foundation was removed: it referenced
+  struct fields that do not exist in the real Dynamo types (it never compiled),
+  and the synchronous-completion approach above makes it unnecessary — synthetic
+  result counts come from the real `Record_IO` path.
+- Cosmetic: the CPU performance counter prints "percentage is less than zero"
+  warnings under synthetic timing; harmless.

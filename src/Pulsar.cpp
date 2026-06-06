@@ -408,6 +408,8 @@ int CDECL main(int argc, char *argv[])
 	param.cpu_affinity = 0; // not specified or default
 	param.timer_type = TIMER_UNDEFINED; // use the default
 	param.disk_control = RAWDISK_VIEW_NOPART; // do not show raw disks with partitions
+	param.test_read_delay_us = 0;  // dynamotest only
+	param.test_write_delay_us = 0; // dynamotest only
 
 	// The manager's GetVersionString method is not available yet since it does not exist, 
 	// so we do away with the variable and have ParseParam rely directly on the source of 
@@ -444,6 +446,8 @@ int CDECL main(int argc, char *argv[])
 	param.cpu_affinity = 0; // not specified or default
 	param.timer_type = TIMER_UNDEFINED; // use the default
 	param.disk_control = RAWDISK_VIEW_NOPART; // do not show raw disks with partitions
+	param.test_read_delay_us = 0;  // dynamotest only
+	param.test_write_delay_us = 0; // dynamotest only
 
 	ParseParam(argc, argv, &param);
 
@@ -862,7 +866,7 @@ static void ParseParam(int argc, char *argv[], struct dynamo_param *param)
 			Syntax();
 			return;
 		}
-		
+
 #if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
 		if (strcasecmp(pcOption, "L") == 0) {
 			do_syslog = TRUE;
@@ -879,7 +883,23 @@ static void ParseParam(int argc, char *argv[], struct dynamo_param *param)
 			Syntax("Options requires one or more argument(s).");
 			return;
 		}
-			
+
+#if defined(IOMTR_TEST_MODE)
+		// dynamotest only: per-I/O synthetic delays in microseconds. These let
+		// the synthetic test target hit a chosen IOPS/latency instead of the
+		// (instant) default. e.g. --rdelay 100 --wdelay 200
+		if (strcasecmp(pcOption, "RDELAY") == 0) {
+			param->test_read_delay_us = atoi(argv[I]);
+			cout << "Test mode: read delay = " << param->test_read_delay_us << " us." << endl;
+			continue;
+		}
+		if (strcasecmp(pcOption, "WDELAY") == 0) {
+			param->test_write_delay_us = atoi(argv[I]);
+			cout << "Test mode: write delay = " << param->test_write_delay_us << " us." << endl;
+			continue;
+		}
+#endif
+
 #if defined (IOMTR_SETTING_CPU_AFFINITY) && (defined(IOMTR_OSFAMILY_WINDOWS) || defined(IOMTR_OS_LINUX))
 		if (strcasecmp(pcOption, "C") == 0) {
 			if (argv[I])

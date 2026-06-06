@@ -326,7 +326,28 @@ int __cdecl TS_Compare_DeviceNumberLogiFirst(const void *elem1, const void *elem
 //
 int Manager::Report_Disks( Target_Spec* disk_spec )
 {
-	BOOL bUseNewDiskView; 
+#if defined(IOMTR_TEST_MODE)
+	// Report a single synthetic logical target and skip all real enumeration
+	// (the physical-drive probe below opens \\.\PhysicalDriveN, which requires
+	// elevation). No hardware is touched. dynamotest only.
+	memset(&disk_spec[0], 0, sizeof(Target_Spec));
+	strcpy(disk_spec[0].name, "TEST: Synthetic Disk");
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+	strcpy(disk_spec[0].actual_name, "TESTDISK");
+	strcpy(disk_spec[0].basic_name, "TESTDISK");
+	disk_spec[0].read_only = FALSE;
+	disk_spec[0].reserved = FALSE;
+#endif
+	disk_spec[0].type = LogicalDiskType;
+	disk_spec[0].disk_info.ready = TRUE;
+	disk_spec[0].disk_info.sector_size = 512;
+	disk_spec[0].disk_info.maximum_size = 0;       // 0 = use whole "disk"
+	disk_spec[0].disk_info.starting_sector = 0;
+	cout << "   Test mode: reporting 1 synthetic target (no enumeration)." << endl << flush;
+	return 1;
+#endif
+
+	BOOL bUseNewDiskView;
 	int device_count, vol_count, raw_count, net_count;
 	HMODULE hLibModule;
 
