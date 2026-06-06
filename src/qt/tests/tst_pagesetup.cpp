@@ -108,5 +108,5 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(PageSetupTest)
+QTEST_MAIN(PageSetupTest)
 #include "tst_pagesetup.moc"

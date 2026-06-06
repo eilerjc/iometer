@@ -63,14 +63,17 @@ private slots:
         DemoEngine engine;
         MainWindow win(&engine);
 
-        // The topology panel should be populated with the DemoEngine's managers/workers
+        // The topology panel should be populated with the DemoEngine's managers/workers.
+        // findChildren also returns empty trees embedded in child pages, so check
+        // that *some* tree carries the "All Managers" root built at construction.
         const auto treeWidgets = win.findChildren<QTreeWidget *>();
         QVERIFY(treeWidgets.count() > 0);  // there should be at least one tree
 
-        if (!treeWidgets.isEmpty()) {
-            const auto tree = treeWidgets[0];
-            QVERIFY(tree->topLevelItemCount() > 0);  // should have at least one manager
+        bool anyPopulated = false;
+        for (auto *tree : treeWidgets) {
+            if (tree->topLevelItemCount() > 0) { anyPopulated = true; break; }
         }
+        QVERIFY2(anyPopulated, "no QTreeWidget had top-level items (worker tree empty)");
     }
 
     // ── Tabs ────────────────────────────────────────────────────────────────
@@ -144,5 +147,5 @@ private slots:
     }
 };
 
-QTEST_GUILESS_MAIN(MainWindowTest)
+QTEST_MAIN(MainWindowTest)
 #include "tst_mainwindow.moc"

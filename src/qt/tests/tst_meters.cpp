@@ -113,8 +113,9 @@ private slots:
     void resize_small() {
         MeterWidget m;
         m.resize(64, 64);
-        QVERIFY(m.width() == 64);
-        QVERIFY(m.height() == 64);
+        // MeterWidget enforces a 120x90 minimum, so a smaller request clamps up.
+        QVERIFY(m.width()  >= 120);
+        QVERIFY(m.height() >= 90);
     }
 
     void resize_large() {
@@ -135,5 +136,5 @@ private slots:
 
 };
 
-QTEST_GUILESS_MAIN(MeterWidgetTest)
+QTEST_MAIN(MeterWidgetTest)
 #include "tst_meters.moc"

@@ -134,9 +134,15 @@ private slots:
     }
 
     // ── Callbacks ────────────────────────────────────────────────────────────
+    //
+    // NOTE: the capture target is declared BEFORE the TestRunner in every case.
+    // ~TestRunner() calls stopAll() when the runner is still Running, which
+    // fires the callbacks; if the captured local were declared after `r` it
+    // would be destroyed first and the destructor's callback would touch freed
+    // memory (a real use-after-free, surfaced by coverage instrumentation).
     void callback_stateChangedFiresOnStart() {
-        TestRunner r;
         std::vector<State> seen;
+        TestRunner r;
         r.onStateChanged = [&](State s){ seen.push_back(s); };
         r.startTest(cfg10s(), oneWorker(), oneSpec());
         // Expect Starting then Running
@@ -145,24 +151,24 @@ private slots:
         QVERIFY(seen.back()  == State::Running);
     }
     void callback_statusMessageFires() {
-        TestRunner r;
         std::vector<std::string> msgs;
+        TestRunner r;
         r.onStatusMessage = [&](const std::string &m){ msgs.push_back(m); };
         r.startTest(cfg10s(), oneWorker(), oneSpec());
         QVERIFY(!msgs.empty());
         QVERIFY(msgs[0].find("Starting test") != std::string::npos);
     }
     void callback_errorOccurredFires() {
-        TestRunner r;
         std::string err;
+        TestRunner r;
         r.onErrorOccurred = [&](const std::string &m){ err = m; };
         r.startTest(cfg10s(), {}, oneSpec());   // no workers → error
         QVERIFY(!err.empty());
         QVERIFY(err.find("no workers") != std::string::npos);
     }
     void callback_fullLifecycleStateSequence() {
-        TestRunner r;
         std::vector<State> seen;
+        TestRunner r;
         r.onStateChanged = [&](State s){ seen.push_back(s); };
         r.startTest(cfg10s(), oneWorker(), oneSpec());
         r.stopTest();
@@ -176,9 +182,9 @@ private slots:
 
     // ── setState dedup: no duplicate callback for same state ─────────────────
     void setState_noCallbackWhenUnchanged() {
+        int calls = 0;
         TestRunner r;
         r.startTest(cfg10s(), oneWorker(), oneSpec());  // ends in Running
-        int calls = 0;
         r.onStateChanged = [&](State){ ++calls; };
         // stopAll from Running drives Stopping→Stopped (2 distinct changes)
         r.stopAll();
