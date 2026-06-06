@@ -1,7 +1,0 @@
-[2026-06-06 16:00:38] [error] 
-
-----------------------------------------------------
-*** Your application has thrown an unhandled exception. Code: 3221225477: EXCEPTION_ACCESS_VIOLATION
-----------------------------------------------------
-See https://github.com/OpenCppCoverage/OpenCppCoverage/wiki/FAQ#your-application-has-thrown-an-unhandled-exception-code-3221225477-exception_access_violation for additional information.
-[2026-06-06 16:00:38] [error] Your program stop with error code: -1073741819

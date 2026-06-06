@@ -34,3 +34,4 @@ test/results_*.csv
 # Windows
 Thumbs.db
 Desktop.ini
+LastCoverageResults.log

@@ -941,6 +941,17 @@ int TargetDisk::Set_Sizes(BOOL open_disk)
 #elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
 BOOL TargetDisk::Set_Sizes(BOOL open_disk)
 {
+#if defined(IOMTR_TEST_MODE)
+	// Synthetic geometry only - GetDiskFreeSpace/IOCTL would fail (and need a
+	// real device). Wherever Set_Sizes is reached in test mode, answer locally.
+	if (spec.disk_info.sector_size <= 0)
+		spec.disk_info.sector_size = 512;
+	sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);
+	size = IOMTR_TEST_DISK_BYTES;
+	spec.disk_info.ready = TRUE;
+	return TRUE;
+#endif
+
 	DWORD i;
 	DWORD low_size, high_size;
 	DWORD sectors_per_cluster, free_clusters, total_clusters;
