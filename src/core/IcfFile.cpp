@@ -200,6 +200,12 @@ bool IcfFile::load(const std::string &filepath,
                 }
                 ++i;
 
+                // Skip the "'size,% of size,..." column-header comment line that
+                // precedes the data rows.
+                if (i < lines.size() && lines[i].rfind("'size", 0) == 0) {
+                    ++i;
+                }
+
                 // Parse access lines until we hit a comment or another spec name
                 while (i < lines.size() && !lines[i].empty() && lines[i][0] != '\'' &&
                        lines[i].find("END") == std::string::npos) {

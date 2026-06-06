@@ -129,6 +129,13 @@ iometer_test(tst_results)
 iometer_test(tst_demo)
 iometer_test(tst_protocol)
 
+# ── Core library unit tests (pure-C++ APIs, no GUI types) ───────────────────
+iometer_test(tst_workerpool)
+iometer_test(tst_testrunner)
+iometer_test(tst_icffile)
+iometer_test(tst_resultswriter)
+iometer_test(tst_dynamoconn)
+
 # ── UI Tests (Qt widget tests) ──────────────────────────────────────────────
 iometer_test(tst_meters)
 iometer_test(tst_pagesetup)
