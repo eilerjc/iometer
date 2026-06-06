@@ -94,6 +94,20 @@ private slots:
         r.mbpsDec = 1500.5;
         QCOMPARE(r.get(RESULT_MBPS_DEC), 1500.5);
     }
+    void workerResultGet_readWriteMbpsDec() {
+        WorkerResult r;
+        r.readMbpsDec  = 1350.25;
+        r.writeMbpsDec = 150.75;
+        QCOMPARE(r.get(RESULT_READ_MBPS_DEC),  1350.25);
+        QCOMPARE(r.get(RESULT_WRITE_MBPS_DEC), 150.75);
+    }
+    void workerResultGet_cpuUserKernel() {
+        WorkerResult r;
+        r.cpuUser   = 22.5;
+        r.cpuKernel = 17.5;
+        QCOMPARE(r.get(RESULT_CPU_USER),   22.5);
+        QCOMPARE(r.get(RESULT_CPU_KERNEL), 17.5);
+    }
     void workerResultGet_mbpsBin() {
         WorkerResult r;
         r.mbpsBin = 1430.2;

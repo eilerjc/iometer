@@ -1,0 +1,22 @@
+{
+	"BUILD_DIR" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt/build_cov/IometerQt_autogen",
+	"CMAKE_BINARY_DIR" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt/build_cov",
+	"CMAKE_CURRENT_BINARY_DIR" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt/build_cov",
+	"CMAKE_CURRENT_SOURCE_DIR" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt",
+	"CMAKE_SOURCE_DIR" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt",
+	"CROSS_CONFIG" : false,
+	"GENERATOR" : "Ninja",
+	"INCLUDE_DIR" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt/build_cov/IometerQt_autogen/include",
+	"INPUTS" : [ "C:/Users/jeiler.000/iometer/github/iometer/src/res/Toolbar.bmp" ],
+	"LOCK_FILE" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt/build_cov/CMakeFiles/IometerQt_autogen.dir/AutoRcc_resources_EWIEGA46WW_Lock.lock",
+	"MULTI_CONFIG" : false,
+	"OPTIONS" : [ "--no-zstd", "-name", "resources" ],
+	"OUTPUT_CHECKSUM" : "EWIEGA46WW",
+	"OUTPUT_NAME" : "qrc_resources.cpp",
+	"RCC_EXECUTABLE" : "C:/Qt/6.8.3/msvc2022_64/bin/rcc.exe",
+	"RCC_LIST_OPTIONS" : [ "--list" ],
+	"SETTINGS_FILE" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt/build_cov/CMakeFiles/IometerQt_autogen.dir/AutoRcc_resources_EWIEGA46WW_Used.txt",
+	"SOURCE" : "C:/Users/jeiler.000/iometer/github/iometer/src/qt/resources.qrc",
+	"USE_BETTER_GRAPH" : true,
+	"VERBOSITY" : 0
+}

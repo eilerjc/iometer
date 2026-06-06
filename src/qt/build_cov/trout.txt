@@ -1,0 +1,15 @@
+********* Start testing of TestRunnerTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-llp64 shared (dynamic) release build; by MSVC 2022), windows 11
+PASS   : TestRunnerTest::initTestCase()
+PASS   : TestRunnerTest::initial_isIdle()
+PASS   : TestRunnerTest::start_validGoesRunning()
+PASS   : TestRunnerTest::start_storesConfigWorkersSpecs()
+PASS   : TestRunnerTest::start_elapsedIsNonNegativeWhileRunning()
+PASS   : TestRunnerTest::start_noWorkersFails()
+PASS   : TestRunnerTest::start_noSpecsFails()
+PASS   : TestRunnerTest::start_whenNotIdleFails()
+PASS   : TestRunnerTest::stop_fromRunningGoesStopped()
+PASS   : TestRunnerTest::stop_whenNotRunningFails()
+PASS   : TestRunnerTest::stopAll_whenIdleIsNoOp()
+PASS   : TestRunnerTest::stopAll_fromRunningGoesStopped()
+PASS   : TestRunnerTest::stopAll_whenErrorIsNoOp()

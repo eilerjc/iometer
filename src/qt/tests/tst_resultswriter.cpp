@@ -249,6 +249,29 @@ private slots:
         std::filesystem::remove(p);
     }
 
+    void perWorker_nameWithCommaIsQuoted() {
+        // A worker name containing a comma must be CSV-quoted so the column
+        // layout stays intact (exercises escapeCsvField's quoting branch).
+        const std::string p = tempCsv("comma.csv");
+        std::vector<WorkerResult> r{
+            makeResult("mgr", "Worker 1, busy", 1000, 100, 95, 0.04, 10, 0)
+        };
+        QVERIFY(ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{}));
+        const std::string content = readAll(p);
+        QVERIFY(content.find("\"Worker 1, busy\"") != std::string::npos);
+        std::filesystem::remove(p);
+    }
+    void perWorker_nameWithQuoteIsEscaped() {
+        const std::string p = tempCsv("quote.csv");
+        std::vector<WorkerResult> r{
+            makeResult("mgr", "drive \"C\"", 1000, 100, 95, 0.04, 10, 0)
+        };
+        QVERIFY(ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{}));
+        // Embedded quotes are doubled per CSV rules
+        QVERIFY(readAll(p).find("\"drive \"\"C\"\"\"") != std::string::npos);
+        std::filesystem::remove(p);
+    }
+
     // ── Empty results still produce a valid ALL row ──────────────────────────
     void empty_writesZeroRow() {
         const std::string p = tempCsv("empty.csv");

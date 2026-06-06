@@ -194,6 +194,37 @@ private slots:
 
         std::filesystem::remove(out);
     }
+    void roundTrip_defaultSpecFlag() {
+        // A spec flagged defaultSpec must be saved as ",DEFAULT" and re-parsed
+        // back to defaultSpec=true (exercises both the save and load branches).
+        TestConfig cfg; cfg.runSeconds = 7;
+        std::vector<AccessSpec> specs;
+        AccessSpec def; def.name = "MyDefault"; def.defaultSpec = true;
+        AccessSpecLine l; l.sizeBytes = 4096; l.readPercent = 100; l.seqPercent = 100; l.ofSize = 100;
+        def.lines.push_back(l);
+        specs.push_back(def);
+        AccessSpec plain; plain.name = "Plain"; plain.defaultSpec = false;
+        plain.lines.push_back(l);
+        specs.push_back(plain);
+        std::vector<IcfFile::BatchWorker> workers;
+
+        const std::string out = tempPath("defaultspec.icf");
+        QVERIFY(IcfFile::save(out, cfg, specs, workers));
+
+        TestConfig cfg2;
+        std::vector<AccessSpec> specs2;
+        std::vector<IcfFile::BatchWorker> workers2;
+        QVERIFY(IcfFile::load(out, cfg2, specs2, workers2));
+
+        const AccessSpec *d = findSpec(specs2, "MyDefault");
+        const AccessSpec *p = findSpec(specs2, "Plain");
+        QVERIFY(d != nullptr && p != nullptr);
+        QVERIFY(d->defaultSpec);
+        QVERIFY(!p->defaultSpec);
+
+        std::filesystem::remove(out);
+    }
+
     void roundTrip_batchWorkerTargets() {
         TestConfig cfg;
         std::vector<AccessSpec> specs;
