@@ -81,18 +81,23 @@ private slots:
 
     // ── "All in one" multi-line distribution ─────────────────────────────────
     void allInOne_lineCount() {
-        const auto &spec = IometerEngine::builtinAccessSpecs().last();
+        // Hold the list in a named local: .last() returns a reference into it,
+        // so the QList must outlive `spec` (binding to a temporary would dangle).
+        const auto specs = IometerEngine::builtinAccessSpecs();
+        const auto &spec = specs.last();
         QCOMPARE(QString::fromStdString(spec.name), QString("All in one"));
-        QCOMPARE(spec.lines.size(), 29); // 29 patterns (excluding Idle and Default)
+        QCOMPARE(spec.lines.size(), size_t(29)); // 29 patterns (excluding Idle and Default)
     }
     void allInOne_ofSizeSumsTo100() {
-        const auto &spec = IometerEngine::builtinAccessSpecs().last();
+        const auto specs = IometerEngine::builtinAccessSpecs();
+        const auto &spec = specs.last();
         int total = 0;
         for (const auto &l : spec.lines) total += l.ofSize;
         QCOMPARE(total, 100);
     }
     void allInOne_noZeroSizes() {
-        const auto &spec = IometerEngine::builtinAccessSpecs().last();
+        const auto specs = IometerEngine::builtinAccessSpecs();
+        const auto &spec = specs.last();
         for (const auto &l : spec.lines)
             QVERIFY2(l.sizeBytes > 0, "All-in-one line has zero transfer size");
     }
