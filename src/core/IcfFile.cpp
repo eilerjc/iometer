@@ -269,11 +269,10 @@ bool IcfFile::load(const std::string &filepath,
                 while (i < lines.size() && lines[i] != "'End worker") {
                     if (lines[i] == "'Assigned access specs") {
                         ++i;
-                        if (i < lines.size() && lines[i] != "'End assigned access specs") {
-                            bw.assignedSpecs.push_back(lines[i]);
-                            ++i;
-                        }
+                        // Capture every assigned spec name (a worker may run several).
                         while (i < lines.size() && lines[i] != "'End assigned access specs") {
+                            if (!lines[i].empty() && lines[i][0] != '\'')
+                                bw.assignedSpecs.push_back(lines[i]);
                             ++i;
                         }
                         if (i < lines.size()) ++i;

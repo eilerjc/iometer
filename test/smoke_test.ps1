@@ -43,6 +43,7 @@ param(
     [switch]$Demo,   # use --demo mode (no Dynamo needed)
     [switch]$Batch,  # use batch mode (/c /r /t) — mirrors Original mode exactly
     [switch]$TestMode, # Run both engines in test modes (no elevation, deterministic)
+    [switch]$IcfSet, # Validate the full fixture ICF set via the test engine (no elevation)
 
     [string]$TestDir       = $PSScriptRoot,
     [int]   $LoginTimeout  = 60,
@@ -53,6 +54,61 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Handle -IcfSet: Validate every fixture ICF through the test engine.
+#
+# Drives IometerQt.exe --validate-icf over the full set of fixture configs.
+# Each parses through the shared core (IcfFile) via the synthetic DemoEngine —
+# no real Dynamo, no elevation, fully deterministic. Exercises the breadth of
+# Iometer config features (multi-manager, multi-target, multi-spec workers,
+# DEFAULT-assigned specs, raw-disk targets) end-to-end through the shipped exe.
+if ($IcfSet) {
+    Write-Host ""
+    Write-Host "=== ICF Fixture Set Validation (test engine) ===" -ForegroundColor Cyan
+    Write-Host ""
+
+    $iometerQt = Join-Path $QtBinDir "IometerQt.exe"
+    if (-not (Test-Path $iometerQt)) {
+        Write-Error "Required file not found: $iometerQt"
+        exit 1
+    }
+
+    $icfFiles = @(
+        (Join-Path $PSScriptRoot "smoke_test.icf"),
+        (Join-Path $PSScriptRoot "fixtures\minimal.icf"),
+        (Join-Path $PSScriptRoot "fixtures\multispec.icf"),
+        (Join-Path $PSScriptRoot "fixtures\two_managers.icf"),
+        (Join-Path $PSScriptRoot "fixtures\multi_target.icf"),
+        (Join-Path $PSScriptRoot "fixtures\multispec_worker.icf"),
+        (Join-Path $PSScriptRoot "fixtures\default_assign.icf")
+    )
+
+    $failed = 0
+    foreach ($icf in $icfFiles) {
+        $name = Split-Path $icf -Leaf
+        if (-not (Test-Path $icf)) {
+            Write-Host "  [MISSING] $name" -ForegroundColor Red
+            $failed++
+            continue
+        }
+        & $iometerQt --validate-icf $icf | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK]      $name" -ForegroundColor Green
+        } else {
+            Write-Host "  [FAIL]    $name (exit $LASTEXITCODE)" -ForegroundColor Red
+            $failed++
+        }
+    }
+
+    Write-Host ""
+    if ($failed -eq 0) {
+        Write-Host "PASS: all $($icfFiles.Count) fixture ICFs validated." -ForegroundColor Green
+        exit 0
+    } else {
+        Write-Host "FAIL: $failed of $($icfFiles.Count) fixture ICFs failed validation." -ForegroundColor Red
+        exit 1
+    }
+}
 
 # Handle -TestMode: Run BOTH engines in test modes (no elevation needed, deterministic)
 if ($TestMode) {
@@ -70,6 +126,15 @@ if ($TestMode) {
     & "$PSCommandPath" -Engine Qt -Demo
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FAIL: Qt demo mode" -ForegroundColor Red
+        exit 1
+    }
+
+    # Validate the full fixture ICF set through the test engine
+    Write-Host ""
+    Write-Host "2. ICF Fixture Set (test engine)..." -ForegroundColor Yellow
+    & "$PSCommandPath" -IcfSet -QtBinDir $QtBinDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "FAIL: ICF fixture set validation" -ForegroundColor Red
         exit 1
     }
 

@@ -135,6 +135,7 @@ iometer_test(tst_testrunner)
 iometer_test(tst_icffile)
 iometer_test(tst_resultswriter)
 iometer_test(tst_dynamoconn)
+iometer_test(tst_icf_fixtures)
 
 # ── UI Tests (Qt widget tests) ──────────────────────────────────────────────
 iometer_test(tst_meters)

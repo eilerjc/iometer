@@ -20,6 +20,7 @@
 #include <QFont>
 #include <QCommandLineParser>
 #include <QTimer>
+#include <QFileInfo>
 #include <QDebug>
 
 // ---------------------------------------------------------------------------
@@ -182,10 +183,57 @@ static int guiMain(int argc, char *argv[])
 }
 
 // ---------------------------------------------------------------------------
+// ICF validation mode (--validate-icf <file>)
+//
+// Loads an ICF through the DemoEngine (the synthetic "test" engine — no real
+// Dynamo, no elevation, deterministic) and checks the parsed configuration is
+// sane: a positive run time and at least one access spec. Used by the smoke
+// test to exercise the full set of fixture ICFs end-to-end through the shipped
+// executable without needing real disk I/O. Exits 0 on success, 1 on failure.
+// ---------------------------------------------------------------------------
+static int validateIcfMain(const QString &icfFile)
+{
+    DemoEngine engine;   // test-data engine: parses ICF, no socket / no elevation
+    if (!engine.loadConfig(icfFile)) {
+        qCritical("validate-icf: FAILED to load '%s'", qPrintable(icfFile));
+        return 1;
+    }
+
+    const TestConfig cfg = engine.testConfig();
+    const int runSecs = (cfg.runHours * 60 + cfg.runMinutes) * 60 + cfg.runSeconds;
+    const int specCount = engine.accessSpecs().size();
+
+    if (runSecs <= 0) {
+        qCritical("validate-icf: '%s' has zero run time", qPrintable(icfFile));
+        return 1;
+    }
+    if (specCount <= 0) {
+        qCritical("validate-icf: '%s' has no access specs", qPrintable(icfFile));
+        return 1;
+    }
+
+    qInfo("validate-icf: OK  %-28s  runtime=%ds  specs=%d  ramp=%ds",
+          qPrintable(QFileInfo(icfFile).fileName()),
+          runSecs, specCount, cfg.rampSeconds);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
+    // --validate-icf <file>: parse-and-check a config via the test engine.
+    for (int i = 1; i < argc; ++i) {
+        const QString a = QString::fromLocal8Bit(argv[i]);
+        if ((a == "--validate-icf" || a == "/validate") && i + 1 < argc) {
+            QCoreApplication app(argc, argv);
+            app.setApplicationName("Iometer");
+            app.setApplicationVersion("1.1.0");
+            return validateIcfMain(QString::fromLocal8Bit(argv[i + 1]));
+        }
+    }
+
     QString icf, results;
     int timeout = 60;
     translateOriginalFlags(argc, argv, icf, results, timeout);

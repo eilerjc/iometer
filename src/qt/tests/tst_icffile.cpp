@@ -8,6 +8,7 @@
 #include "../core/IcfFile.h"
 #include <string>
 #include <vector>
+#include <fstream>
 #include <filesystem>
 
 static std::string fixture(const std::string &name)
@@ -142,6 +143,63 @@ private slots:
         QCOMPARE(workers.size(), size_t(1));
         QVERIFY(!workers[0].targets.empty());
         QVERIFY(workers[0].targets[0].find("nvme") != std::string::npos);
+    }
+
+    // ── Robustness: malformed numerics degrade gracefully (no throw) ─────────
+    void load_garbledNumericsDoNotThrow() {
+        // Non-numeric run-time and access-spec fields must parse to 0 rather
+        // than throwing (exercises the parseInt/parseDouble catch paths).
+        const std::string out = tempPath("garbled.icf");
+        {
+            std::ofstream f(out);
+            f << "Version 1.1.0\n"
+              << "'TEST SETUP ===\n"
+              << "'Run Time\n'\thours      minutes    seconds\n"
+              << "\tx          y          z\n"
+              << "'Ramp Up Time (s)\n\tnope\n"
+              << "'END test setup\n"
+              << "'RESULTS DISPLAY ===\n'END results display\n"
+              << "'ACCESS SPECIFICATIONS ===\n"
+              << "'Access specification name,default assignment\n"
+              << "\tGarbled,NONE\n"
+              << "'size,% of size,% reads,% random,delay,burst,align,reply\n"
+              << "\tbig,lots,half,some,wait,burst,align,reply\n"
+              << "'END access specifications\n"
+              << "'MANAGER LIST ===\n'END manager list\nVersion 1.1.0\n";
+        }
+        TestConfig cfg;
+        std::vector<AccessSpec> specs;
+        std::vector<IcfFile::BatchWorker> workers;
+        QVERIFY(IcfFile::load(out, cfg, specs, workers));   // graceful, no throw
+        QCOMPARE(cfg.runHours, 0);
+        QCOMPARE(cfg.runSeconds, 0);
+        QCOMPARE(cfg.rampSeconds, 0);
+        // The spec line still parsed structurally; numeric fields fell back to 0
+        const AccessSpec *g = findSpec(specs, "Garbled");
+        QVERIFY(g != nullptr);
+        QCOMPARE(g->lines.size(), size_t(1));
+        QCOMPARE(g->lines[0].sizeBytes, 0);
+        std::filesystem::remove(out);
+    }
+    void load_truncatedMidSpecDoesNotCrash() {
+        // File cut off mid-access-spec: parser must bail cleanly, not over-read.
+        const std::string out = tempPath("trunc.icf");
+        {
+            std::ofstream f(out);
+            f << "Version 1.1.0\n"
+              << "'TEST SETUP ===\n'Run Time\n'\thours minutes seconds\n\t0 0 9\n"
+              << "'END test setup\n"
+              << "'RESULTS DISPLAY ===\n'END results display\n"
+              << "'ACCESS SPECIFICATIONS ===\n"
+              << "'Access specification name,default assignment\n"
+              << "\tHalfWritten,NONE\n";   // abrupt EOF — no data rows, no END markers
+        }
+        TestConfig cfg;
+        std::vector<AccessSpec> specs;
+        std::vector<IcfFile::BatchWorker> workers;
+        QVERIFY(IcfFile::load(out, cfg, specs, workers));
+        QCOMPARE(cfg.runSeconds, 9);   // earlier sections still parsed
+        std::filesystem::remove(out);
     }
 
     // ── Round-trip: save → load preserves fields ─────────────────────────────

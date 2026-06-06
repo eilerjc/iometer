@@ -1,6 +1,7 @@
 // DemoEngine.cpp
 #include "DemoEngine.h"
 #include "IometerEngine.h"
+#include "../core/IcfFile.h"
 #include <cmath>
 #include <QRandomGenerator>
 
@@ -170,10 +171,25 @@ void DemoEngine::newConfig()
     emit configChanged();
 }
 
-bool DemoEngine::loadConfig(const QString &)
+bool DemoEngine::loadConfig(const QString &filepath)
 {
-    emit statusMessage("Config load not yet implemented in demo mode.");
-    return false;
+    // The demo engine doubles as a "test dynamo": it parses a real ICF through
+    // the shared core parser so configs can be exercised end-to-end without a
+    // live Dynamo. Worker layout stays as the synthetic default; only the test
+    // config and access-spec library come from the file.
+    TestConfig cfg;
+    std::vector<AccessSpec> specs;
+    std::vector<IcfFile::BatchWorker> batchWorkers;
+    if (!IcfFile::load(filepath.toStdString(), cfg, specs, batchWorkers)) {
+        emit errorOccurred(QString("Failed to load ICF: %1").arg(filepath));
+        return false;
+    }
+
+    m_testConfig = cfg;
+    if (!specs.empty())
+        m_specs = QList<AccessSpec>(specs.begin(), specs.end());
+    emit configChanged();
+    return true;
 }
 
 bool DemoEngine::saveConfig(const QString &)
