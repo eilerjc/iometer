@@ -90,6 +90,18 @@ Start-Sleep 3
 Cover "dynamo" $dynTest @("--rdelay","50","-i","127.0.0.1","-m",$env:COMPUTERNAME) 60
 if (-not $ctrl.HasExited) { Stop-Process -Id $ctrl.Id -Force -ErrorAction SilentlyContinue }
 
+# --- 3b. Rich disk scenario: "All in one" spec exercises read/write/random/sizes
+#         across 2 workers, covering Dynamo's write + random + multi-worker paths.
+Write-Host "[3b] dynamotest <-> IometerQt (rich All-in-one disk patterns)..." -ForegroundColor Cyan
+$richIcf = Join-Path $fixtures "fixtures\cov_rich_disk.icf"
+if (Test-Path $richIcf) {
+    Get-Process IometerQt,dynamotest -ErrorAction SilentlyContinue | Stop-Process -Force
+    $ctrlR = Start-Process $qtBatch -ArgumentList "/c `"$richIcf`" /r $env:TEMP\occ_rich.csv /t 25" -PassThru
+    for ($i=0; $i -lt 15 -and -not (Get-NetTCPConnection -LocalPort 1066 -State Listen -ErrorAction SilentlyContinue); $i++) { Start-Sleep 1 }
+    Cover "dynamo_rich" $dynTest @("--rdelay","30","-i","127.0.0.1","-m","4KMONSTER") 180
+    if (-not $ctrlR.HasExited) { Stop-Process -Id $ctrlR.Id -Force -ErrorAction SilentlyContinue }
+}
+
 # --- 4. dynamotest <-> IometerQt: cover the CONTROLLER (DynamoEngine) ---------
 Write-Host "[4] dynamotest <-> IometerQt (covering IometerQt/DynamoEngine)..." -ForegroundColor Cyan
 Get-Process IometerQt,dynamotest -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -143,6 +155,12 @@ if ($covFiles.Count -eq 0) { Write-Host "ERROR: no coverage captured" -Foregroun
 $htmlDir = Join-Path $covDir "html"
 $merge = @()
 foreach ($c in $covFiles) { $merge += @("--input_coverage", $c) }
+# Exclude code that cannot execute on Windows x64, so the report reflects
+# reachable code: the Virtual Interface (VI) target stack (no VI hardware) and
+# ByteOrder.cpp (big-endian byte-swapping only).
+foreach ($dead in @("IOTargetVI","IOCQVI","IOVIPL","NetVI","VINic","ByteOrder")) {
+    $merge += @("--excluded_sources", $dead)
+}
 $merge += @("--export_type", "html:$htmlDir", "--export_type", "cobertura:$(Join-Path $covDir 'coverage.xml')")
 $m = Start-Process $occ -ArgumentList $merge -PassThru -NoNewWindow
 $m.WaitForExit(120 * 1000) | Out-Null
