@@ -123,6 +123,10 @@ struct DyDiskSpec {
 // 20 + 4 + 4 + 4 + 4 + 8 + 8 = 52 bytes
 static_assert(sizeof(DyDiskSpec) == 52, "DyDiskSpec size mismatch");
 
+// Network TargetType values (mirror src/IOTest.h TargetType, shared with MFC).
+static constexpr int32_t DY_TCP_SERVER_TYPE = 0x800C8000;  // GenericServer | TCP
+static constexpr int32_t DY_TCP_CLIENT_TYPE = 0x800A8000;  // GenericClient | TCP
+
 // -- TCP_Spec -----------------------------------------------------------------
 struct DyTcpSpec {
     uint32_t local_port;

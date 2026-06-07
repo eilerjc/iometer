@@ -58,6 +58,7 @@ set(CORE_SOURCES
     ../core/IcfFile.cpp
     ../core/WorkerPool.cpp
     ../core/TestRunner.cpp
+    ../core/NetworkSetup.cpp
 )
 set(CORE_HEADERS
     QtIometerTypes.h
@@ -79,6 +80,7 @@ set(CORE_HEADERS
     ../core/IcfFile.h
     ../core/WorkerPool.h
     ../core/TestRunner.h
+    ../core/NetworkSetup.h
 )
 
 # ── Static library shared by app + all test targets ──────────────────────────
@@ -135,6 +137,7 @@ iometer_test(tst_testrunner)
 iometer_test(tst_icffile)
 iometer_test(tst_resultswriter)
 iometer_test(tst_dynamoconn)
+ iometer_test(tst_networksetup)
 iometer_test(tst_icf_fixtures)
 
 # ── UI Tests (Qt widget tests) ──────────────────────────────────────────────

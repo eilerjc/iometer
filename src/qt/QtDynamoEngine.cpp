@@ -3,6 +3,7 @@
 #include "QtIometerEngine.h"
 #include "../core/ResultsWriter.h"
 #include "../core/IcfFile.h"
+#include "../core/NetworkSetup.h"
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QHostAddress>
@@ -809,6 +810,35 @@ void QtDySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &spec)
 void QtDySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
 {
     dm->count = 0;
+
+    // -- Network workers: build a TCP server/client target via the shared core
+    //    NetworkSetup (same logic the MFC controller will use). The role comes
+    //    from this worker's position among the session's network workers
+    //    (single-manager loopback pairing). Disk workers fall through below.
+    if (NetworkSetup::isNetworkWorker(w.type)) {
+        int netCount = 0, netIndex = -1;
+        for (const WorkerInfo &mw : m_workers) {
+            if (NetworkSetup::isNetworkWorker(mw.type)) {
+                if (mw.id == w.id) netIndex = netCount;
+                ++netCount;
+            }
+        }
+        const auto plan = NetworkSetup::planLoopback(netCount);
+        if (netIndex >= 0 && netIndex < static_cast<int>(plan.size())) {
+            const NetworkSetup::NetworkTarget &nt = plan[netIndex];
+            DyTargetSpec &dst = dm->data.targets[0];
+            std::memset(&dst, 0, sizeof(dst));
+            const std::string addr = (nt.role == NetworkSetup::Role::Server)
+                                     ? nt.localInterface : nt.remoteAddress;
+            std::strncpy(dst.name, nt.name.c_str(), DY_MAX_NAME - 1);
+            dst.type = (nt.role == NetworkSetup::Role::Server)
+                       ? DY_TCP_SERVER_TYPE : DY_TCP_CLIENT_TYPE;
+            std::strncpy(dst.tcp_info.remote_address, addr.c_str(), DY_MAX_NAME - 1);
+            dst.queue_depth = w.queueDepth;
+            dm->count = 1;
+        }
+        return;
+    }
 
     // Find each target in the discovered disk list
     for (const std::string &targetName : w.targets) {
