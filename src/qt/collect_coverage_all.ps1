@@ -9,8 +9,10 @@
 #   - every Qt unit-test exe                       -> core + Qt engine + widgets
 #   - IometerQt --validate-icf over the fixtures   -> main + DemoEngine
 #   - dynamotest <-> IometerQt (batch)             -> Dynamo + DynamoEngine socket
-#   - (MFC IOmeter <-> dynamotest needs elevation or an AsInvoker IometerTest
-#      build; see -IncludeMfc note. Skipped by default.)
+#   - (-IncludeMfc) IOmetertest <-> dynamotest      -> MFC Iometer GUI. Uses the
+#      AsInvoker IOmetertest.exe + a non-local-manager ICF so the GUI does NOT
+#      auto-spawn the elevated local Dynamo (no UAC). Launches a window; off by
+#      default. Covers GUI startup/cmdline/doc/login paths.
 #
 # Requires: OpenCppCoverage, a Qt build WITH PDBs (RelWithDebInfo), and the
 # MSVC Dynamotest build. Run from anywhere; paths are derived from $PSScriptRoot.
@@ -19,6 +21,7 @@
 param(
     [string]$QtConfig  = "RelWithDebInfo",   # Qt config that carries PDBs
     [string]$QtPrefix  = "C:\Qt\6.8.3\msvc2022_64",
+    [switch]$IncludeMfc,                      # also cover the MFC IOmeter GUI (launches a window)
     [switch]$Open
 )
 
@@ -103,6 +106,36 @@ if (-not $covCtrl.WaitForExit(90 * 1000)) { try { $covCtrl.Kill() } catch {} }
 if (-not $dyn2.HasExited) { Stop-Process -Id $dyn2.Id -Force -ErrorAction SilentlyContinue }
 if (Test-Path $covCtrlOut) { $covFiles += $covCtrlOut; Write-Host "  [cov] iometerqt_run" -ForegroundColor Green }
 else { Write-Host "  [miss] iometerqt_run" -ForegroundColor Yellow }
+
+# --- 4b. MFC IOmeter GUI (opt-in; launches a window) -------------------------
+# Uses the AsInvoker IOmetertest.exe + a NON-LOCAL manager ICF so the GUI does
+# NOT auto-spawn the elevated local Dynamo (no UAC). dynamotest fills the
+# manager externally. The GUI is slow under the debugger, so we wait for the
+# login port before connecting and rely on the batch login-timeout to exit.
+if ($IncludeMfc) {
+    Write-Host "[4b] MFC IOmeter GUI (IOmetertest, non-local manager)..." -ForegroundColor Cyan
+    $iomTest = Join-Path $PSScriptRoot "..\msvs11\Release\x64\IOmetertest.exe"
+    $nlIcf   = Join-Path $fixtures "fixtures\nonlocal_manager.icf"
+    if ((Test-Path $iomTest) -and (Test-Path $nlIcf)) {
+        Get-Process IOmetertest,dynamotest,Dynamo -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        $mfcOut = Join-Path $covRaw "mfc_iometer.cov"
+        $occArgs = @("--quiet","--sources",$srcFilt,"--modules","IOmetertest.exe",
+                     "--excluded_sources","tests","--export_type","binary:$mfcOut","--",
+                     $iomTest,"/c",$nlIcf,"/r","$env:TEMP\occ_mfc.csv","/t","30")
+        $covMfc = Start-Process $occ -ArgumentList $occArgs -PassThru -NoNewWindow
+        for ($i=0; $i -lt 60 -and -not $covMfc.HasExited; $i++) {
+            Start-Sleep 2
+            if (Get-NetTCPConnection -LocalPort 1066 -State Listen -ErrorAction SilentlyContinue) { break }
+        }
+        $dynM = Start-Process $dynTest -ArgumentList "-n TESTMGR -m TESTNET --rdelay 50 -i 127.0.0.1" -PassThru
+        if (-not $covMfc.WaitForExit(300000)) { try { $covMfc.Kill() } catch {} }
+        if (-not $dynM.HasExited) { Stop-Process -Id $dynM.Id -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $mfcOut) { $covFiles += $mfcOut; Write-Host "  [cov] mfc_iometer" -ForegroundColor Green }
+        else { Write-Host "  [miss] mfc_iometer" -ForegroundColor Yellow }
+    } else {
+        Write-Host "  [skip] IOmetertest.exe or nonlocal_manager.icf missing" -ForegroundColor Yellow
+    }
+}
 
 # --- 5. Merge all runs into one report ---------------------------------------
 Write-Host "[5] Merging $($covFiles.Count) runs -> unified report..." -ForegroundColor Cyan
