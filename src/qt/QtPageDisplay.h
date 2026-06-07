@@ -1,14 +1,14 @@
-// PageDisplay.h -- "Results Display" tab.
+// QtPageDisplay.h -- "Results Display" tab.
 // Layout matches the original: metric rows showing live values + BigMeter access.
 #pragma once
 
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QWidget>
 #include <QVector>
 #include <QProgressBar>
 
-class BigMeterWidget;
-class IometerEngine;
+class QtBigMeterWidget;
+class QtIometerEngine;
 class QPushButton;
 class QLabel;
 class QComboBox;
@@ -16,12 +16,12 @@ class QCheckBox;
 class QRadioButton;
 class QGroupBox;
 
-class PageDisplay : public QWidget
+class QtPageDisplay : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit PageDisplay(IometerEngine *engine, QWidget *parent = nullptr);
+    explicit QtPageDisplay(QtIometerEngine *engine, QWidget *parent = nullptr);
 
 public slots:
     void updateResults(const QVector<WorkerResult> &results);
@@ -54,8 +54,8 @@ private:
     void setupUi();
     void setupRow(QWidget *container, int row, int resultType, const QString &label);
 
-    IometerEngine  *m_engine     = nullptr;
-    BigMeterWidget *m_bigMeter   = nullptr;
+    QtIometerEngine  *m_engine     = nullptr;
+    QtBigMeterWidget *m_bigMeter   = nullptr;
     QCheckBox      *m_recordChk  = nullptr;
     QRadioButton   *m_sinceStart = nullptr;
     QRadioButton   *m_sinceUpdate= nullptr;

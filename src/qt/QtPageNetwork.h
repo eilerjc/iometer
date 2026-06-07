@@ -1,13 +1,13 @@
-// PageNetwork.h -- "Network Targets" tab.
+// QtPageNetwork.h -- "Network Targets" tab.
 // Layout matches the original:
 //   Left:   "Targets" group box with a checkable manager->NIC tree
 //   Right:  Network Interface to Use for Connection,
 //           Max # Outstanding Sends, Test Connection Rate
 #pragma once
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QWidget>
 
-class IometerEngine;
+class QtIometerEngine;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QComboBox;
@@ -15,14 +15,14 @@ class QSpinBox;
 class QCheckBox;
 class QGroupBox;
 
-class PageNetwork : public QWidget
+class QtPageNetwork : public QWidget
 {
     Q_OBJECT
 public:
-    explicit PageNetwork(IometerEngine *engine, QWidget *parent = nullptr);
+    explicit QtPageNetwork(QtIometerEngine *engine, QWidget *parent = nullptr);
 
 public slots:
-    // Called by MainWindow when Topology tree selection changes
+    // Called by QtMainWindow when Topology tree selection changes
     void clearSelection();
     void setSelectedManager(const QString &mgrName);
     void setSelectedWorker(const QString &mgrName, const QString &workerId);
@@ -30,7 +30,7 @@ public slots:
     // Called when engine reports new config (e.g. manager connected)
     void refreshForEngine();
 
-    // Called by MainWindow for compatibility
+    // Called by QtMainWindow for compatibility
     void onManagerConnected(const ManagerInfo &mgr);
     void onManagerDisconnected(const QString &name);
 
@@ -49,7 +49,7 @@ private:
     void setParamsEnabled(bool enabled);
     void rebuildNicCombo();
 
-    IometerEngine   *m_engine          = nullptr;
+    QtIometerEngine   *m_engine          = nullptr;
     QString          m_selManagerName;
     QString          m_selWorkerId;
     bool             m_updating        = false;

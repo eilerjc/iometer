@@ -1,10 +1,10 @@
-// tst_demo.cpp — Tests for DemoEngine (simulated I/O engine)
+// tst_demo.cpp — Tests for QtDemoEngine (simulated I/O engine)
 // Verifies signals, state transitions, and configuration round-trips.
 #include <QObject>
 #include <QTest>
 #include <QThread>
 #include <QSignalSpy>
-#include "DemoEngine.h"
+#include "QtDemoEngine.h"
 
 class DemoEngineTest : public QObject
 {
@@ -13,52 +13,52 @@ private slots:
 
     // ── Initial state ────────────────────────────────────────────────────────
     void initialState_notRunning() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         QVERIFY(!eng.isRunning());
     }
     void initialState_hasManager() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         QVERIFY(!eng.managers().isEmpty());
     }
     void initialState_hasWorkers() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         QVERIFY(!eng.managers().first().workers.empty());
     }
     void initialState_hasSpecsFromLibrary() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         QVERIFY(eng.accessSpecs().size() >= 32);
     }
 
     // ── startTest / stopTest signals ─────────────────────────────────────────
     void startTest_emitsTestStarted() {
-        DemoEngine eng;
-        QSignalSpy spy(&eng, &IometerEngine::testStarted);
+        QtDemoEngine eng;
+        QSignalSpy spy(&eng, &QtIometerEngine::testStarted);
         eng.startTest();
         QCOMPARE(spy.count(), 1);
         eng.stopTest();
     }
     void startTest_setsRunning() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         eng.startTest();
         QVERIFY(eng.isRunning());
         eng.stopTest();
     }
     void stopTest_emitsTestStopped() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         eng.startTest();
-        QSignalSpy spy(&eng, &IometerEngine::testStopped);
+        QSignalSpy spy(&eng, &QtIometerEngine::testStopped);
         eng.stopTest();
         QCOMPARE(spy.count(), 1);
     }
     void stopTest_clearsRunning() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         eng.startTest();
         eng.stopTest();
         QVERIFY(!eng.isRunning());
     }
     void doubleStart_ignored() {
-        DemoEngine eng;
-        QSignalSpy spy(&eng, &IometerEngine::testStarted);
+        QtDemoEngine eng;
+        QSignalSpy spy(&eng, &QtIometerEngine::testStarted);
         eng.startTest();
         eng.startTest(); // second call should be a no-op
         QCOMPARE(spy.count(), 1);
@@ -67,8 +67,8 @@ private slots:
 
     // ── resultsUpdated fires during test run ─────────────────────────────────
     void resultsUpdated_emittedDuringTest() {
-        DemoEngine eng;
-        QSignalSpy spy(&eng, &IometerEngine::resultsUpdated);
+        QtDemoEngine eng;
+        QSignalSpy spy(&eng, &QtIometerEngine::resultsUpdated);
         eng.startTest();
         // Wait up to 2000ms for at least one update (timer fires every 500ms)
         QVERIFY(spy.wait(2000));
@@ -76,8 +76,8 @@ private slots:
         eng.stopTest();
     }
     void resultsUpdated_nonZeroValues() {
-        DemoEngine eng;
-        QSignalSpy spy(&eng, &IometerEngine::resultsUpdated);
+        QtDemoEngine eng;
+        QSignalSpy spy(&eng, &QtIometerEngine::resultsUpdated);
         eng.startTest();
         QVERIFY(spy.wait(2000));
         eng.stopTest();
@@ -90,8 +90,8 @@ private slots:
         QVERIFY2(hasNonZero, "All IOps were zero after demo test started");
     }
     void resultsUpdated_hasAggregateRow() {
-        DemoEngine eng;
-        QSignalSpy spy(&eng, &IometerEngine::resultsUpdated);
+        QtDemoEngine eng;
+        QSignalSpy spy(&eng, &QtIometerEngine::resultsUpdated);
         eng.startTest();
         QVERIFY(spy.wait(2000));
         eng.stopTest();
@@ -103,9 +103,9 @@ private slots:
 
     // ── stopAll behaves same as stopTest ────────────────────────────────────
     void stopAll_stopsTest() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         eng.startTest();
-        QSignalSpy spy(&eng, &IometerEngine::testStopped);
+        QSignalSpy spy(&eng, &QtIometerEngine::testStopped);
         eng.stopAll();
         QCOMPARE(spy.count(), 1);
         QVERIFY(!eng.isRunning());
@@ -113,7 +113,7 @@ private slots:
 
     // ── Access spec round-trip ───────────────────────────────────────────────
     void setAccessSpecs_roundTrip() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         QList<AccessSpec> custom;
         AccessSpec s;
         s.name = "TestSpec";
@@ -127,7 +127,7 @@ private slots:
 
     // ── TestConfig round-trip ────────────────────────────────────────────────
     void testConfig_roundTrip() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         TestConfig cfg;
         cfg.runSeconds  = 30;
         cfg.rampSeconds = 5;
@@ -141,12 +141,12 @@ private slots:
 
     // ── Workers and managers ──────────────────────────────────────────────────
     void managers_notEmpty() {
-        DemoEngine eng;
+        QtDemoEngine eng;
         QVERIFY(!eng.managers().isEmpty());
     }
     void workers_count() {
-        DemoEngine eng;
-        // DemoEngine simulates a quad-core system with 4 disk workers
+        QtDemoEngine eng;
+        // QtDemoEngine simulates a quad-core system with 4 disk workers
         QCOMPARE(eng.managers().first().workers.size(), 4);
     }
 };

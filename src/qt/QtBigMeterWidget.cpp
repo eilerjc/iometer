@@ -1,4 +1,4 @@
-// BigMeterWidget.cpp
+// QtBigMeterWidget.cpp
 // Qt port of CBigMeter - Iometer "Presentation Meter" window.
 //
 // Layout (top to bottom) matches the original:
@@ -8,8 +8,8 @@
 //   4. Separator
 //   5. Two side-by-side groups: [Settings] | [Test Controls]
 
-#include "BigMeterWidget.h"
-#include "MeterWidget.h"
+#include "QtBigMeterWidget.h"
+#include "QtMeterWidget.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -28,7 +28,7 @@
 // Construction
 // -----------------------------------------------------------------------------
 
-BigMeterWidget::BigMeterWidget(QWidget *parent)
+QtBigMeterWidget::QtBigMeterWidget(QWidget *parent)
     : QWidget(parent)
 {
     setupUi();
@@ -36,14 +36,14 @@ BigMeterWidget::BigMeterWidget(QWidget *parent)
     resize(600, 580);
 }
 
-void BigMeterWidget::setupUi()
+void QtBigMeterWidget::setupUi()
 {
     auto *root = new QVBoxLayout(this);
     root->setSpacing(4);
     root->setContentsMargins(8, 8, 8, 8);
 
     // -- 1. Speedometer (takes up most of the space) ----------------------
-    m_meter = new MeterWidget;
+    m_meter = new QtMeterWidget;
     m_meter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     root->addWidget(m_meter, 1);
 
@@ -129,15 +129,15 @@ void BigMeterWidget::setupUi()
 
     // -- Wire up signals ---------------------------------------------------
     connect(m_startNextBtn, &QPushButton::clicked,
-            this,           &BigMeterWidget::onStartNextClicked);
+            this,           &QtBigMeterWidget::onStartNextClicked);
     connect(m_stopBtn,      &QPushButton::clicked,
-            this,           &BigMeterWidget::onStopClicked);
+            this,           &QtBigMeterWidget::onStopClicked);
     connect(m_watermarkChk, &QCheckBox::toggled,
-            this,           &BigMeterWidget::onWatermarkToggled);
+            this,           &QtBigMeterWidget::onWatermarkToggled);
     connect(m_maxRangeSpin, QOverload<int>::of(&QSpinBox::valueChanged),
-            this,           &BigMeterWidget::onMaxRangeChanged);
+            this,           &QtBigMeterWidget::onMaxRangeChanged);
     connect(m_resultType,   &QComboBox::currentTextChanged,
-            this,           &BigMeterWidget::onResultTypeChanged);
+            this,           &QtBigMeterWidget::onResultTypeChanged);
 
     // Initialise the meter and button states
     m_meter->setRange(0, 100, true);
@@ -148,13 +148,13 @@ void BigMeterWidget::setupUi()
 // Public API
 // -----------------------------------------------------------------------------
 
-void BigMeterWidget::setTitle(const QString &testTitle)
+void QtBigMeterWidget::setTitle(const QString &testTitle)
 {
     // Route to the OS window title bar - no separate in-window title label.
     setWindowTitle(testTitle.isEmpty() ? "Iometer - Presentation Meter" : testTitle);
 }
 
-void BigMeterWidget::setWorkerResult(const QString &workerName,
+void QtBigMeterWidget::setWorkerResult(const QString &workerName,
                                      const QString &resultName)
 {
     m_workerName = workerName;
@@ -177,7 +177,7 @@ void BigMeterWidget::setWorkerResult(const QString &workerName,
     }
 }
 
-void BigMeterWidget::updateDisplay(double value, const QString &formattedText)
+void QtBigMeterWidget::updateDisplay(double value, const QString &formattedText)
 {
     m_meter->setValue(value);
     m_valueLabel->setText(
@@ -186,12 +186,12 @@ void BigMeterWidget::updateDisplay(double value, const QString &formattedText)
             : formattedText);
 }
 
-void BigMeterWidget::resetWatermark()
+void QtBigMeterWidget::resetWatermark()
 {
     m_meter->resetWatermark();
 }
 
-void BigMeterWidget::setButtonState(bool canStart, bool canStop, bool canStopAll)
+void QtBigMeterWidget::setButtonState(bool canStart, bool canStop, bool canStopAll)
 {
     m_canStart   = canStart;
     m_canStop    = canStop;
@@ -203,7 +203,7 @@ void BigMeterWidget::setButtonState(bool canStart, bool canStop, bool canStopAll
 // Private helpers
 // -----------------------------------------------------------------------------
 
-void BigMeterWidget::updateButtons()
+void QtBigMeterWidget::updateButtons()
 {
     // Logic mirrors CBigMeter::UpdateButtons
     if (m_canStart) {
@@ -225,7 +225,7 @@ void BigMeterWidget::updateButtons()
 // Slots
 // -----------------------------------------------------------------------------
 
-void BigMeterWidget::onStartNextClicked()
+void QtBigMeterWidget::onStartNextClicked()
 {
     if (m_canStart) {
         m_meter->resetWatermark();
@@ -235,19 +235,19 @@ void BigMeterWidget::onStartNextClicked()
     }
 }
 
-void BigMeterWidget::onStopClicked()
+void QtBigMeterWidget::onStopClicked()
 {
     emit stopRequested();
 }
 
-void BigMeterWidget::onWatermarkToggled(bool checked)
+void QtBigMeterWidget::onWatermarkToggled(bool checked)
 {
     m_meter->showWatermark = checked;
     m_meter->resetWatermark();
     m_meter->update();
 }
 
-void BigMeterWidget::onMaxRangeChanged(int value)
+void QtBigMeterWidget::onMaxRangeChanged(int value)
 {
     if (value == 0)
         m_meter->setRange(0, 100, /*auto=*/true);
@@ -255,7 +255,7 @@ void BigMeterWidget::onMaxRangeChanged(int value)
         m_meter->setRange(0, value, /*auto=*/false);
 }
 
-void BigMeterWidget::onResultTypeChanged(const QString &text)
+void QtBigMeterWidget::onResultTypeChanged(const QString &text)
 {
     m_resultName = text;
     setWorkerResult(m_workerName, text);   // update the subtitle label

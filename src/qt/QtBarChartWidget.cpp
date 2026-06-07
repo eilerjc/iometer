@@ -1,12 +1,12 @@
-// BarChartWidget.cpp
-#include "BarChartWidget.h"
+// QtBarChartWidget.cpp
+#include "QtBarChartWidget.h"
 #include <QPainter>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMouseEvent>
 #include <cmath>
 
-BarChartWidget::BarChartWidget(QWidget *parent)
+QtBarChartWidget::QtBarChartWidget(QWidget *parent)
     : QWidget(parent)
 {
     setMinimumSize(160, 90);
@@ -45,12 +45,12 @@ BarChartWidget::BarChartWidget(QWidget *parent)
     vlay->addWidget(m_metricCombo);
 
     connect(m_metricCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &BarChartWidget::onMetricChanged);
+            this, &QtBarChartWidget::onMetricChanged);
 
-    setStyleSheet("BarChartWidget { background:#0d1117; border:1px solid #2a3a4a; border-radius:4px; }");
+    setStyleSheet("QtBarChartWidget { background:#0d1117; border:1px solid #2a3a4a; border-radius:4px; }");
 }
 
-void BarChartWidget::setWorker(const QString &mgrName, const QString &workerName)
+void QtBarChartWidget::setWorker(const QString &mgrName, const QString &workerName)
 {
     m_managerName = mgrName;
     m_workerName  = workerName;
@@ -59,7 +59,7 @@ void BarChartWidget::setWorker(const QString &mgrName, const QString &workerName
     update();
 }
 
-void BarChartWidget::setResultType(int rt)
+void QtBarChartWidget::setResultType(int rt)
 {
     if (rt < 0 || rt >= NUM_RESULT_TYPES) return;
     m_resultType = rt;
@@ -71,7 +71,7 @@ void BarChartWidget::setResultType(int rt)
     update();
 }
 
-void BarChartWidget::updateResults(const QVector<WorkerResult> &results)
+void QtBarChartWidget::updateResults(const QVector<WorkerResult> &results)
 {
     for (const auto &r : results) {
         if ((r.managerName == m_managerName || m_managerName.isEmpty()) &&
@@ -91,7 +91,7 @@ void BarChartWidget::updateResults(const QVector<WorkerResult> &results)
     }
 }
 
-void BarChartWidget::updatePeak()
+void QtBarChartWidget::updatePeak()
 {
     if (m_value > m_peak) m_peak = m_value;
     // Auto-range: ratchet up by decades
@@ -101,7 +101,7 @@ void BarChartWidget::updatePeak()
     m_maxRange = range;
 }
 
-void BarChartWidget::onMetricChanged(int index)
+void QtBarChartWidget::onMetricChanged(int index)
 {
     m_resultType = index;
     m_value = m_peak = m_maxRange = 0.0;
@@ -110,7 +110,7 @@ void BarChartWidget::onMetricChanged(int index)
     emit resultTypeChanged(index);
 }
 
-void BarChartWidget::resizeEvent(QResizeEvent *event)
+void QtBarChartWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     // Bar area is between the worker label and the value label
@@ -121,7 +121,7 @@ void BarChartWidget::resizeEvent(QResizeEvent *event)
     update();
 }
 
-void BarChartWidget::paintEvent(QPaintEvent *)
+void QtBarChartWidget::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.fillRect(rect(), QColor(0x0d, 0x11, 0x17));
@@ -173,7 +173,7 @@ void BarChartWidget::paintEvent(QPaintEvent *)
     p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 4, 4);
 }
 
-void BarChartWidget::mouseDoubleClickEvent(QMouseEvent *)
+void QtBarChartWidget::mouseDoubleClickEvent(QMouseEvent *)
 {
     // Double-click → pop up the BigMeter for this chart
     emit bigMeterRequested(0);   // slot index TBD by parent

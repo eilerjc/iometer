@@ -1,4 +1,4 @@
-// PageSetup.h -- "Disk Targets" tab.
+// QtPageSetup.h -- "Disk Targets" tab.
 // Equivalent to CPageSetup / CDiskPageDlg in the MFC original.
 //
 // Layout matches the original:
@@ -6,10 +6,10 @@
 //   Right:  Maximum Disk Size, Starting Disk Sector, # Outstanding I/Os,
 //           Use Fixed Seed, Test Connection Rate, Write IO Data Pattern
 #pragma once
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QWidget>
 
-class IometerEngine;
+class QtIometerEngine;
 class QListWidget;
 class QListWidgetItem;
 class QSpinBox;
@@ -19,14 +19,14 @@ class QLabel;
 class QGroupBox;
 class QLineEdit;
 
-class PageSetup : public QWidget
+class QtPageSetup : public QWidget
 {
     Q_OBJECT
 public:
-    explicit PageSetup(IometerEngine *engine, QWidget *parent = nullptr);
+    explicit QtPageSetup(QtIometerEngine *engine, QWidget *parent = nullptr);
 
 public slots:
-    // Called by MainWindow when the Topology tree selection changes
+    // Called by QtMainWindow when the Topology tree selection changes
     void clearSelection();
     void setSelectedManager(const QString &mgrName);
     void setSelectedWorker(const QString &mgrName, const QString &workerId);
@@ -52,7 +52,7 @@ private:
     void saveWorkerParams();
     void setParamsEnabled(bool enabled);
 
-    IometerEngine  *m_engine         = nullptr;
+    QtIometerEngine  *m_engine         = nullptr;
     QString         m_selManagerName;
     QString         m_selWorkerId;
     bool            m_updating        = false;

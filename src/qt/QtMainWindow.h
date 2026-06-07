@@ -1,18 +1,18 @@
-// MainWindow.h -- Top-level application window for the Iometer Qt GUI.
+// QtMainWindow.h -- Top-level application window for the Iometer Qt GUI.
 // Equivalent to CMainFrame + CGalileoView in the MFC original.
 #pragma once
 
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QMainWindow>
 #include <QVector>
 #include <QFile>
 
-class IometerEngine;
-class PageDisplay;
-class PageSetup;
-class PageAccess;
-class PageResults;
-class PageNetwork;
+class QtIometerEngine;
+class QtPageDisplay;
+class QtPageSetup;
+class QtPageAccess;
+class QtPageResults;
+class QtPageNetwork;
 class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -21,13 +21,13 @@ class QLabel;
 class QAction;
 class QGroupBox;
 
-class MainWindow : public QMainWindow
+class QtMainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit MainWindow(IometerEngine *engine, QWidget *parent = nullptr);
-    ~MainWindow() override = default;
+    explicit QtMainWindow(QtIometerEngine *engine, QWidget *parent = nullptr);
+    ~QtMainWindow() override = default;
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -88,7 +88,7 @@ private:
     static QIcon makeHelpIcon();         // tlb13 - yellow "?"
 
     // ---- Engine ---------------------------------------------------------------
-    IometerEngine *m_engine = nullptr;
+    QtIometerEngine *m_engine = nullptr;
 
     // ---- Central area: topology panel (left) + tabs (right) ------------------
     QSplitter   *m_splitter      = nullptr;
@@ -97,11 +97,11 @@ private:
     QTabWidget  *m_tabs          = nullptr;
 
     // ---- Tab pages -----------------------------------------------------------
-    PageSetup   *m_pageSetup     = nullptr;   // tab 0: Disk Targets
-    PageNetwork *m_pageNetwork   = nullptr;   // tab 1: Network Targets
-    PageAccess  *m_pageAccess    = nullptr;   // tab 2: Access Specifications
-    PageDisplay *m_pageDisplay   = nullptr;   // tab 3: Results Display
-    PageResults *m_pageResults   = nullptr;   // tab 4: Test Setup
+    QtPageSetup   *m_pageSetup     = nullptr;   // tab 0: Disk Targets
+    QtPageNetwork *m_pageNetwork   = nullptr;   // tab 1: Network Targets
+    QtPageAccess  *m_pageAccess    = nullptr;   // tab 2: Access Specifications
+    QtPageDisplay *m_pageDisplay   = nullptr;   // tab 3: Results Display
+    QtPageResults *m_pageResults   = nullptr;   // tab 4: Test Setup
 
     // ---- Toolbar actions (in original toolbar order) -------------------------
     QAction *m_actOpen           = nullptr;   // ID_FILE_OPEN

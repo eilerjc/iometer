@@ -1,7 +1,7 @@
-// BigMeterWidget.h
+// QtBigMeterWidget.h
 // Qt port of CBigMeter - the Iometer "Presentation Meter" window.
 //
-// Displays a large speedometer (MeterWidget) together with:
+// Displays a large speedometer (QtMeterWidget) together with:
 //   • test title and worker/result labels
 //   • large numeric readout
 //   • result-type selector (combo box)
@@ -16,19 +16,19 @@
 #include <QWidget>
 #include <QString>
 
-class MeterWidget;
+class QtMeterWidget;
 class QLabel;
 class QPushButton;
 class QCheckBox;
 class QSpinBox;
 class QComboBox;
 
-class BigMeterWidget : public QWidget
+class QtBigMeterWidget : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit BigMeterWidget(QWidget *parent = nullptr);
+    explicit QtBigMeterWidget(QWidget *parent = nullptr);
 
     // -- Display control ---------------------------------------------------
     void setTitle(const QString &testTitle);
@@ -43,7 +43,7 @@ public:
     void setButtonState(bool canStart, bool canStop, bool canStopAll);
 
     // -- Access to the embedded gauge --------------------------------------
-    MeterWidget *meter() const { return m_meter; }
+    QtMeterWidget *meter() const { return m_meter; }
 
 signals:
     void startRequested();
@@ -62,7 +62,7 @@ private:
     void setupUi();
     void updateButtons();
 
-    MeterWidget  *m_meter        = nullptr;
+    QtMeterWidget  *m_meter        = nullptr;
     QLabel       *m_titleLabel   = nullptr;
     QLabel       *m_workerLabel  = nullptr;
     QLabel       *m_valueLabel   = nullptr;

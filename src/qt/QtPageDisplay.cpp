@@ -1,7 +1,7 @@
-// PageDisplay.cpp -- "Results Display" tab
-#include "PageDisplay.h"
-#include "BigMeterWidget.h"
-#include "IometerEngine.h"
+// QtPageDisplay.cpp -- "Results Display" tab
+#include "QtPageDisplay.h"
+#include "QtBigMeterWidget.h"
+#include "QtIometerEngine.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -18,21 +18,21 @@
 
 // =============================================================================
 
-PageDisplay::PageDisplay(IometerEngine *engine, QWidget *parent)
+QtPageDisplay::QtPageDisplay(QtIometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
-    m_bigMeter = new BigMeterWidget(nullptr);
+    m_bigMeter = new QtBigMeterWidget(nullptr);
     m_bigMeter->hide();
 
     // Wire BigMeter test-control buttons to the engine
-    connect(m_bigMeter, &BigMeterWidget::stopRequested,
-            m_engine,   &IometerEngine::stopTest);
-    connect(m_bigMeter, &BigMeterWidget::startRequested,
-            m_engine,   &IometerEngine::startTest);
-    // "Next >>" advances to the next assigned spec (handled by MainWindow)
-    connect(m_bigMeter, &BigMeterWidget::nextRequested,
-            this,       &PageDisplay::nextSpecRequested);
+    connect(m_bigMeter, &QtBigMeterWidget::stopRequested,
+            m_engine,   &QtIometerEngine::stopTest);
+    connect(m_bigMeter, &QtBigMeterWidget::startRequested,
+            m_engine,   &QtIometerEngine::startTest);
+    // "Next >>" advances to the next assigned spec (handled by QtMainWindow)
+    connect(m_bigMeter, &QtBigMeterWidget::nextRequested,
+            this,       &QtPageDisplay::nextSpecRequested);
 }
 
 // =============================================================================
@@ -45,7 +45,7 @@ PageDisplay::PageDisplay(IometerEngine *engine, QWidget *parent)
 // so the text line sits naturally above the bar without grid-cell fighting.
 // =============================================================================
 
-void PageDisplay::setupUi()
+void QtPageDisplay::setupUi()
 {
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(6, 6, 6, 6);
@@ -211,7 +211,7 @@ static QString scaleText(double ceiling)
 // Slots
 // =============================================================================
 
-void PageDisplay::updateResults(const QVector<WorkerResult> &results)
+void QtPageDisplay::updateResults(const QVector<WorkerResult> &results)
 {
     WorkerResult agg;
     for (const auto &r : results)
@@ -291,7 +291,7 @@ void PageDisplay::updateResults(const QVector<WorkerResult> &results)
     }
 }
 
-void PageDisplay::onTestStarted()
+void QtPageDisplay::onTestStarted()
 {
     m_running = true;
     for (int i = 0; i < NUM_ROWS; ++i) {
@@ -304,13 +304,13 @@ void PageDisplay::onTestStarted()
     if (m_bigMeter) m_bigMeter->setButtonState(false, true, true);
 }
 
-void PageDisplay::onTestStopped()
+void QtPageDisplay::onTestStopped()
 {
     m_running = false;
     if (m_bigMeter) m_bigMeter->setButtonState(true, false, false);
 }
 
-void PageDisplay::onBigMeterClicked()
+void QtPageDisplay::onBigMeterClicked()
 {
     m_bigMeter->setTitle("Iometer Presentation Meter");
     m_bigMeter->setWorkerResult("All Managers",
@@ -320,7 +320,7 @@ void PageDisplay::onBigMeterClicked()
     m_bigMeter->activateWindow();
 }
 
-void PageDisplay::onMetricButtonClicked(int row)
+void QtPageDisplay::onMetricButtonClicked(int row)
 {
     // Build the exact 2-level cascading menu from IDR_POPUP_DISPLAY_LIST.
     const int cur = m_rows[row].resultType;
@@ -409,14 +409,14 @@ void PageDisplay::onMetricButtonClicked(int row)
     m_rows[row].bar->setValue(0);
 }
 
-void PageDisplay::onMetricRowClicked(int row)
+void QtPageDisplay::onMetricRowClicked(int row)
 {
     // ">" button - open BigMeter for this row's current metric
     m_activeMeterRow = row;
     onBigMeterClicked();
 }
 
-void PageDisplay::refreshWorkerAssignments()
+void QtPageDisplay::refreshWorkerAssignments()
 {
     // Could update worker labels in each row; currently all show "All Managers"
 }

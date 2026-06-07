@@ -1,6 +1,6 @@
-// PageResults.cpp -- "Test Setup" tab
-#include "PageResults.h"
-#include "IometerEngine.h"
+// QtPageResults.cpp -- "Test Setup" tab
+#include "QtPageResults.h"
+#include "QtIometerEngine.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -15,19 +15,19 @@
 
 // =============================================================================
 
-PageResults::PageResults(IometerEngine *engine, QWidget *parent)
+QtPageResults::QtPageResults(QtIometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
     loadConfig();
-    connect(engine, &IometerEngine::configChanged, this, &PageResults::onConfigChanged);
+    connect(engine, &QtIometerEngine::configChanged, this, &QtPageResults::onConfigChanged);
 }
 
 // =============================================================================
 // UI construction -- matches the original Test Setup tab exactly
 // =============================================================================
 
-void PageResults::setupUi()
+void QtPageResults::setupUi()
 {
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(6, 6, 6, 6);
@@ -169,7 +169,7 @@ void PageResults::setupUi()
 // Config load/save
 // =============================================================================
 
-void PageResults::loadConfig()
+void QtPageResults::loadConfig()
 {
     m_updating = true;
     const TestConfig &c = m_engine->testConfig();
@@ -193,7 +193,7 @@ void PageResults::loadConfig()
     m_updating = false;
 }
 
-void PageResults::saveConfig()
+void QtPageResults::saveConfig()
 {
     if (m_updating) return;
     TestConfig c;
@@ -217,4 +217,4 @@ void PageResults::saveConfig()
     m_engine->setTestConfig(c);
 }
 
-void PageResults::onConfigChanged() { loadConfig(); }
+void QtPageResults::onConfigChanged() { loadConfig(); }

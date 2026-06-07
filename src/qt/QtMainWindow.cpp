@@ -1,11 +1,11 @@
-// MainWindow.cpp
-#include "MainWindow.h"
-#include "IometerEngine.h"
-#include "PageDisplay.h"
-#include "PageSetup.h"
-#include "PageAccess.h"
-#include "PageResults.h"
-#include "PageNetwork.h"
+// QtMainWindow.cpp
+#include "QtMainWindow.h"
+#include "QtIometerEngine.h"
+#include "QtPageDisplay.h"
+#include "QtPageSetup.h"
+#include "QtPageAccess.h"
+#include "QtPageResults.h"
+#include "QtPageNetwork.h"
 
 #include <QToolBar>
 #include <QAction>
@@ -85,24 +85,24 @@ static QIcon toolbarIcon(int idx)
     return QIcon(QPixmap::fromImage(img));
 }
 
-QIcon MainWindow::makeOpenIcon()        { return toolbarIcon(TBI_OPEN);        }
-QIcon MainWindow::makeSaveIcon()        { return toolbarIcon(TBI_SAVE);        }
-QIcon MainWindow::makeNewDynamoIcon()   { return toolbarIcon(TBI_NEW_DYNAMO);  }
-QIcon MainWindow::makeNewDiskWorkerIcon(){ return toolbarIcon(TBI_NEW_DISK);   }
-QIcon MainWindow::makeNewNetWorkerIcon(){ return toolbarIcon(TBI_NEW_NET);     }
-QIcon MainWindow::makeCopyWorkerIcon()  { return toolbarIcon(TBI_COPY_WORKER); }
-QIcon MainWindow::makeStartIcon()       { return toolbarIcon(TBI_START);       }
-QIcon MainWindow::makeStopIcon(bool all){ return toolbarIcon(all ? TBI_STOP_ALL : TBI_STOP); }
-QIcon MainWindow::makeResetIcon()       { return toolbarIcon(TBI_RESET);       }
-QIcon MainWindow::makeExitOneIcon()     { return toolbarIcon(TBI_EXIT_ONE);    }
-QIcon MainWindow::makeExitIcon()        { return toolbarIcon(TBI_EXIT);        }
-QIcon MainWindow::makeHelpIcon()        { return toolbarIcon(TBI_HELP);        }
+QIcon QtMainWindow::makeOpenIcon()        { return toolbarIcon(TBI_OPEN);        }
+QIcon QtMainWindow::makeSaveIcon()        { return toolbarIcon(TBI_SAVE);        }
+QIcon QtMainWindow::makeNewDynamoIcon()   { return toolbarIcon(TBI_NEW_DYNAMO);  }
+QIcon QtMainWindow::makeNewDiskWorkerIcon(){ return toolbarIcon(TBI_NEW_DISK);   }
+QIcon QtMainWindow::makeNewNetWorkerIcon(){ return toolbarIcon(TBI_NEW_NET);     }
+QIcon QtMainWindow::makeCopyWorkerIcon()  { return toolbarIcon(TBI_COPY_WORKER); }
+QIcon QtMainWindow::makeStartIcon()       { return toolbarIcon(TBI_START);       }
+QIcon QtMainWindow::makeStopIcon(bool all){ return toolbarIcon(all ? TBI_STOP_ALL : TBI_STOP); }
+QIcon QtMainWindow::makeResetIcon()       { return toolbarIcon(TBI_RESET);       }
+QIcon QtMainWindow::makeExitOneIcon()     { return toolbarIcon(TBI_EXIT_ONE);    }
+QIcon QtMainWindow::makeExitIcon()        { return toolbarIcon(TBI_EXIT);        }
+QIcon QtMainWindow::makeHelpIcon()        { return toolbarIcon(TBI_HELP);        }
 
 // =============================================================================
-// MainWindow
+// QtMainWindow
 // =============================================================================
 
-MainWindow::MainWindow(IometerEngine *engine, QWidget *parent)
+QtMainWindow::QtMainWindow(QtIometerEngine *engine, QWidget *parent)
     : QMainWindow(parent), m_engine(engine)
 {
     setWindowTitle(QString("Iometer 1.1.0 [Built: %1 %2]").arg(__DATE__, __TIME__));
@@ -116,20 +116,20 @@ MainWindow::MainWindow(IometerEngine *engine, QWidget *parent)
     rebuildWorkerTree();
     setRunningState(false);
 
-    connect(engine, &IometerEngine::testStarted,         this, &MainWindow::onTestStarted);
-    connect(engine, &IometerEngine::testStopped,         this, &MainWindow::onTestStopped);
-    connect(engine, &IometerEngine::resultsUpdated,      this, &MainWindow::onResultsUpdated);
-    connect(engine, &IometerEngine::statusMessage,       this, &MainWindow::onStatusMessage);
-    connect(engine, &IometerEngine::managerConnected,    this, &MainWindow::onManagerConnected);
-    connect(engine, &IometerEngine::managerDisconnected, this, &MainWindow::onManagerDisconnected);
-    connect(engine, &IometerEngine::configChanged,       this, &MainWindow::onConfigChanged);
+    connect(engine, &QtIometerEngine::testStarted,         this, &QtMainWindow::onTestStarted);
+    connect(engine, &QtIometerEngine::testStopped,         this, &QtMainWindow::onTestStopped);
+    connect(engine, &QtIometerEngine::resultsUpdated,      this, &QtMainWindow::onResultsUpdated);
+    connect(engine, &QtIometerEngine::statusMessage,       this, &QtMainWindow::onStatusMessage);
+    connect(engine, &QtIometerEngine::managerConnected,    this, &QtMainWindow::onManagerConnected);
+    connect(engine, &QtIometerEngine::managerDisconnected, this, &QtMainWindow::onManagerDisconnected);
+    connect(engine, &QtIometerEngine::configChanged,       this, &QtMainWindow::onConfigChanged);
 }
 
 // -----------------------------------------------------------------------------
 // Setup
 // -----------------------------------------------------------------------------
 
-void MainWindow::setupToolBar()
+void QtMainWindow::setupToolBar()
 {
     auto *tb = addToolBar("Main");
     tb->setMovable(false);
@@ -183,21 +183,21 @@ void MainWindow::setupToolBar()
     m_actNew->setShortcut(QKeySequence::New);
 
     // -- Connections -----------------------------------------------------------
-    connect(m_actOpen,          &QAction::triggered, this, &MainWindow::onOpen);
-    connect(m_actSave,          &QAction::triggered, this, &MainWindow::onSave);
-    connect(m_actNewDynamo,     &QAction::triggered, this, &MainWindow::onNewDynamo);
-    connect(m_actNewDiskWorker, &QAction::triggered, this, &MainWindow::onNewDiskWorker);
-    connect(m_actNewNetWorker,  &QAction::triggered, this, &MainWindow::onNewNetWorker);
-    connect(m_actCopyWorker,    &QAction::triggered, this, &MainWindow::onCopyWorker);
-    connect(m_actStart,         &QAction::triggered, this, &MainWindow::onStart);
-    connect(m_actStop,          &QAction::triggered, this, &MainWindow::onStop);
-    connect(m_actStopAll,       &QAction::triggered, this, &MainWindow::onStopAll);
-    connect(m_actNew,           &QAction::triggered, this, &MainWindow::onNew);
-    connect(m_actExitOne,       &QAction::triggered, this, &MainWindow::onExitOne);
+    connect(m_actOpen,          &QAction::triggered, this, &QtMainWindow::onOpen);
+    connect(m_actSave,          &QAction::triggered, this, &QtMainWindow::onSave);
+    connect(m_actNewDynamo,     &QAction::triggered, this, &QtMainWindow::onNewDynamo);
+    connect(m_actNewDiskWorker, &QAction::triggered, this, &QtMainWindow::onNewDiskWorker);
+    connect(m_actNewNetWorker,  &QAction::triggered, this, &QtMainWindow::onNewNetWorker);
+    connect(m_actCopyWorker,    &QAction::triggered, this, &QtMainWindow::onCopyWorker);
+    connect(m_actStart,         &QAction::triggered, this, &QtMainWindow::onStart);
+    connect(m_actStop,          &QAction::triggered, this, &QtMainWindow::onStop);
+    connect(m_actStopAll,       &QAction::triggered, this, &QtMainWindow::onStopAll);
+    connect(m_actNew,           &QAction::triggered, this, &QtMainWindow::onNew);
+    connect(m_actExitOne,       &QAction::triggered, this, &QtMainWindow::onExitOne);
     connect(m_actExit,          &QAction::triggered, this, [this]{
         close();
     });
-    connect(m_actHelp,          &QAction::triggered, this, &MainWindow::onAbout);
+    connect(m_actHelp,          &QAction::triggered, this, &QtMainWindow::onAbout);
 
     // -- Menu bar -------------------------------------------------------------
     auto *fileMenu = menuBar()->addMenu("&File");
@@ -236,7 +236,7 @@ void MainWindow::setupToolBar()
     helpMenu->addAction(m_actHelp);
 }
 
-void MainWindow::setupTopologyPanel()
+void QtMainWindow::setupTopologyPanel()
 {
     // QGroupBox provides the "Topology" header label + sunken border,
     // matching the look of the original panel.
@@ -253,16 +253,16 @@ void MainWindow::setupTopologyPanel()
     lay->addWidget(m_workerTree);
 
     connect(m_workerTree, &QTreeWidget::currentItemChanged,
-            this, &MainWindow::onWorkerTreeSelectionChanged);
+            this, &QtMainWindow::onWorkerTreeSelectionChanged);
 }
 
-void MainWindow::setupTabs()
+void QtMainWindow::setupTabs()
 {
-    m_pageSetup   = new PageSetup(m_engine);
-    m_pageNetwork = new PageNetwork(m_engine);
-    m_pageAccess  = new PageAccess(m_engine);
-    m_pageDisplay = new PageDisplay(m_engine);
-    m_pageResults = new PageResults(m_engine);
+    m_pageSetup   = new QtPageSetup(m_engine);
+    m_pageNetwork = new QtPageNetwork(m_engine);
+    m_pageAccess  = new QtPageAccess(m_engine);
+    m_pageDisplay = new QtPageDisplay(m_engine);
+    m_pageResults = new QtPageResults(m_engine);
 
     m_tabs = new QTabWidget;
     // Tab order and names match the original exactly:
@@ -282,22 +282,22 @@ void MainWindow::setupTabs()
     setCentralWidget(m_splitter);
 
     // Forward engine signals to pages
-    connect(m_engine, &IometerEngine::resultsUpdated,
-            m_pageDisplay, &PageDisplay::updateResults);
-    connect(m_engine, &IometerEngine::testStarted,
-            m_pageDisplay, &PageDisplay::onTestStarted);
-    connect(m_engine, &IometerEngine::testStopped,
-            m_pageDisplay, &PageDisplay::onTestStopped);
+    connect(m_engine, &QtIometerEngine::resultsUpdated,
+            m_pageDisplay, &QtPageDisplay::updateResults);
+    connect(m_engine, &QtIometerEngine::testStarted,
+            m_pageDisplay, &QtPageDisplay::onTestStarted);
+    connect(m_engine, &QtIometerEngine::testStopped,
+            m_pageDisplay, &QtPageDisplay::onTestStopped);
     // BigMeter "Next >>" = advance to next spec (same as toolbar Stop)
-    connect(m_pageDisplay, &PageDisplay::nextSpecRequested,
-            this,          &MainWindow::onStop);
-    connect(m_engine, &IometerEngine::managerConnected,
-            m_pageNetwork, &PageNetwork::onManagerConnected);
-    connect(m_engine, &IometerEngine::managerDisconnected,
-            m_pageNetwork, &PageNetwork::onManagerDisconnected);
+    connect(m_pageDisplay, &QtPageDisplay::nextSpecRequested,
+            this,          &QtMainWindow::onStop);
+    connect(m_engine, &QtIometerEngine::managerConnected,
+            m_pageNetwork, &QtPageNetwork::onManagerConnected);
+    connect(m_engine, &QtIometerEngine::managerDisconnected,
+            m_pageNetwork, &QtPageNetwork::onManagerDisconnected);
 }
 
-void MainWindow::setupStatusBar()
+void QtMainWindow::setupStatusBar()
 {
     m_statusLeft  = new QLabel("Ready");
     m_statusRight = new QLabel("0 workers | 0 managers");
@@ -309,7 +309,7 @@ void MainWindow::setupStatusBar()
 // Topology tree
 // -----------------------------------------------------------------------------
 
-void MainWindow::rebuildWorkerTree()
+void QtMainWindow::rebuildWorkerTree()
 {
     // Save current selection so we can restore it after the rebuild.
     // m_workerTree->clear() fires currentItemChanged with no item, which would
@@ -397,7 +397,7 @@ void MainWindow::rebuildWorkerTree()
         onWorkerTreeSelectionChanged();            // nothing to restore - notify pages
 }
 
-void MainWindow::onWorkerTreeSelectionChanged()
+void QtMainWindow::onWorkerTreeSelectionChanged()
 {
     auto *item = m_workerTree->currentItem();
     if (!item) {
@@ -433,7 +433,7 @@ void MainWindow::onWorkerTreeSelectionChanged()
     updateTopologyButtons();
 }
 
-void MainWindow::updateTopologyButtons()
+void QtMainWindow::updateTopologyButtons()
 {
     if (m_running) return;   // all topology buttons disabled while running
 
@@ -458,7 +458,7 @@ void MainWindow::updateTopologyButtons()
 // Toolbar / menu actions
 // -----------------------------------------------------------------------------
 
-void MainWindow::onNew()
+void QtMainWindow::onNew()
 {
     if (m_running) {
         QMessageBox::warning(this, "Test Running",
@@ -469,7 +469,7 @@ void MainWindow::onNew()
     setWindowTitle(QString("Iometer 1.1.0 [Built: %1 %2]").arg(__DATE__, __TIME__));
 }
 
-void MainWindow::onOpen()
+void QtMainWindow::onOpen()
 {
     if (m_running) {
         QMessageBox::warning(this, "Test Running",
@@ -485,7 +485,7 @@ void MainWindow::onOpen()
         setWindowTitle("Iometer -- " + path);
 }
 
-void MainWindow::onSave()
+void QtMainWindow::onSave()
 {
     const QString path = QFileDialog::getSaveFileName(
         this, "Save ICF File", {}, "Iometer Config (*.icf);;All Files (*)");
@@ -496,7 +496,7 @@ void MainWindow::onSave()
         setWindowTitle("Iometer -- " + path);
 }
 
-void MainWindow::onStart()
+void QtMainWindow::onStart()
 {
     if (m_running) return;
 
@@ -543,21 +543,21 @@ void MainWindow::onStart()
     m_engine->startTest();
 }
 
-void MainWindow::onStop()
+void QtMainWindow::onStop()
 {
     // Stop = end current spec and advance to next (like the original).
     m_specAdvancing = true;
     m_engine->stopTest();
 }
 
-void MainWindow::onStopAll()
+void QtMainWindow::onStopAll()
 {
     // Stop All = abort everything, do not advance.
     m_specAdvancing = false;
     m_engine->stopAll();
 }
 
-void MainWindow::onNewDynamo()
+void QtMainWindow::onNewDynamo()
 {
     // Launch Dynamo.exe from the same directory.
     // With no arguments Dynamo connects back to localhost:1066.
@@ -572,7 +572,7 @@ void MainWindow::onNewDynamo()
     }
 }
 
-void MainWindow::onNewDiskWorker()
+void QtMainWindow::onNewDiskWorker()
 {
     if (m_selManagerName.isEmpty()) return;
 
@@ -593,7 +593,7 @@ void MainWindow::onNewDiskWorker()
     m_engine->addWorker(m_selManagerName, w);
 }
 
-void MainWindow::onNewNetWorker()
+void QtMainWindow::onNewNetWorker()
 {
     if (m_selManagerName.isEmpty()) return;
 
@@ -613,7 +613,7 @@ void MainWindow::onNewNetWorker()
     m_engine->addWorker(m_selManagerName, w);
 }
 
-void MainWindow::onCopyWorker()
+void QtMainWindow::onCopyWorker()
 {
     if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
 
@@ -631,7 +631,7 @@ void MainWindow::onCopyWorker()
     }
 }
 
-void MainWindow::onExitOne()
+void QtMainWindow::onExitOne()
 {
     if (m_selManagerName.isEmpty()) return;
 
@@ -666,7 +666,7 @@ void MainWindow::onExitOne()
     }
 }
 
-void MainWindow::onAbout()
+void QtMainWindow::onAbout()
 {
     QMessageBox::about(this, "About Iometer Qt GUI",
         "<h2>Iometer 1.1.0 Qt GUI</h2>"
@@ -681,14 +681,14 @@ void MainWindow::onAbout()
 // Engine signal handlers
 // -----------------------------------------------------------------------------
 
-void MainWindow::onTestStarted()
+void QtMainWindow::onTestStarted()
 {
     setRunningState(true);
     m_tabs->setCurrentIndex(3);   // jump to Results Display
     m_statusLeft->setText("Test running...");
 }
 
-void MainWindow::onTestStopped()
+void QtMainWindow::onTestStopped()
 {
     // Check if we should advance to the next spec in the run queue
     const int nextIdx = m_runQueueIdx + 1;
@@ -719,7 +719,7 @@ void MainWindow::onTestStopped()
     }
 }
 
-void MainWindow::onResultsUpdated(QVector<WorkerResult> results)
+void QtMainWindow::onResultsUpdated(QVector<WorkerResult> results)
 {
     for (const auto &r : results) {
         if (r.isAggregate) {
@@ -756,25 +756,25 @@ void MainWindow::onResultsUpdated(QVector<WorkerResult> results)
     }
 }
 
-void MainWindow::onStatusMessage(QString msg) { m_statusLeft->setText(msg); }
+void QtMainWindow::onStatusMessage(QString msg) { m_statusLeft->setText(msg); }
 
-void MainWindow::onManagerConnected(ManagerInfo)
+void QtMainWindow::onManagerConnected(ManagerInfo)
 {
     rebuildWorkerTree();
     m_pageSetup->refreshForEngine();
     m_pageDisplay->refreshWorkerAssignments();
 }
 
-void MainWindow::onManagerDisconnected(QString) { rebuildWorkerTree(); }
+void QtMainWindow::onManagerDisconnected(QString) { rebuildWorkerTree(); }
 
-void MainWindow::onConfigChanged()
+void QtMainWindow::onConfigChanged()
 {
     rebuildWorkerTree();
     m_pageAccess->loadSpecList();
     updateTopologyButtons();
 }
 
-void MainWindow::setRunningState(bool running)
+void QtMainWindow::setRunningState(bool running)
 {
     m_running = running;
 
@@ -803,7 +803,7 @@ void MainWindow::setRunningState(bool running)
         updateTopologyButtons();
 }
 
-void MainWindow::closeEvent(QCloseEvent *event)
+void QtMainWindow::closeEvent(QCloseEvent *event)
 {
     if (m_running) {
         const auto btn = QMessageBox::question(

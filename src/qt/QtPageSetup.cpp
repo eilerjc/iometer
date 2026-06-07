@@ -1,6 +1,6 @@
-// PageSetup.cpp -- "Disk Targets" tab
-#include "PageSetup.h"
-#include "IometerEngine.h"
+// QtPageSetup.cpp -- "Disk Targets" tab
+#include "QtPageSetup.h"
+#include "QtIometerEngine.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGroupBox>
@@ -45,20 +45,20 @@ static QIcon makeUnpreparedDiskIcon()
 
 // =============================================================================
 
-PageSetup::PageSetup(IometerEngine *engine, QWidget *parent)
+QtPageSetup::QtPageSetup(QtIometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
-    connect(engine, &IometerEngine::configChanged,       this, &PageSetup::refreshForEngine);
-    connect(engine, &IometerEngine::managerConnected,    this, [this](const ManagerInfo&){ refreshForEngine(); });
-    connect(engine, &IometerEngine::managerDisconnected, this, [this](const QString&){ refreshForEngine(); });
+    connect(engine, &QtIometerEngine::configChanged,       this, &QtPageSetup::refreshForEngine);
+    connect(engine, &QtIometerEngine::managerConnected,    this, [this](const ManagerInfo&){ refreshForEngine(); });
+    connect(engine, &QtIometerEngine::managerDisconnected, this, [this](const QString&){ refreshForEngine(); });
 }
 
 // =============================================================================
 // UI construction -- matches the original Disk Targets tab layout
 // =============================================================================
 
-void PageSetup::setupUi()
+void QtPageSetup::setupUi()
 {
     auto *root = new QHBoxLayout(this);
     root->setContentsMargins(6, 6, 6, 6);
@@ -160,32 +160,32 @@ void PageSetup::setupUi()
 
     // ---- Connections --------------------------------------------------------
     connect(m_targetList,   &QListWidget::itemChanged,
-            this, &PageSetup::onTargetItemChanged);
+            this, &QtPageSetup::onTargetItemChanged);
     connect(m_queueDepth,   QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &PageSetup::onQueueDepthChanged);
+            this, &QtPageSetup::onQueueDepthChanged);
     connect(m_maxDiskSize,  QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &PageSetup::onMaxDiskSizeChanged);
+            this, &QtPageSetup::onMaxDiskSizeChanged);
     connect(m_startSector,  QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &PageSetup::onStartSectorChanged);
+            this, &QtPageSetup::onStartSectorChanged);
     connect(m_fixedSeedChk, &QCheckBox::toggled,
-            this, &PageSetup::onFixedSeedToggled);
+            this, &QtPageSetup::onFixedSeedToggled);
     connect(m_fixedSeedEdit, &QLineEdit::editingFinished,
-            this, &PageSetup::onFixedSeedValueChanged);
+            this, &QtPageSetup::onFixedSeedValueChanged);
     connect(m_connRateChk,  &QCheckBox::toggled,
-            this, &PageSetup::onConnRateToggled);
+            this, &QtPageSetup::onConnRateToggled);
     connect(m_transPerConn, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &PageSetup::onTransPerConnChanged);
+            this, &QtPageSetup::onTransPerConnChanged);
     connect(m_dataPattern,  QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &PageSetup::onDataPatternChanged);
+            this, &QtPageSetup::onDataPatternChanged);
 
     setParamsEnabled(false);
 }
 
 // =============================================================================
-// Selection control (called by MainWindow::onWorkerTreeSelectionChanged)
+// Selection control (called by QtMainWindow::onWorkerTreeSelectionChanged)
 // =============================================================================
 
-void PageSetup::clearSelection()
+void QtPageSetup::clearSelection()
 {
     m_selManagerName.clear();
     m_selWorkerId.clear();
@@ -193,7 +193,7 @@ void PageSetup::clearSelection()
     setParamsEnabled(false);
 }
 
-void PageSetup::setSelectedManager(const QString &mgrName)
+void QtPageSetup::setSelectedManager(const QString &mgrName)
 {
     m_selManagerName = mgrName;
     m_selWorkerId.clear();
@@ -201,7 +201,7 @@ void PageSetup::setSelectedManager(const QString &mgrName)
     setParamsEnabled(false);
 }
 
-void PageSetup::setSelectedWorker(const QString &mgrName, const QString &workerId)
+void QtPageSetup::setSelectedWorker(const QString &mgrName, const QString &workerId)
 {
     m_selManagerName = mgrName;
     m_selWorkerId    = workerId;
@@ -210,7 +210,7 @@ void PageSetup::setSelectedWorker(const QString &mgrName, const QString &workerI
     setParamsEnabled(true);
 }
 
-void PageSetup::refreshForEngine()
+void QtPageSetup::refreshForEngine()
 {
     // Re-populate with the current selection intact (e.g. after manager connects)
     if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty())
@@ -225,7 +225,7 @@ void PageSetup::refreshForEngine()
 // Internal helpers
 // =============================================================================
 
-void PageSetup::populateTargetList()
+void QtPageSetup::populateTargetList()
 {
     m_updating = true;
     m_targetList->clear();
@@ -290,7 +290,7 @@ void PageSetup::populateTargetList()
     m_updating = false;
 }
 
-void PageSetup::loadWorkerParams()
+void QtPageSetup::loadWorkerParams()
 {
     if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     m_updating = true;
@@ -315,7 +315,7 @@ void PageSetup::loadWorkerParams()
     m_updating = false;
 }
 
-void PageSetup::saveWorkerParams()
+void QtPageSetup::saveWorkerParams()
 {
     if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     for (const auto &mgr : m_engine->managers()) {
@@ -336,7 +336,7 @@ void PageSetup::saveWorkerParams()
     }
 }
 
-void PageSetup::setParamsEnabled(bool enabled)
+void QtPageSetup::setParamsEnabled(bool enabled)
 {
     m_maxDiskSize->setEnabled(enabled);
     m_startSector->setEnabled(enabled);
@@ -352,7 +352,7 @@ void PageSetup::setParamsEnabled(bool enabled)
 // Slots
 // =============================================================================
 
-void PageSetup::onTargetItemChanged(QListWidgetItem *item)
+void QtPageSetup::onTargetItemChanged(QListWidgetItem *item)
 {
     if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     if (!item) return;
@@ -377,23 +377,23 @@ void PageSetup::onTargetItemChanged(QListWidgetItem *item)
     }
 }
 
-void PageSetup::onQueueDepthChanged(int)    { saveWorkerParams(); }
-void PageSetup::onMaxDiskSizeChanged(int)   { saveWorkerParams(); }
-void PageSetup::onStartSectorChanged(int)   { saveWorkerParams(); }
+void QtPageSetup::onQueueDepthChanged(int)    { saveWorkerParams(); }
+void QtPageSetup::onMaxDiskSizeChanged(int)   { saveWorkerParams(); }
+void QtPageSetup::onStartSectorChanged(int)   { saveWorkerParams(); }
 
-void PageSetup::onFixedSeedToggled(bool checked)
+void QtPageSetup::onFixedSeedToggled(bool checked)
 {
     m_fixedSeedEdit->setEnabled(checked);
     saveWorkerParams();
 }
 
-void PageSetup::onFixedSeedValueChanged()   { saveWorkerParams(); }
+void QtPageSetup::onFixedSeedValueChanged()   { saveWorkerParams(); }
 
-void PageSetup::onConnRateToggled(bool checked)
+void QtPageSetup::onConnRateToggled(bool checked)
 {
     m_transPerConn->setEnabled(checked);
     saveWorkerParams();
 }
 
-void PageSetup::onTransPerConnChanged(int)  { saveWorkerParams(); }
-void PageSetup::onDataPatternChanged(int)   { saveWorkerParams(); }
+void QtPageSetup::onTransPerConnChanged(int)  { saveWorkerParams(); }
+void QtPageSetup::onDataPatternChanged(int)   { saveWorkerParams(); }

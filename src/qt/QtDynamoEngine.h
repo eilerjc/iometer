@@ -1,8 +1,8 @@
-// DynamoEngine.h - Real Iometer engine: TCP server on port 1066 + Dynamo protocol
+// QtDynamoEngine.h - Real Iometer engine: TCP server on port 1066 + Dynamo protocol
 #pragma once
 
-#include "IometerEngine.h"
-#include "DyProto.h"
+#include "QtIometerEngine.h"
+#include "QtDyProto.h"
 #include "../core/WorkerPool.h"
 #include "../core/TestRunner.h"
 #include <QObject>
@@ -15,9 +15,9 @@ class QTcpServer;
 class QTcpSocket;
 
 // -----------------------------------------------------------------------------
-// DySession - manages the protocol exchange with one connected Dynamo instance
+// QtDySession - manages the protocol exchange with one connected Dynamo instance
 // -----------------------------------------------------------------------------
-class DySession : public QObject
+class QtDySession : public QObject
 {
     Q_OBJECT
 
@@ -47,8 +47,8 @@ public:
         Disconnected
     };
 
-    explicit DySession(QTcpSocket *loginSocket, QObject *parent = nullptr);
-    ~DySession() override;
+    explicit QtDySession(QTcpSocket *loginSocket, QObject *parent = nullptr);
+    ~QtDySession() override;
 
     State    state()       const { return m_state; }
     QString  managerName() const { return m_managerName; }
@@ -81,7 +81,7 @@ public:
         return infos;
     }
 
-    // -- Test control (called by DynamoEngine after state==Ready) -------------
+    // -- Test control (called by QtDynamoEngine after state==Ready) -------------
     void startTest(const QList<WorkerInfo> &workers, const QList<AccessSpec> &specs);
     void stopTest();
     void stopAll();
@@ -90,10 +90,10 @@ public:
     const QVector<WorkerResult>& pendingResults() const { return m_pendingResults; }
 
 signals:
-    void managerConnected(DySession *self);
-    void managerDisconnected(DySession *self);
-    void resultsReady(DySession *self);
-    void errorOccurred(DySession *self, const QString &msg);
+    void managerConnected(QtDySession *self);
+    void managerDisconnected(QtDySession *self);
+    void resultsReady(QtDySession *self);
+    void errorOccurred(QtDySession *self, const QString &msg);
 
 private slots:
     void onLoginData();
@@ -180,22 +180,22 @@ private:
 };
 
 // -----------------------------------------------------------------------------
-// DynamoEngine - IometerEngine implementation backed by real Dynamo processes
+// QtDynamoEngine - QtIometerEngine implementation backed by real Dynamo processes
 // Uses WorkerPool to manage manager/worker lifecycle
 // -----------------------------------------------------------------------------
 
 class WorkerPool;  // Forward declaration
 
-class DynamoEngine : public IometerEngine
+class QtDynamoEngine : public QtIometerEngine
 {
     Q_OBJECT
 
 public:
     // startListening=false skips binding port 1066 (used by unit tests)
-    explicit DynamoEngine(bool startListening = true, QObject *parent = nullptr);
-    ~DynamoEngine() override;
+    explicit QtDynamoEngine(bool startListening = true, QObject *parent = nullptr);
+    ~QtDynamoEngine() override;
 
-    // -- IometerEngine interface -----------------------------------------------
+    // -- QtIometerEngine interface -----------------------------------------------
     void startTest() override;
     void stopTest()  override;
     void stopAll()   override;
@@ -237,17 +237,17 @@ public:
 
 private slots:
     void onNewConnection();
-    void onSessionConnected(DySession *s);
-    void onSessionDisconnected(DySession *s);
-    void onSessionResults(DySession *s);
-    void onSessionError(DySession *s, const QString &msg);
+    void onSessionConnected(QtDySession *s);
+    void onSessionDisconnected(QtDySession *s);
+    void onSessionResults(QtDySession *s);
+    void onSessionError(QtDySession *s, const QString &msg);
 
 private:
     void rebuildManagers();
     void computeAggregate();
 
     QTcpServer                *m_server        = nullptr;
-    QList<DySession*>         m_sessions;
+    QList<QtDySession*>         m_sessions;
     WorkerPool                m_workerPool;   // core domain model (manager/worker lifecycle)
     TestRunner                m_testRunner;   // core domain model (test state machine)
     QList<AccessSpec>         m_specs;

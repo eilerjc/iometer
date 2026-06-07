@@ -1,4 +1,4 @@
-// tst_mainwindow.cpp — Tests for MainWindow
+// tst_mainwindow.cpp — Tests for QtMainWindow
 // Verifies main window construction, menu/toolbar actions, and state transitions.
 #include <QObject>
 #include <QTest>
@@ -6,8 +6,8 @@
 #include <QTreeWidget>
 #include <QTabWidget>
 #include <QStatusBar>
-#include "MainWindow.h"
-#include "DemoEngine.h"
+#include "QtMainWindow.h"
+#include "QtDemoEngine.h"
 
 class MainWindowTest : public QObject
 {
@@ -16,23 +16,23 @@ private slots:
 
     // ── Construction ─────────────────────────────────────────────────────────
     void construct_withDemoEngine() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
         QVERIFY(!win.isVisible());
         QVERIFY(win.windowTitle().length() > 0);
     }
 
     void construct_multipleInstances() {
-        DemoEngine engine1, engine2;
-        MainWindow win1(&engine1);
-        MainWindow win2(&engine2);
+        QtDemoEngine engine1, engine2;
+        QtMainWindow win1(&engine1);
+        QtMainWindow win2(&engine2);
         QVERIFY(true);
     }
 
     // ── Toolbar / Menu actions (by name) ────────────────────────────────────
     void toolbar_hasActions() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         // Count actions in toolbar — just verify there are some
         const auto actions = win.findChildren<QAction *>();
@@ -40,8 +40,8 @@ private slots:
     }
 
     void toolbar_newDynamo_action() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         // Find "New Dynamo" action by text
         const auto actions = win.findChildren<QAction *>();
@@ -60,10 +60,10 @@ private slots:
 
     // ── Topology tree ────────────────────────────────────────────────────────
     void topologyTree_hasItems() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
-        // The topology panel should be populated with the DemoEngine's managers/workers.
+        // The topology panel should be populated with the QtDemoEngine's managers/workers.
         // findChildren also returns empty trees embedded in child pages, so check
         // that *some* tree carries the "All Managers" root built at construction.
         const auto treeWidgets = win.findChildren<QTreeWidget *>();
@@ -78,8 +78,8 @@ private slots:
 
     // ── Tabs ────────────────────────────────────────────────────────────────
     void tabs_exists() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         const auto tabWidgets = win.findChildren<QTabWidget *>();
         QVERIFY(tabWidgets.count() > 0);  // should have tab widget with Setup, Access, etc.
@@ -92,8 +92,8 @@ private slots:
 
     // ── StatusBar ────────────────────────────────────────────────────────────
     void statusBar_exists() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         // StatusBar should show status messages
         QVERIFY(win.statusBar() != nullptr);
@@ -101,8 +101,8 @@ private slots:
 
     // ── Engine signal handling ───────────────────────────────────────────────
     void engineSignals_statusMessage() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         // Emit a status message from the engine; window should handle it
         emit engine.statusMessage("Test message");
@@ -111,8 +111,8 @@ private slots:
     }
 
     void engineSignals_testStarted() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         emit engine.testStarted();
 
@@ -120,8 +120,8 @@ private slots:
     }
 
     void engineSignals_testStopped() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         emit engine.testStopped();
 
@@ -129,8 +129,8 @@ private slots:
     }
 
     void engineSignals_resultsUpdated() {
-        DemoEngine engine;
-        MainWindow win(&engine);
+        QtDemoEngine engine;
+        QtMainWindow win(&engine);
 
         // Simulate results update
         QVector<WorkerResult> results;

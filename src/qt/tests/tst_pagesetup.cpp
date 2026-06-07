@@ -1,9 +1,9 @@
-// tst_pagesetup.cpp — Tests for PageSetup widget
+// tst_pagesetup.cpp — Tests for QtPageSetup widget
 // Verifies target list, worker params, and state management.
 #include <QObject>
 #include <QTest>
-#include "PageSetup.h"
-#include "DemoEngine.h"
+#include "QtPageSetup.h"
+#include "QtDemoEngine.h"
 
 class PageSetupTest : public QObject
 {
@@ -11,21 +11,21 @@ class PageSetupTest : public QObject
 private slots:
 
     void construct_withDemoEngine() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         QVERIFY(!page.isVisible());
     }
 
     void clearSelection() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         page.clearSelection();
         QVERIFY(true);
     }
 
     void setSelectedManager_valid() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
         page.setSelectedManager(QString::fromStdString(managers[0].name));
@@ -33,22 +33,22 @@ private slots:
     }
 
     void setSelectedManager_invalid() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         page.setSelectedManager("NonExistent");
         QVERIFY(true);
     }
 
     void setSelectedManager_empty() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         page.setSelectedManager("");
         QVERIFY(true);
     }
 
     void setSelectedWorker_valid() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
         const auto &mgr = managers[0];
@@ -58,8 +58,8 @@ private slots:
     }
 
     void setSelectedWorker_invalidWorker() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
         page.setSelectedWorker(QString::fromStdString(managers[0].name), "InvalidWorkerID");
@@ -67,22 +67,22 @@ private slots:
     }
 
     void setSelectedWorker_invalidManager() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         page.setSelectedWorker("InvalidMgr", "InvalidWorker");
         QVERIFY(true);
     }
 
     void refreshForEngine() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         page.refreshForEngine();
         QVERIFY(true);
     }
 
     void refreshForEngine_afterSelection() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         const auto managers = engine.managers();
         if (!managers.isEmpty() && !managers[0].workers.empty()) {
             page.setSelectedWorker(QString::fromStdString(managers[0].name), QString::fromStdString(managers[0].workers[0].id));
@@ -92,8 +92,8 @@ private slots:
     }
 
     void stateTransitions() {
-        DemoEngine engine;
-        PageSetup page(&engine);
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
         const auto managers = engine.managers();
         QVERIFY(!managers.isEmpty());
 

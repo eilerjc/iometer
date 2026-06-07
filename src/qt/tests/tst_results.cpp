@@ -7,7 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QTextStream>
-#include "DynamoEngine.h"
+#include "QtDynamoEngine.h"
 
 // Helper: build a minimal WorkerResult
 static WorkerResult makeResult(const QString &manager, const QString &worker,
@@ -66,7 +66,7 @@ private slots:
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open());
         tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         QFile f(tmp.fileName());
         QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
         bool found = false;
@@ -82,7 +82,7 @@ private slots:
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open());
         tmp.close();
-        QVERIFY(DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{}));
+        QVERIFY(QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{}));
         QVERIFY(QFile::exists(tmp.fileName()));
         QVERIFY(QFileInfo(tmp.fileName()).size() > 0);
     }
@@ -94,7 +94,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList fields = parseAllRow(tmp.fileName());
         QVERIFY2(!fields.isEmpty(), "No ALL row found");
         QCOMPARE(fields[0].trimmed(), QString("ALL"));
@@ -107,7 +107,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(f.size() > 6);
         QCOMPARE(f[6].trimmed().toDouble(), testIops);
@@ -120,7 +120,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(f.size() > 12);
         QCOMPARE(f[12].trimmed().toDouble(), testMbps);
@@ -132,7 +132,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(f.size() > 27);
         QCOMPARE(f[27].trimmed().toInt(), 0);
@@ -144,7 +144,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(f.size() > 27);
         QCOMPARE(f[27].trimmed().toInt(), 42);
@@ -158,7 +158,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(f.size() > 6);
         QCOMPARE(f[6].trimmed().toDouble(), 25000.0);
@@ -172,7 +172,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(f.size() > 3);
         QCOMPARE(f[3].trimmed().toInt(), 3); // workers field
@@ -185,7 +185,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(f.size() > 6);
         // The recomputed aggregate should be 1000 (w1 only), not 9999
@@ -197,7 +197,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        QVERIFY(DynamoEngine::writeBatchResultsCsv(tmp.fileName(), {}, TestConfig{}));
+        QVERIFY(QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), {}, TestConfig{}));
         const QStringList f = parseAllRow(tmp.fileName());
         QVERIFY(!f.isEmpty());
         QCOMPARE(f[6].trimmed().toDouble(), 0.0); // IOps = 0
@@ -211,7 +211,7 @@ private slots:
         QTemporaryFile tmp;
         tmp.setFileTemplate(QDir::tempPath() + "/iometer_XXXXXX.csv");
         QVERIFY(tmp.open()); tmp.close();
-        DynamoEngine::writeBatchResultsCsv(tmp.fileName(), {}, cfg);
+        QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), {}, cfg);
         QFile f(tmp.fileName());
         QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
         const QString content = QString::fromUtf8(f.readAll());

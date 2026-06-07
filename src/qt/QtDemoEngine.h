@@ -1,18 +1,18 @@
-// DemoEngine.h -- Simulated Iometer engine for UI testing.
+// QtDemoEngine.h -- Simulated Iometer engine for UI testing.
 //
 // Generates realistic-looking I/O statistics for multiple fake workers
 // without requiring a real Dynamo instance.
 #pragma once
 
-#include "IometerEngine.h"
+#include "QtIometerEngine.h"
 #include <QTimer>
 
-class DemoEngine : public IometerEngine
+class QtDemoEngine : public QtIometerEngine
 {
     Q_OBJECT
 
 public:
-    explicit DemoEngine(QObject *parent = nullptr);
+    explicit QtDemoEngine(QObject *parent = nullptr);
 
     void startTest()            override;
     void stopTest()             override;

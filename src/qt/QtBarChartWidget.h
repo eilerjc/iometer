@@ -1,19 +1,19 @@
-// BarChartWidget.h - Horizontal performance bar chart, one worker/metric slot.
+// QtBarChartWidget.h - Horizontal performance bar chart, one worker/metric slot.
 // Equivalent to CBargraph in the MFC GUI.
 #pragma once
 
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QWidget>
 #include <QComboBox>
 #include <QLabel>
 #include <QString>
 
-class BarChartWidget : public QWidget
+class QtBarChartWidget : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit BarChartWidget(QWidget *parent = nullptr);
+    explicit QtBarChartWidget(QWidget *parent = nullptr);
 
     // Assign a worker to this chart slot
     void setWorker(const QString &managerName, const QString &workerName);

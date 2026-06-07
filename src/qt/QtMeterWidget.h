@@ -1,11 +1,11 @@
-// MeterWidget.h
+// QtMeterWidget.h
 // Qt port of CMeterCtrl - the Iometer speedometer gauge control.
 //
 // Drop-in replacement geometry: same NEEDLE_SWEEP, PIVOT_ARC_ANGLE, and
 // CalculatePoint() math as the original MFC control, rewritten with QPainter.
 //
 // Usage:
-//   MeterWidget *m = new MeterWidget(parent);
+//   QtMeterWidget *m = new QtMeterWidget(parent);
 //   m->setRange(0, 100, /*autoRange=*/true);
 //   m->setValue(42.0);
 //   m->showWatermark = true;
@@ -17,12 +17,12 @@
 #include <QString>
 #include <vector>
 
-class MeterWidget : public QWidget
+class QtMeterWidget : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit MeterWidget(QWidget *parent = nullptr);
+    explicit QtMeterWidget(QWidget *parent = nullptr);
 
     // -- API matching CMeterCtrl -------------------------------------------
     void setRange(int range1, int range2, bool autoRange = false);

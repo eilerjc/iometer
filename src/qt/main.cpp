@@ -1,8 +1,8 @@
 // main.cpp - Iometer Qt entry point
 //
 // GUI mode (default):
-//   IometerQt.exe            → DynamoEngine, full GUI
-//   IometerQt.exe --demo     → DemoEngine, simulated data, no Dynamo
+//   IometerQt.exe            → QtDynamoEngine, full GUI
+//   IometerQt.exe --demo     → QtDemoEngine, simulated data, no Dynamo
 //
 // Batch mode (backwards compatible with original IOmeter.exe /c /r /t flags):
 //   IometerQt.exe /c config.icf /r results.csv /t 60
@@ -12,9 +12,9 @@
 //   runs the test for the duration specified in the ICF, writes results.csv
 //   in the original format, then exits 0 on success or 1 on failure.
 //
-#include "MainWindow.h"
-#include "DemoEngine.h"
-#include "DynamoEngine.h"
+#include "QtMainWindow.h"
+#include "QtDemoEngine.h"
+#include "QtDynamoEngine.h"
 #include <QApplication>
 #include <QCoreApplication>
 #include <QFont>
@@ -50,7 +50,7 @@ static int batchMain(const QString &icfFile,
                      int loginTimeoutSec)
 {
     // QCoreApplication is already set up by the caller.
-    DynamoEngine engine;
+    QtDynamoEngine engine;
 
     if (!engine.loadConfig(icfFile)) {
         qCritical("Batch: cannot open ICF file: %s", qPrintable(icfFile));
@@ -73,7 +73,7 @@ static int batchMain(const QString &icfFile,
     bool success = false;
 
     QObject::connect(
-        &engine, &IometerEngine::managerConnected,
+        &engine, &QtIometerEngine::managerConnected,
         [&](ManagerInfo) {
             qInfo("Batch: Dynamo connected. Configuring test...");
 
@@ -118,11 +118,11 @@ static int batchMain(const QString &icfFile,
 
             qInfo("Batch: Starting test (%d ms)...", runMs);
             engine.startTest();
-            QTimer::singleShot(runMs, &engine, &IometerEngine::stopTest);
+            QTimer::singleShot(runMs, &engine, &QtIometerEngine::stopTest);
         });
 
     QObject::connect(
-        &engine, &IometerEngine::testStopped,
+        &engine, &QtIometerEngine::testStopped,
         [&]() {
             qInfo("Batch: Test complete. Writing results to %s", qPrintable(resultsFile));
             success = engine.saveBatchResults(resultsFile);
@@ -163,18 +163,18 @@ static int guiMain(int argc, char *argv[])
     parser.addVersionOption();
 
     QCommandLineOption demoOpt("demo",
-        "Use simulated DemoEngine instead of connecting to Dynamo.exe");
+        "Use simulated QtDemoEngine instead of connecting to Dynamo.exe");
     parser.addOption(demoOpt);
     parser.process(app);
 
-    IometerEngine *engine = nullptr;
+    QtIometerEngine *engine = nullptr;
     if (parser.isSet(demoOpt)) {
-        engine = new DemoEngine;
+        engine = new QtDemoEngine;
     } else {
-        engine = new DynamoEngine;
+        engine = new QtDynamoEngine;
     }
 
-    MainWindow win(engine);
+    QtMainWindow win(engine);
     win.show();
 
     const int ret = app.exec();
@@ -185,7 +185,7 @@ static int guiMain(int argc, char *argv[])
 // ---------------------------------------------------------------------------
 // ICF validation mode (--validate-icf <file>)
 //
-// Loads an ICF through the DemoEngine (the synthetic "test" engine — no real
+// Loads an ICF through the QtDemoEngine (the synthetic "test" engine — no real
 // Dynamo, no elevation, deterministic) and checks the parsed configuration is
 // sane: a positive run time and at least one access spec. Used by the smoke
 // test to exercise the full set of fixture ICFs end-to-end through the shipped
@@ -193,7 +193,7 @@ static int guiMain(int argc, char *argv[])
 // ---------------------------------------------------------------------------
 static int validateIcfMain(const QString &icfFile)
 {
-    DemoEngine engine;   // test-data engine: parses ICF, no socket / no elevation
+    QtDemoEngine engine;   // test-data engine: parses ICF, no socket / no elevation
     if (!engine.loadConfig(icfFile)) {
         qCritical("validate-icf: FAILED to load '%s'", qPrintable(icfFile));
         return 1;

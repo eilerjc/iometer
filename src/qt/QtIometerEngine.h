@@ -1,21 +1,21 @@
-// IometerEngine.h -- Abstract interface between the Qt GUI and the I/O engine.
+// QtIometerEngine.h -- Abstract interface between the Qt GUI and the I/O engine.
 //
 // The GUI binds to this interface exclusively; concrete implementations are
-// DemoEngine (simulated data) and DynamoEngine (real Dynamo.exe).
+// QtDemoEngine (simulated data) and QtDynamoEngine (real Dynamo.exe).
 #pragma once
 
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QObject>
 #include <QVector>
 #include <QList>
 
-class IometerEngine : public QObject
+class QtIometerEngine : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit IometerEngine(QObject *parent = nullptr) : QObject(parent) {}
-    virtual ~IometerEngine() = default;
+    explicit QtIometerEngine(QObject *parent = nullptr) : QObject(parent) {}
+    virtual ~QtIometerEngine() = default;
 
     // ---- Test control -------------------------------------------------------
     virtual void startTest()          = 0;

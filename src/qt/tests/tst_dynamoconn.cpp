@@ -1,14 +1,14 @@
 // tst_dynamoconn.cpp — Unit tests for the core DynamoConnection.
 //
 // DynamoConnection is currently a platform-agnostic stub (the real socket I/O
-// lives in the Qt DySession). These tests pin its observable contract — state
+// lives in the Qt QtDySession). These tests pin its observable contract — state
 // transitions, the guard on sendMessage, default port, and the disconnect
 // callback — so the behaviour can't silently regress when real socket handling
 // is added later.
 #include <QObject>
 #include <QTest>
 #include "../core/DynamoConnection.h"
-#include "../DyProto.h"   // complete DyMsg for sendMessage()
+#include "../QtDyProto.h"   // complete DyMsg for sendMessage()
 
 using State = DynamoConnection::State;
 

@@ -1,6 +1,6 @@
-// DynamoEngine.cpp
-#include "DynamoEngine.h"
-#include "IometerEngine.h"
+// QtDynamoEngine.cpp
+#include "QtDynamoEngine.h"
+#include "QtIometerEngine.h"
 #include "../core/ResultsWriter.h"
 #include "../core/IcfFile.h"
 #include <QTcpServer>
@@ -67,17 +67,17 @@ static void accumulateRaw(const DyRawResult &r, double elapsed,
 }
 
 // -----------------------------------------------------------------------------
-// DySession
+// QtDySession
 // -----------------------------------------------------------------------------
 
-DySession::DySession(QTcpSocket *loginSocket, QObject *parent)
+QtDySession::QtDySession(QTcpSocket *loginSocket, QObject *parent)
     : QObject(parent), m_loginSocket(loginSocket)
 {
     // The login socket belongs to us now
     m_loginSocket->setParent(this);
 
     connect(m_loginSocket, &QTcpSocket::readyRead,
-            this, &DySession::onLoginData);
+            this, &QtDySession::onLoginData);
     connect(m_loginSocket, &QTcpSocket::disconnected,
             this, [this]{ m_loginSocket->deleteLater(); m_loginSocket = nullptr; });
 
@@ -87,10 +87,10 @@ DySession::DySession(QTcpSocket *loginSocket, QObject *parent)
 
     // Update timer (starts only when test is running)
     m_updateTimer.setSingleShot(false);
-    connect(&m_updateTimer, &QTimer::timeout, this, &DySession::onUpdateTimer);
+    connect(&m_updateTimer, &QTimer::timeout, this, &QtDySession::onUpdateTimer);
 }
 
-DySession::~DySession()
+QtDySession::~QtDySession()
 {
     m_updateTimer.stop();
     if (m_loginSocket) m_loginSocket->abort();
@@ -99,7 +99,7 @@ DySession::~DySession()
 
 // -- Low-level socket helpers --------------------------------------------------
 
-void DySession::sendMsg(int32_t purpose, int32_t data)
+void QtDySession::sendMsg(int32_t purpose, int32_t data)
 {
     if (!m_mainSocket || m_mainSocket->state() != QAbstractSocket::ConnectedState)
         return;
@@ -109,7 +109,7 @@ void DySession::sendMsg(int32_t purpose, int32_t data)
     m_mainSocket->write(reinterpret_cast<const char*>(&msg), sizeof(msg));
 }
 
-void DySession::sendDataMsg(DyDataMessage *dm)
+void QtDySession::sendDataMsg(DyDataMessage *dm)
 {
     if (!m_mainSocket || m_mainSocket->state() != QAbstractSocket::ConnectedState)
         return;
@@ -118,13 +118,13 @@ void DySession::sendDataMsg(DyDataMessage *dm)
     m_mainSocket->write(reinterpret_cast<const char*>(dm), DY_DATAMSG_SIZE);
 }
 
-bool DySession::consume(int bytes)
+bool QtDySession::consume(int bytes)
 {
     // Append any newly-arrived data into m_buf then check
     return m_buf.size() >= bytes;
 }
 
-QByteArray DySession::take(int bytes)
+QByteArray QtDySession::take(int bytes)
 {
     QByteArray chunk = m_buf.left(bytes);
     m_buf.remove(0, bytes);
@@ -133,7 +133,7 @@ QByteArray DySession::take(int bytes)
 
 // -- Login socket handler ------------------------------------------------------
 
-void DySession::onLoginData()
+void QtDySession::onLoginData()
 {
     // Append whatever arrived
     m_buf += m_loginSocket->readAll();
@@ -146,13 +146,13 @@ void DySession::onLoginData()
     }
 }
 
-void DySession::processLoginMsg()
+void QtDySession::processLoginMsg()
 {
     QByteArray chunk = take(DY_MSG_SIZE);
     const DyMsg *msg = reinterpret_cast<const DyMsg*>(chunk.constData());
 
     if (msg->purpose != DY_LOGIN) {
-        qWarning() << "DySession: expected LOGIN, got" << msg->purpose;
+        qWarning() << "QtDySession: expected LOGIN, got" << msg->purpose;
         m_state = State::Error;
         emit errorOccurred(this, "Unexpected login message");
         return;
@@ -162,7 +162,7 @@ void DySession::processLoginMsg()
     const uint32_t dynVer    = static_cast<uint32_t>(msg->data);
     const uint32_t ourVer    = static_cast<uint32_t>(DY_VERSION);
     if ((dynVer & DY_COMPAT_MASK) != (ourVer & DY_COMPAT_MASK)) {
-        qWarning() << "DySession: version mismatch. Dynamo=" << dynVer
+        qWarning() << "QtDySession: version mismatch. Dynamo=" << dynVer
                    << "Ours=" << ourVer;
         // Send WRONG_VERSION
         DyMsg reply;
@@ -180,13 +180,13 @@ void DySession::processLoginMsg()
     // Will be handled next time onLoginData fires with enough bytes
 }
 
-void DySession::processLoginData()
+void QtDySession::processLoginData()
 {
     QByteArray chunk = take(DY_DATAMSG_SIZE);
     const DyDataMessage *dm = reinterpret_cast<const DyDataMessage*>(chunk.constData());
 
     if (dm->size != DY_DATAMSG_SIZE) {
-        qWarning() << "DySession: Data_Message size mismatch: got" << dm->size
+        qWarning() << "QtDySession: Data_Message size mismatch: got" << dm->size
                    << "expected" << DY_DATAMSG_SIZE;
         // Be lenient - continue anyway (might be a different build)
     }
@@ -198,7 +198,7 @@ void DySession::processLoginData()
     m_timerResolution = mi.timer_resolution > 0.0 ? mi.timer_resolution : 1.0;
     m_processorCount  = mi.processors > 0 ? mi.processors : 1;
 
-    qDebug() << "DySession: login from" << m_managerName
+    qDebug() << "QtDySession: login from" << m_managerName
              << "main port" << m_address << ":" << m_mainPort
              << "processors" << m_processorCount
              << "timer_res" << m_timerResolution;
@@ -211,15 +211,15 @@ void DySession::processLoginData()
     m_loginSocket->flush();
 
     // Login socket is done - disconnect it
-    disconnect(m_loginSocket, &QTcpSocket::readyRead, this, &DySession::onLoginData);
+    disconnect(m_loginSocket, &QTcpSocket::readyRead, this, &QtDySession::onLoginData);
     m_loginSocket->disconnectFromHost();
 
     // Connect back to Dynamo's main port
     m_state      = State::Connecting;
     m_mainSocket = new QTcpSocket(this);
-    connect(m_mainSocket, &QTcpSocket::connected,     this, &DySession::onMainConnected);
-    connect(m_mainSocket, &QTcpSocket::readyRead,     this, &DySession::onMainData);
-    connect(m_mainSocket, &QTcpSocket::disconnected,  this, &DySession::onMainDisconnected);
+    connect(m_mainSocket, &QTcpSocket::connected,     this, &QtDySession::onMainConnected);
+    connect(m_mainSocket, &QTcpSocket::readyRead,     this, &QtDySession::onMainData);
+    connect(m_mainSocket, &QTcpSocket::disconnected,  this, &QtDySession::onMainDisconnected);
 
     QString host = m_address.isEmpty() ? "127.0.0.1" : m_address;
     m_mainSocket->connectToHost(host, m_mainPort);
@@ -228,9 +228,9 @@ void DySession::processLoginData()
 
 // -- Main socket handlers ------------------------------------------------------
 
-void DySession::onMainConnected()
+void QtDySession::onMainConnected()
 {
-    qDebug() << "DySession: main socket connected to" << m_address << ":" << m_mainPort;
+    qDebug() << "QtDySession: main socket connected to" << m_address << ":" << m_mainPort;
 
     // Request disk target list
     m_state = State::WaitTargetsDisk;
@@ -238,20 +238,20 @@ void DySession::onMainConnected()
     // Dynamo will send 3 Data_Messages: disks, TCP, VI
 }
 
-void DySession::onMainDisconnected()
+void QtDySession::onMainDisconnected()
 {
     m_updateTimer.stop();
     m_state = State::Disconnected;
     emit managerDisconnected(this);
 }
 
-void DySession::onMainData()
+void QtDySession::onMainData()
 {
     m_buf += m_mainSocket->readAll();
     dispatchMainData();
 }
 
-void DySession::dispatchMainData()
+void QtDySession::dispatchMainData()
 {
     // Keep processing as long as we have enough data for the current state
     bool progress = true;
@@ -356,7 +356,7 @@ void DySession::dispatchMainData()
 
 // -- Target discovery handlers -------------------------------------------------
 
-void DySession::processTargetList(int phase)
+void QtDySession::processTargetList(int phase)
 {
     QByteArray chunk = take(DY_DATAMSG_SIZE);
     const DyDataMessage *dm = reinterpret_cast<const DyDataMessage*>(chunk.constData());
@@ -399,7 +399,7 @@ void DySession::processTargetList(int phase)
         // DY_ADD_WORKERS data = number of disk workers to create.
         sendMsg(DY_ADD_WORKERS, static_cast<int32_t>(m_workers.size()));
         m_state = State::WaitAddWorkers;
-        qDebug() << "DySession: sent ADD_WORKERS(" << m_workers.size() << ") to"
+        qDebug() << "QtDySession: sent ADD_WORKERS(" << m_workers.size() << ") to"
                  << m_managerName;
         break;
     }
@@ -407,15 +407,15 @@ void DySession::processTargetList(int phase)
 
 // -- ADD_WORKERS reply ---------------------------------------------------------
 
-void DySession::processAddWorkersReply()
+void QtDySession::processAddWorkersReply()
 {
     QByteArray chunk = take(DY_MSG_SIZE);
     const DyMsg *msg = reinterpret_cast<const DyMsg*>(chunk.constData());
     const int32_t actualCount = msg->data;
     if (actualCount <= 0) {
-        qWarning() << "DySession: ADD_WORKERS reply says 0 workers on" << m_managerName;
+        qWarning() << "QtDySession: ADD_WORKERS reply says 0 workers on" << m_managerName;
     }
-    qDebug() << "DySession: ADD_WORKERS confirmed," << actualCount
+    qDebug() << "QtDySession: ADD_WORKERS confirmed," << actualCount
              << "workers on" << m_managerName;
     m_state = State::Ready;
     emit managerConnected(this);
@@ -423,7 +423,7 @@ void DySession::processAddWorkersReply()
 
 // -- Worker setup handlers -----------------------------------------------------
 
-void DySession::beginSetupWorker(int idx)
+void QtDySession::beginSetupWorker(int idx)
 {
     if (idx >= m_workers.size()) {
         // All workers configured - start the test
@@ -449,12 +449,12 @@ void DySession::beginSetupWorker(int idx)
     m_state = State::SetupAccess;
 }
 
-void DySession::processSetAccessReply()
+void QtDySession::processSetAccessReply()
 {
     QByteArray chunk = take(DY_MSG_SIZE);
     const DyMsg *msg = reinterpret_cast<const DyMsg*>(chunk.constData());
     if (!msg->data) {
-        qWarning() << "DySession: SET_ACCESS failed for worker" << m_setupWorkerIdx;
+        qWarning() << "QtDySession: SET_ACCESS failed for worker" << m_setupWorkerIdx;
     }
 
     // -- SET_TARGETS --
@@ -470,18 +470,18 @@ void DySession::processSetAccessReply()
     m_state = State::SetupTargetsReply;
 }
 
-void DySession::processSetTargetsReply()
+void QtDySession::processSetTargetsReply()
 {
     QByteArray chunk = take(DY_MSG_SIZE);
     const DyMsg *msg = reinterpret_cast<const DyMsg*>(chunk.constData());
     if (!msg->data) {
-        qWarning() << "DySession: SET_TARGETS failed for worker" << m_setupWorkerIdx;
+        qWarning() << "QtDySession: SET_TARGETS failed for worker" << m_setupWorkerIdx;
     }
     // Dynamo also sends a Data_Message back with updated target info
     m_state = State::SetupTargetsData;
 }
 
-void DySession::processSetTargetsData()
+void QtDySession::processSetTargetsData()
 {
     // Consume the reply Data_Message (we use it only for error info)
     take(DY_DATAMSG_SIZE);
@@ -489,40 +489,40 @@ void DySession::processSetTargetsData()
     beginSetupWorker(m_setupWorkerIdx + 1);
 }
 
-void DySession::advanceSetupWorkers()
+void QtDySession::advanceSetupWorkers()
 {
     beginSetupWorker(0);
 }
 
 // -- Start sequence ------------------------------------------------------------
 
-void DySession::beginStartSequence()
+void QtDySession::beginStartSequence()
 {
     m_activeWorkerCount = m_workers.size();
     sendMsg(DY_START, DY_ALL_WORKERS);
     m_state = State::WaitStartReply;
 }
 
-void DySession::processStartReply()
+void QtDySession::processStartReply()
 {
     take(DY_MSG_SIZE);  // consume reply
     sendMsg(DY_BEGIN_IO, DY_ALL_WORKERS);
     m_state = State::WaitBeginIoReply;
 }
 
-void DySession::processBeginIoReply()
+void QtDySession::processBeginIoReply()
 {
     take(DY_MSG_SIZE);  // consume reply
     sendMsg(DY_RECORD_ON, DY_ALL_WORKERS);
     // RECORD_ON has no reply
     m_state = State::Running;
     m_updateTimer.start(k_updateIntervalMs);
-    qDebug() << "DySession: test started on" << m_managerName;
+    qDebug() << "QtDySession: test started on" << m_managerName;
 }
 
 // -- Update timer - request results while running ------------------------------
 
-void DySession::onUpdateTimer()
+void QtDySession::onUpdateTimer()
 {
     if (m_state != State::Running) return;
 
@@ -535,7 +535,7 @@ void DySession::onUpdateTimer()
     dispatchMainData();
 }
 
-void DySession::processUpdateMgr()
+void QtDySession::processUpdateMgr()
 {
     QByteArray chunk = take(DY_DATAMSG_SIZE);
     const DyDataMessage *dm = reinterpret_cast<const DyDataMessage*>(chunk.constData());
@@ -546,7 +546,7 @@ void DySession::processUpdateMgr()
     dispatchMainData();
 }
 
-void DySession::processUpdateWorker()
+void QtDySession::processUpdateWorker()
 {
     QByteArray chunk = take(DY_DATAMSG_SIZE);
     const DyDataMessage *dm = reinterpret_cast<const DyDataMessage*>(chunk.constData());
@@ -576,7 +576,7 @@ void DySession::processUpdateWorker()
 
 // -- Stop sequence -------------------------------------------------------------
 
-void DySession::stopTest()
+void QtDySession::stopTest()
 {
     if (m_state == State::WaitUpdateMgr || m_state == State::WaitUpdateWorker) {
         // Wait until current update completes
@@ -591,7 +591,7 @@ void DySession::stopTest()
     dispatchMainData();
 }
 
-void DySession::stopAll()
+void QtDySession::stopAll()
 {
     stopTest();
     if (m_mainSocket && m_mainSocket->state() == QAbstractSocket::ConnectedState) {
@@ -600,14 +600,14 @@ void DySession::stopAll()
     }
 }
 
-void DySession::processRecordOffReply()
+void QtDySession::processRecordOffReply()
 {
     take(DY_MSG_SIZE);
     sendMsg(DY_STOP, DY_ALL_WORKERS);
     m_state = State::WaitStop;
 }
 
-void DySession::processStopReply()
+void QtDySession::processStopReply()
 {
     take(DY_MSG_SIZE);
     sendMsg(DY_REPORT_RESULTS, DY_MANAGER);
@@ -616,7 +616,7 @@ void DySession::processStopReply()
     m_pendingResults.clear();
 }
 
-void DySession::processFinalMgr()
+void QtDySession::processFinalMgr()
 {
     QByteArray chunk = take(DY_DATAMSG_SIZE);
     const DyDataMessage *dm = reinterpret_cast<const DyDataMessage*>(chunk.constData());
@@ -625,7 +625,7 @@ void DySession::processFinalMgr()
     dispatchMainData();
 }
 
-void DySession::processFinalWorker()
+void QtDySession::processFinalWorker()
 {
     QByteArray chunk = take(DY_DATAMSG_SIZE);
     const DyDataMessage *dm = reinterpret_cast<const DyDataMessage*>(chunk.constData());
@@ -641,15 +641,15 @@ void DySession::processFinalWorker()
     if (m_workerResultIdx >= m_activeWorkerCount) {
         m_state = State::Ready;
         emit resultsReady(this);
-        qDebug() << "DySession: final results received on" << m_managerName;
+        qDebug() << "QtDySession: final results received on" << m_managerName;
     } else {
         dispatchMainData();
     }
 }
 
-// -- Test control (called by DynamoEngine) -------------------------------------
+// -- Test control (called by QtDynamoEngine) -------------------------------------
 
-void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSpec> &specs)
+void QtDySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSpec> &specs)
 {
     if (m_state != State::Ready) return;
 
@@ -667,7 +667,7 @@ void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSp
     }
 
     if (m_workers.isEmpty()) {
-        qWarning() << "DySession: no workers for" << m_managerName
+        qWarning() << "QtDySession: no workers for" << m_managerName
                    << "- creating" << m_processorCount << "default workers";
         for (int i = 0; i < m_processorCount; ++i) {
             WorkerInfo w;
@@ -682,7 +682,7 @@ void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSp
     }
 
     if (m_workers.isEmpty()) {
-        qWarning() << "DySession: no targets discovered for" << m_managerName;
+        qWarning() << "QtDySession: no targets discovered for" << m_managerName;
         return;
     }
 
@@ -691,7 +691,7 @@ void DySession::startTest(const QList<WorkerInfo> &workers, const QList<AccessSp
 
 // -- Result decoding -----------------------------------------------------------
 
-WorkerResult DySession::decodeWorkerResults(const DyWorkerResults &wr,
+WorkerResult QtDySession::decodeWorkerResults(const DyWorkerResults &wr,
                                              const QString &mgrName,
                                              const QString &workerName)
 {
@@ -777,7 +777,7 @@ WorkerResult DySession::decodeWorkerResults(const DyWorkerResults &wr,
 
 // -- Build protocol messages ---------------------------------------------------
 
-void DySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &spec)
+void QtDySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &spec)
 {
     dm->count = 1;
     DyTestSpec &ts = dm->data.spec;
@@ -806,7 +806,7 @@ void DySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &spec)
         ts.access[n].of_size = 0;
 }
 
-void DySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
+void QtDySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
 {
     dm->count = 0;
 
@@ -834,13 +834,13 @@ void DySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &w)
 }
 
 // -----------------------------------------------------------------------------
-// DynamoEngine
+// QtDynamoEngine
 // -----------------------------------------------------------------------------
 
-DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
-    : IometerEngine(parent)
+QtDynamoEngine::QtDynamoEngine(bool startListening, QObject *parent)
+    : QtIometerEngine(parent)
 {
-    m_specs = IometerEngine::builtinAccessSpecs();
+    m_specs = QtIometerEngine::builtinAccessSpecs();
 
     // Bridge the core TestRunner's std::function callbacks to Qt signals.
     m_testRunner.onStatusMessage = [this](const std::string &msg) {
@@ -851,7 +851,7 @@ DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
     };
 
     m_server = new QTcpServer(this);
-    connect(m_server, &QTcpServer::newConnection, this, &DynamoEngine::onNewConnection);
+    connect(m_server, &QTcpServer::newConnection, this, &QtDynamoEngine::onNewConnection);
 
     if (startListening) {
         if (m_server->listen(QHostAddress::Any, DY_PORT)) {
@@ -864,7 +864,7 @@ DynamoEngine::DynamoEngine(bool startListening, QObject *parent)
     }
 }
 
-DynamoEngine::~DynamoEngine()
+QtDynamoEngine::~QtDynamoEngine()
 {
     for (auto *s : m_sessions) s->deleteLater();
     m_server->close();
@@ -872,20 +872,20 @@ DynamoEngine::~DynamoEngine()
 
 // -- New Dynamo connection -----------------------------------------------------
 
-void DynamoEngine::onNewConnection()
+void QtDynamoEngine::onNewConnection()
 {
     while (m_server->hasPendingConnections()) {
         QTcpSocket *sock = m_server->nextPendingConnection();
-        auto *session = new DySession(sock, this);
+        auto *session = new QtDySession(sock, this);
 
-        connect(session, &DySession::managerConnected,
-                this, &DynamoEngine::onSessionConnected);
-        connect(session, &DySession::managerDisconnected,
-                this, &DynamoEngine::onSessionDisconnected);
-        connect(session, &DySession::resultsReady,
-                this, &DynamoEngine::onSessionResults);
-        connect(session, &DySession::errorOccurred,
-                this, &DynamoEngine::onSessionError);
+        connect(session, &QtDySession::managerConnected,
+                this, &QtDynamoEngine::onSessionConnected);
+        connect(session, &QtDySession::managerDisconnected,
+                this, &QtDynamoEngine::onSessionDisconnected);
+        connect(session, &QtDySession::resultsReady,
+                this, &QtDynamoEngine::onSessionResults);
+        connect(session, &QtDySession::errorOccurred,
+                this, &QtDynamoEngine::onSessionError);
 
         m_sessions.append(session);
         emit statusMessage(QString("Dynamo connecting from %1…")
@@ -895,7 +895,7 @@ void DynamoEngine::onNewConnection()
 
 // -- Session event handlers ----------------------------------------------------
 
-void DynamoEngine::onSessionConnected(DySession *s)
+void QtDynamoEngine::onSessionConnected(QtDySession *s)
 {
     rebuildManagers();
 
@@ -914,7 +914,7 @@ void DynamoEngine::onSessionConnected(DySession *s)
     emit configChanged();
 }
 
-void DynamoEngine::onSessionDisconnected(DySession *s)
+void QtDynamoEngine::onSessionDisconnected(QtDySession *s)
 {
     const QString name = s->managerName();
     m_sessions.removeAll(s);
@@ -926,7 +926,7 @@ void DynamoEngine::onSessionDisconnected(DySession *s)
     emit statusMessage(QString("Dynamo '%1' disconnected").arg(name));
 }
 
-void DynamoEngine::onSessionResults(DySession *s)
+void QtDynamoEngine::onSessionResults(QtDySession *s)
 {
     // Merge this session's results into m_currentResults
     QVector<WorkerResult> all;
@@ -965,14 +965,14 @@ void DynamoEngine::onSessionResults(DySession *s)
     emit resultsUpdated(m_currentResults);
 }
 
-void DynamoEngine::onSessionError(DySession *s, const QString &msg)
+void QtDynamoEngine::onSessionError(QtDySession *s, const QString &msg)
 {
     emit errorOccurred(QString("[%1] %2").arg(s->managerName(), msg));
 }
 
-// -- IometerEngine interface ---------------------------------------------------
+// -- QtIometerEngine interface ---------------------------------------------------
 
-void DynamoEngine::startTest()
+void QtDynamoEngine::startTest()
 {
     if (m_running) return;
     if (m_sessions.isEmpty()) {
@@ -1016,7 +1016,7 @@ void DynamoEngine::startTest()
     emit statusMessage("Test started");
 }
 
-void DynamoEngine::stopTest()
+void QtDynamoEngine::stopTest()
 {
     if (!m_running) return;
 
@@ -1033,7 +1033,7 @@ void DynamoEngine::stopTest()
     emit statusMessage("Test stopped");
 }
 
-void DynamoEngine::stopAll()
+void QtDynamoEngine::stopAll()
 {
     // Stop tests only - do NOT exit Dynamo workers; managers stay connected
     m_testRunner.stopAll();
@@ -1051,7 +1051,7 @@ void DynamoEngine::stopAll()
 // ICF load / save  (original Iometer 1.1.0 text format)
 // =============================================================================
 
-bool DynamoEngine::loadConfig(const QString &filepath)
+bool QtDynamoEngine::loadConfig(const QString &filepath)
 {
     TestConfig cfg;
     std::vector<AccessSpec> specs;
@@ -1062,7 +1062,7 @@ bool DynamoEngine::loadConfig(const QString &filepath)
         return false;
     }
 
-    // Convert IcfFile BatchWorker to DynamoEngine BatchWorkerConfig
+    // Convert IcfFile BatchWorker to QtDynamoEngine BatchWorkerConfig
     m_batchWorkers.clear();
     for (const auto &bw : batchWorkers) {
         BatchWorkerConfig wc;
@@ -1079,9 +1079,9 @@ bool DynamoEngine::loadConfig(const QString &filepath)
     return true;
 }
 
-bool DynamoEngine::saveConfig(const QString &filepath)
+bool QtDynamoEngine::saveConfig(const QString &filepath)
 {
-    // Convert DynamoEngine BatchWorkerConfig to IcfFile BatchWorker
+    // Convert QtDynamoEngine BatchWorkerConfig to IcfFile BatchWorker
     std::vector<IcfFile::BatchWorker> batchWorkers;
 
     auto managers = m_workerPool.managerInfos();
@@ -1112,13 +1112,13 @@ bool DynamoEngine::saveConfig(const QString &filepath)
 
     return IcfFile::save(filepath.toStdString(), m_testConfig, toVec(m_specs), batchWorkers);
 }
-bool DynamoEngine::saveBatchResults(const QString &filepath)
+bool QtDynamoEngine::saveBatchResults(const QString &filepath)
 {
     const auto &r = m_savedResults.isEmpty() ? m_currentResults : m_savedResults;
     return writeBatchResultsCsv(filepath, r, m_testConfig);
 }
 
-bool DynamoEngine::writeBatchResultsCsv(const QString &filepath,
+bool QtDynamoEngine::writeBatchResultsCsv(const QString &filepath,
                                         const QVector<WorkerResult> &results,
                                         const TestConfig &cfg)
 {
@@ -1127,7 +1127,7 @@ bool DynamoEngine::writeBatchResultsCsv(const QString &filepath,
     return ResultsWriter::writeBatchResultsCsv(filepath.toStdString(), toVec(results), cfg);
 }
 
-void DynamoEngine::newConfig()
+void QtDynamoEngine::newConfig()
 {
     for (auto *s : m_sessions) s->deleteLater();
     m_sessions.clear();
@@ -1138,18 +1138,18 @@ void DynamoEngine::newConfig()
     emit configChanged();
 }
 
-QList<ManagerInfo> DynamoEngine::managers() const
+QList<ManagerInfo> QtDynamoEngine::managers() const
 {
     return toQList(m_workerPool.managerInfos());
 }
 
-void DynamoEngine::connectManager(const QString &, const QString &)
+void QtDynamoEngine::connectManager(const QString &, const QString &)
 {
     // Managers connect by launching Dynamo.exe - this is a no-op here
     emit statusMessage(QString("To connect a manager: run Dynamo.exe -i <this-host> on the target machine"));
 }
 
-void DynamoEngine::disconnectManager(const QString &mgrName)
+void QtDynamoEngine::disconnectManager(const QString &mgrName)
 {
     for (auto *s : m_sessions) {
         if (s->managerName() == mgrName) {
@@ -1159,37 +1159,37 @@ void DynamoEngine::disconnectManager(const QString &mgrName)
     }
 }
 
-void DynamoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
+void QtDynamoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
 {
     m_workerPool.addWorker(mgrName.toStdString(), w);
     emit configChanged();
 }
 
-void DynamoEngine::removeWorker(const QString &mgrName, const QString &workerId)
+void QtDynamoEngine::removeWorker(const QString &mgrName, const QString &workerId)
 {
     m_workerPool.removeWorker(mgrName.toStdString(), workerId.toStdString());
     emit configChanged();
 }
 
-void DynamoEngine::updateWorker(const WorkerInfo &w)
+void QtDynamoEngine::updateWorker(const WorkerInfo &w)
 {
     m_workerPool.updateWorker(w);
     emit configChanged();
 }
 
-void DynamoEngine::setAccessSpecs(const QList<AccessSpec> &specs)
+void QtDynamoEngine::setAccessSpecs(const QList<AccessSpec> &specs)
 {
     m_specs = specs;
 }
 
 // -- Helpers -------------------------------------------------------------------
 
-void DynamoEngine::rebuildManagers()
+void QtDynamoEngine::rebuildManagers()
 {
     m_workerPool.clear();
     for (const auto *s : m_sessions) {
-        if (s->state() == DySession::State::Ready ||
-            s->state() == DySession::State::Running ||
+        if (s->state() == QtDySession::State::Ready ||
+            s->state() == QtDySession::State::Running ||
             s->isRunning()) {
             ManagerInfo mgr;
             mgr.name             = s->managerName().toStdString();

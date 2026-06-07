@@ -1,12 +1,12 @@
 // tst_icf.cpp — ICF load/save round-trip tests
-// Verifies that DynamoEngine correctly parses original Iometer 1.1.0 ICF files
+// Verifies that QtDynamoEngine correctly parses original Iometer 1.1.0 ICF files
 // and writes them back in a format reloadable by both original and Qt Iometer.
 #include <QObject>
 #include <QTest>
 #include <QTemporaryFile>
 #include <QDir>
-#include "DynamoEngine.h"
-#include "IometerTypes.h"
+#include "QtDynamoEngine.h"
+#include "QtIometerTypes.h"
 
 class IcfTest : public QObject
 {
@@ -15,7 +15,7 @@ private slots:
 
     // ── Minimal ICF: parse run-time fields ───────────────────────────────────
     void parseRunTime() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         QVERIFY(eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/minimal.icf"));
         const TestConfig cfg = eng.testConfig();
         QCOMPARE(cfg.runHours,   0);
@@ -23,12 +23,12 @@ private slots:
         QCOMPARE(cfg.runSeconds, 5);
     }
     void parseRampUp() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         QVERIFY(eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/minimal.icf"));
         QCOMPARE(eng.testConfig().rampSeconds, 0);
     }
     void parseDescription_blank() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         QVERIFY(eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/minimal.icf"));
         // Blank description must not bleed into run-time data
         const QString desc = QString::fromStdString(eng.testConfig().description);
@@ -38,17 +38,17 @@ private slots:
 
     // ── Smoke-test ICF: parse access specs ───────────────────────────────────
     void smokeIcf_loadsCleanly() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         QVERIFY(eng.loadConfig(QString(IOMETER_SMOKE_ICF)));
     }
     void smokeIcf_specCount() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_SMOKE_ICF));
         // smoke_test.icf contains all built-in specs plus a modified Default
         QVERIFY(eng.accessSpecs().size() >= 30);
     }
     void smokeIcf_runTime() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_SMOKE_ICF));
         const TestConfig cfg = eng.testConfig();
         QCOMPARE(cfg.runHours,   0);
@@ -56,17 +56,17 @@ private slots:
         QCOMPARE(cfg.runSeconds, 10);
     }
     void smokeIcf_batchAssignedSpec() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_SMOKE_ICF));
         QCOMPARE(eng.batchAssignedSpec(), QString("64 KiB; 100% Read; 0% random"));
     }
     void smokeIcf_batchWorkerCount() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_SMOKE_ICF));
         QCOMPARE(eng.batchWorkers().size(), 1);
     }
     void smokeIcf_batchWorkerTarget() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_SMOKE_ICF));
         const auto workers = eng.batchWorkers();
         QVERIFY(!workers.isEmpty());
@@ -76,11 +76,11 @@ private slots:
 
     // ── Multi-spec ICF fixture ───────────────────────────────────────────────
     void multispecIcf_loadsCleanly() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         QVERIFY(eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/multispec.icf"));
     }
     void multispecIcf_runTime() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/multispec.icf");
         const TestConfig cfg = eng.testConfig();
         QCOMPARE(cfg.runHours,   0);
@@ -88,12 +88,12 @@ private slots:
         QCOMPARE(cfg.runSeconds, 30);
     }
     void multispecIcf_workerCount() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/multispec.icf");
         QCOMPARE(eng.batchWorkers().size(), 2);
     }
     void multispecIcf_allInOneSpec() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         eng.loadConfig(QString(IOMETER_FIXTURE_DIR) + "/multispec.icf");
         // "All in one" is multi-line — verify it parsed all 29 lines
         for (const auto &spec : eng.accessSpecs()) {
@@ -107,13 +107,13 @@ private slots:
 
     // ── Missing file ──────────────────────────────────────────────────────────
     void missingFile_returnsFalse() {
-        DynamoEngine eng(false);
+        QtDynamoEngine eng(false);
         QVERIFY(!eng.loadConfig("/nonexistent/path/to/file.icf"));
     }
 
     // ── Round-trip: load → save → reload → compare ──────────────────────────
     void roundTrip_smokeIcf() {
-        DynamoEngine eng1(false);
+        QtDynamoEngine eng1(false);
         QVERIFY(eng1.loadConfig(QString(IOMETER_SMOKE_ICF)));
 
         QTemporaryFile tmp;
@@ -124,7 +124,7 @@ private slots:
 
         QVERIFY(eng1.saveConfig(tmpPath));
 
-        DynamoEngine eng2(false);
+        QtDynamoEngine eng2(false);
         QVERIFY(eng2.loadConfig(tmpPath));
 
         // Key fields must survive the round-trip
@@ -137,7 +137,7 @@ private slots:
     }
 
     void roundTrip_specNames() {
-        DynamoEngine eng1(false);
+        QtDynamoEngine eng1(false);
         eng1.loadConfig(QString(IOMETER_SMOKE_ICF));
 
         QTemporaryFile tmp;
@@ -146,7 +146,7 @@ private slots:
         tmp.close();
 
         eng1.saveConfig(tmp.fileName());
-        DynamoEngine eng2(false);
+        QtDynamoEngine eng2(false);
         eng2.loadConfig(tmp.fileName());
 
         const auto s1 = eng1.accessSpecs();
@@ -157,7 +157,7 @@ private slots:
     }
 
     void roundTrip_specLines() {
-        DynamoEngine eng1(false);
+        QtDynamoEngine eng1(false);
         eng1.loadConfig(QString(IOMETER_SMOKE_ICF));
 
         QTemporaryFile tmp;
@@ -166,7 +166,7 @@ private slots:
         tmp.close();
 
         eng1.saveConfig(tmp.fileName());
-        DynamoEngine eng2(false);
+        QtDynamoEngine eng2(false);
         eng2.loadConfig(tmp.fileName());
 
         // Spot-check: the Default spec (first after Idle) should have 1 line

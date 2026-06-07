@@ -1,6 +1,6 @@
-// PageNetwork.cpp -- "Network Targets" tab
-#include "PageNetwork.h"
-#include "IometerEngine.h"
+// QtPageNetwork.cpp -- "Network Targets" tab
+#include "QtPageNetwork.h"
+#include "QtIometerEngine.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGroupBox>
@@ -15,20 +15,20 @@
 
 // =============================================================================
 
-PageNetwork::PageNetwork(IometerEngine *engine, QWidget *parent)
+QtPageNetwork::QtPageNetwork(QtIometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
-    connect(engine, &IometerEngine::configChanged,       this, &PageNetwork::refreshForEngine);
-    connect(engine, &IometerEngine::managerConnected,    this, &PageNetwork::onManagerConnected);
-    connect(engine, &IometerEngine::managerDisconnected, this, &PageNetwork::onManagerDisconnected);
+    connect(engine, &QtIometerEngine::configChanged,       this, &QtPageNetwork::refreshForEngine);
+    connect(engine, &QtIometerEngine::managerConnected,    this, &QtPageNetwork::onManagerConnected);
+    connect(engine, &QtIometerEngine::managerDisconnected, this, &QtPageNetwork::onManagerDisconnected);
 }
 
 // =============================================================================
 // UI construction -- matches the original Network Targets tab layout
 // =============================================================================
 
-void PageNetwork::setupUi()
+void QtPageNetwork::setupUi()
 {
     auto *root = new QHBoxLayout(this);
     root->setContentsMargins(6, 6, 6, 6);
@@ -94,24 +94,24 @@ void PageNetwork::setupUi()
 
     // ---- Connections --------------------------------------------------------
     connect(m_targetTree, &QTreeWidget::itemChanged,
-            this, &PageNetwork::onTargetItemChanged);
+            this, &QtPageNetwork::onTargetItemChanged);
     connect(m_nicCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &PageNetwork::onNicComboChanged);
+            this, &QtPageNetwork::onNicComboChanged);
     connect(m_maxSends, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &PageNetwork::onMaxSendsChanged);
+            this, &QtPageNetwork::onMaxSendsChanged);
     connect(m_testConnRateChk, &QCheckBox::toggled,
-            this, &PageNetwork::onTestConnRateToggled);
+            this, &QtPageNetwork::onTestConnRateToggled);
     connect(m_transPerConn, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &PageNetwork::onTransPerConnChanged);
+            this, &QtPageNetwork::onTransPerConnChanged);
 
     setParamsEnabled(false);
 }
 
 // =============================================================================
-// Selection control (called by MainWindow::onWorkerTreeSelectionChanged)
+// Selection control (called by QtMainWindow::onWorkerTreeSelectionChanged)
 // =============================================================================
 
-void PageNetwork::clearSelection()
+void QtPageNetwork::clearSelection()
 {
     m_selManagerName.clear();
     m_selWorkerId.clear();
@@ -119,7 +119,7 @@ void PageNetwork::clearSelection()
     setParamsEnabled(false);
 }
 
-void PageNetwork::setSelectedManager(const QString &mgrName)
+void QtPageNetwork::setSelectedManager(const QString &mgrName)
 {
     m_selManagerName = mgrName;
     m_selWorkerId.clear();
@@ -128,7 +128,7 @@ void PageNetwork::setSelectedManager(const QString &mgrName)
     setParamsEnabled(false);
 }
 
-void PageNetwork::setSelectedWorker(const QString &mgrName, const QString &workerId)
+void QtPageNetwork::setSelectedWorker(const QString &mgrName, const QString &workerId)
 {
     m_selManagerName = mgrName;
     m_selWorkerId    = workerId;
@@ -138,7 +138,7 @@ void PageNetwork::setSelectedWorker(const QString &mgrName, const QString &worke
     setParamsEnabled(true);
 }
 
-void PageNetwork::refreshForEngine()
+void QtPageNetwork::refreshForEngine()
 {
     if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty())
         setSelectedWorker(m_selManagerName, m_selWorkerId);
@@ -148,14 +148,14 @@ void PageNetwork::refreshForEngine()
         clearSelection();
 }
 
-void PageNetwork::onManagerConnected(const ManagerInfo &)    { refreshForEngine(); }
-void PageNetwork::onManagerDisconnected(const QString &)     { refreshForEngine(); }
+void QtPageNetwork::onManagerConnected(const ManagerInfo &)    { refreshForEngine(); }
+void QtPageNetwork::onManagerDisconnected(const QString &)     { refreshForEngine(); }
 
 // =============================================================================
 // Internal helpers
 // =============================================================================
 
-void PageNetwork::populateTargetTree()
+void QtPageNetwork::populateTargetTree()
 {
     m_updating = true;
     m_targetTree->clear();
@@ -203,7 +203,7 @@ void PageNetwork::populateTargetTree()
     m_updating = false;
 }
 
-void PageNetwork::rebuildNicCombo()
+void QtPageNetwork::rebuildNicCombo()
 {
     m_updating = true;
     m_nicCombo->clear();
@@ -218,7 +218,7 @@ void PageNetwork::rebuildNicCombo()
     m_updating = false;
 }
 
-void PageNetwork::loadWorkerParams()
+void QtPageNetwork::loadWorkerParams()
 {
     if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     m_updating = true;
@@ -241,7 +241,7 @@ void PageNetwork::loadWorkerParams()
     m_updating = false;
 }
 
-void PageNetwork::saveWorkerParams()
+void QtPageNetwork::saveWorkerParams()
 {
     if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     for (const auto &mgr : m_engine->managers()) {
@@ -258,7 +258,7 @@ void PageNetwork::saveWorkerParams()
     }
 }
 
-void PageNetwork::setParamsEnabled(bool enabled)
+void QtPageNetwork::setParamsEnabled(bool enabled)
 {
     m_nicCombo->setEnabled(enabled);
     m_maxSends->setEnabled(enabled);
@@ -270,7 +270,7 @@ void PageNetwork::setParamsEnabled(bool enabled)
 // Slots
 // =============================================================================
 
-void PageNetwork::onTargetItemChanged(QTreeWidgetItem *item, int /*column*/)
+void QtPageNetwork::onTargetItemChanged(QTreeWidgetItem *item, int /*column*/)
 {
     if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
     if (!item || !(item->flags() & Qt::ItemIsUserCheckable)) return;
@@ -298,13 +298,13 @@ void PageNetwork::onTargetItemChanged(QTreeWidgetItem *item, int /*column*/)
     }
 }
 
-void PageNetwork::onNicComboChanged(int)       { saveWorkerParams(); }
-void PageNetwork::onMaxSendsChanged(int)       { saveWorkerParams(); }
+void QtPageNetwork::onNicComboChanged(int)       { saveWorkerParams(); }
+void QtPageNetwork::onMaxSendsChanged(int)       { saveWorkerParams(); }
 
-void PageNetwork::onTestConnRateToggled(bool checked)
+void QtPageNetwork::onTestConnRateToggled(bool checked)
 {
     m_transPerConn->setEnabled(checked);
     saveWorkerParams();
 }
 
-void PageNetwork::onTransPerConnChanged(int)   { saveWorkerParams(); }
+void QtPageNetwork::onTransPerConnChanged(int)   { saveWorkerParams(); }

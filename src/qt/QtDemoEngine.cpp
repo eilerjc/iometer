@@ -1,20 +1,20 @@
-// DemoEngine.cpp
-#include "DemoEngine.h"
-#include "IometerEngine.h"
+// QtDemoEngine.cpp
+#include "QtDemoEngine.h"
+#include "QtIometerEngine.h"
 #include "../core/IcfFile.h"
 #include <cmath>
 #include <QRandomGenerator>
 
 static constexpr double PI = 3.14159265358979323846;
 
-DemoEngine::DemoEngine(QObject *parent) : IometerEngine(parent)
+QtDemoEngine::QtDemoEngine(QObject *parent) : QtIometerEngine(parent)
 {
-    connect(&m_timer, &QTimer::timeout, this, &DemoEngine::tick);
+    connect(&m_timer, &QTimer::timeout, this, &QtDemoEngine::tick);
     m_timer.setInterval(500);   // update twice per second
     buildDefaultConfig();
 }
 
-void DemoEngine::buildDefaultConfig()
+void QtDemoEngine::buildDefaultConfig()
 {
     // ---- Local manager with 4 disk workers ----------------------------------
     ManagerInfo local;
@@ -54,12 +54,12 @@ void DemoEngine::buildDefaultConfig()
     m_managers.append(local);
 
     // ---- Access specs: use shared built-in library -------
-    m_specs = IometerEngine::builtinAccessSpecs();
+    m_specs = QtIometerEngine::builtinAccessSpecs();
 }
 
 // ---- Test control -----------------------------------------------------------
 
-void DemoEngine::startTest()
+void QtDemoEngine::startTest()
 {
     if (m_running) return;
     m_running = true;
@@ -69,7 +69,7 @@ void DemoEngine::startTest()
     emit statusMessage("Test running...");
 }
 
-void DemoEngine::stopTest()
+void QtDemoEngine::stopTest()
 {
     if (!m_running) return;
     m_running = false;
@@ -82,14 +82,14 @@ void DemoEngine::stopTest()
     emit statusMessage("Test stopped.");
 }
 
-void DemoEngine::stopAll()
+void QtDemoEngine::stopAll()
 {
     stopTest();
 }
 
 // ---- Simulation tick --------------------------------------------------------
 
-WorkerResult DemoEngine::makeResult(const WorkerInfo &w, const std::string &mgrName, double t) const
+WorkerResult QtDemoEngine::makeResult(const WorkerInfo &w, const std::string &mgrName, double t) const
 {
     int idx = 0;
     for (int i = 0; i < m_managers.first().workers.size(); ++i)
@@ -122,7 +122,7 @@ WorkerResult DemoEngine::makeResult(const WorkerInfo &w, const std::string &mgrN
     return r;
 }
 
-void DemoEngine::tick()
+void QtDemoEngine::tick()
 {
     m_t += 0.5;
     m_current.clear();
@@ -162,7 +162,7 @@ void DemoEngine::tick()
 
 // ---- Config -----------------------------------------------------------------
 
-void DemoEngine::newConfig()
+void QtDemoEngine::newConfig()
 {
     m_managers.clear();
     m_specs.clear();
@@ -171,7 +171,7 @@ void DemoEngine::newConfig()
     emit configChanged();
 }
 
-bool DemoEngine::loadConfig(const QString &filepath)
+bool QtDemoEngine::loadConfig(const QString &filepath)
 {
     // The demo engine doubles as a "test dynamo": it parses a real ICF through
     // the shared core parser so configs can be exercised end-to-end without a
@@ -192,7 +192,7 @@ bool DemoEngine::loadConfig(const QString &filepath)
     return true;
 }
 
-bool DemoEngine::saveConfig(const QString &)
+bool QtDemoEngine::saveConfig(const QString &)
 {
     emit statusMessage("Config save not yet implemented in demo mode.");
     return false;
@@ -200,7 +200,7 @@ bool DemoEngine::saveConfig(const QString &)
 
 // ---- Manager / worker management --------------------------------------------
 
-void DemoEngine::connectManager(const QString &address, const QString &name)
+void QtDemoEngine::connectManager(const QString &address, const QString &name)
 {
     for (auto &m : m_managers) {
         if (m.address == address.toStdString()) { m.connected = true; emit managerConnected(m); return; }
@@ -213,7 +213,7 @@ void DemoEngine::connectManager(const QString &address, const QString &name)
     emit managerConnected(m);
 }
 
-void DemoEngine::disconnectManager(const QString &mgrName)
+void QtDemoEngine::disconnectManager(const QString &mgrName)
 {
     for (int i = 0; i < m_managers.size(); ++i) {
         if (m_managers[i].name == mgrName.toStdString()) {
@@ -224,13 +224,13 @@ void DemoEngine::disconnectManager(const QString &mgrName)
     }
 }
 
-void DemoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
+void QtDemoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
 {
     for (auto &m : m_managers)
         if (m.name == mgrName.toStdString()) { m.workers.push_back(w); emit configChanged(); return; }
 }
 
-void DemoEngine::removeWorker(const QString &mgrName, const QString &workerId)
+void QtDemoEngine::removeWorker(const QString &mgrName, const QString &workerId)
 {
     for (auto &m : m_managers)
         if (m.name == mgrName.toStdString())
@@ -238,7 +238,7 @@ void DemoEngine::removeWorker(const QString &mgrName, const QString &workerId)
                 if (m.workers[i].id == workerId.toStdString()) { m.workers.erase(m.workers.begin() + i); emit configChanged(); return; }
 }
 
-void DemoEngine::updateWorker(const WorkerInfo &w)
+void QtDemoEngine::updateWorker(const WorkerInfo &w)
 {
     for (auto &m : m_managers)
         for (auto &worker : m.workers)

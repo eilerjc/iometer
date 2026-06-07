@@ -1,7 +1,7 @@
 // tst_resultswriter.cpp — Direct unit tests for the pure-C++ core ResultsWriter.
 //
 // Calls ResultsWriter::writeBatchResultsCsv with std:: types and parses the
-// output with std::ifstream — no DynamoEngine, no Qt I/O. Verifies the original
+// output with std::ifstream — no QtDynamoEngine, no Qt I/O. Verifies the original
 // Iometer CSV layout (field[0]=ALL, [3]=workers, [6]=IOps, [12]=MBps(Dec),
 // [27]=Errors) and aggregate correctness.
 #include <QObject>

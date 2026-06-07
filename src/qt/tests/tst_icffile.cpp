@@ -1,6 +1,6 @@
 // tst_icffile.cpp — Direct unit tests for the pure-C++ core IcfFile parser.
 //
-// Calls IcfFile::load/save with std:: types directly (no DynamoEngine), proving
+// Calls IcfFile::load/save with std:: types directly (no QtDynamoEngine), proving
 // the core ICF interface works standalone. tst_icf.cpp covers the same format
 // through the Qt engine; this verifies the lower layer in isolation.
 #include <QObject>

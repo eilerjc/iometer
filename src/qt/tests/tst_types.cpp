@@ -3,7 +3,7 @@
 //         TestConfig defaults, ResultType enum ordering.
 #include <QObject>
 #include <QTest>
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 
 class TypesTest : public QObject
 {

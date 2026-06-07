@@ -42,17 +42,17 @@ endfunction()
 
 # ── Engine + widget sources (shared between app and tests via static lib) ────
 set(CORE_SOURCES
-    DemoEngine.cpp
-    DynamoEngine.cpp
-    MeterWidget.cpp
-    BigMeterWidget.cpp
-    BarChartWidget.cpp
-    PageSetup.cpp
-    PageAccess.cpp
-    PageDisplay.cpp
-    PageResults.cpp
-    PageNetwork.cpp
-    MainWindow.cpp
+    QtDemoEngine.cpp
+    QtDynamoEngine.cpp
+    QtMeterWidget.cpp
+    QtBigMeterWidget.cpp
+    QtBarChartWidget.cpp
+    QtPageSetup.cpp
+    QtPageAccess.cpp
+    QtPageDisplay.cpp
+    QtPageResults.cpp
+    QtPageNetwork.cpp
+    QtMainWindow.cpp
     ../core/ResultsWriter.cpp
     ../core/DynamoConnection.cpp
     ../core/IcfFile.cpp
@@ -60,20 +60,20 @@ set(CORE_SOURCES
     ../core/TestRunner.cpp
 )
 set(CORE_HEADERS
-    IometerTypes.h
-    IometerEngine.h
-    DemoEngine.h
-    DynamoEngine.h
-    DyProto.h
-    MeterWidget.h
-    BigMeterWidget.h
-    BarChartWidget.h
-    PageSetup.h
-    PageAccess.h
-    PageDisplay.h
-    PageResults.h
-    PageNetwork.h
-    MainWindow.h
+    QtIometerTypes.h
+    QtIometerEngine.h
+    QtDemoEngine.h
+    QtDynamoEngine.h
+    QtDyProto.h
+    QtMeterWidget.h
+    QtBigMeterWidget.h
+    QtBarChartWidget.h
+    QtPageSetup.h
+    QtPageAccess.h
+    QtPageDisplay.h
+    QtPageResults.h
+    QtPageNetwork.h
+    QtMainWindow.h
     ../core/ResultsWriter.h
     ../core/DynamoConnection.h
     ../core/IcfFile.h

@@ -1,9 +1,9 @@
-// tst_meters.cpp — Tests for MeterWidget (gauge control)
+// tst_meters.cpp — Tests for QtMeterWidget (gauge control)
 // Verifies range, value setting, watermark, and rendering without errors.
 #include <QObject>
 #include <QTest>
 #include <QWidget>
-#include "MeterWidget.h"
+#include "QtMeterWidget.h"
 
 class MeterWidgetTest : public QObject
 {
@@ -12,69 +12,69 @@ private slots:
 
     // ── Construction ─────────────────────────────────────────────────────────
     void construct() {
-        MeterWidget m;
+        QtMeterWidget m;
         QVERIFY(m.sizeHint().width() > 0);
         QVERIFY(m.sizeHint().height() > 0);
     }
 
     // ── Range API ────────────────────────────────────────────────────────────
     void setRange_simple() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         // setRange should not crash; actual range is internal
         QVERIFY(true);
     }
 
     void setRange_withAutoRange() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 1000, true);
         QVERIFY(true);
     }
 
     void setRange_reverseOrder() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(100, 0, false);  // reverse min/max
         QVERIFY(true);  // should handle gracefully
     }
 
     // ── Value setting ───────────────────────────────────────────────────────
     void setValue_zero() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         m.setValue(0);
         QVERIFY(true);
     }
 
     void setValue_midrange() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         m.setValue(50);
         QVERIFY(true);
     }
 
     void setValue_max() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         m.setValue(100);
         QVERIFY(true);
     }
 
     void setValue_outOfRange() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         m.setValue(200);  // beyond max
         QVERIFY(true);  // should handle gracefully
     }
 
     void setValue_negative() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         m.setValue(-50);  // below min
         QVERIFY(true);  // should handle gracefully
     }
 
     void setValue_rapid() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         for (int i = 0; i < 100; ++i)
             m.setValue(i);
@@ -83,7 +83,7 @@ private slots:
 
     // ── Watermark ───────────────────────────────────────────────────────────
     void watermark_disabled() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.showWatermark = false;
         m.setRange(0, 100, false);
         m.setValue(50);
@@ -91,7 +91,7 @@ private slots:
     }
 
     void watermark_enabled() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.showWatermark = true;
         m.setRange(0, 100, false);
         m.setValue(50);
@@ -99,7 +99,7 @@ private slots:
     }
 
     void watermark_reset() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.showWatermark = true;
         m.setRange(0, 100, false);
         m.setValue(30);
@@ -111,22 +111,22 @@ private slots:
 
     // ── Resize ──────────────────────────────────────────────────────────────
     void resize_small() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.resize(64, 64);
-        // MeterWidget enforces a 120x90 minimum, so a smaller request clamps up.
+        // QtMeterWidget enforces a 120x90 minimum, so a smaller request clamps up.
         QVERIFY(m.width()  >= 120);
         QVERIFY(m.height() >= 90);
     }
 
     void resize_large() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.resize(400, 400);
         QVERIFY(m.width() == 400);
         QVERIFY(m.height() == 400);
     }
 
     void resize_afterValue() {
-        MeterWidget m;
+        QtMeterWidget m;
         m.setRange(0, 100, false);
         m.setValue(75);
         m.resize(200, 200);

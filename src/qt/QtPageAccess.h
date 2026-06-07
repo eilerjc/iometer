@@ -1,22 +1,22 @@
-// PageAccess.h -- "Access Specifications" tab.
+// QtPageAccess.h -- "Access Specifications" tab.
 // Layout matches the original:
 //   Left:   "Assigned Access Specifications" list + Move Up/Down
 //   Center: << Add / Remove >> transfer buttons
 //   Right:  "Global Access Specifications" list + New/Edit/Edit Copy/Delete
 #pragma once
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QWidget>
 
-class IometerEngine;
+class QtIometerEngine;
 class QListWidget;
 class QPushButton;
 class QDialog;
 
-class PageAccess : public QWidget
+class QtPageAccess : public QWidget
 {
     Q_OBJECT
 public:
-    explicit PageAccess(IometerEngine *engine, QWidget *parent = nullptr);
+    explicit QtPageAccess(QtIometerEngine *engine, QWidget *parent = nullptr);
 
 public slots:
     void loadSpecList();   // rebuild both panels from engine state
@@ -43,7 +43,7 @@ private:
     void rebuildAssignedList();
     bool editSpecDialog(AccessSpec &spec, const QString &title);
 
-    IometerEngine *m_engine    = nullptr;
+    QtIometerEngine *m_engine    = nullptr;
     QListWidget   *m_assigned  = nullptr;   // left column
     QListWidget   *m_global    = nullptr;   // right column
     QPushButton   *m_addBtn    = nullptr;   // << Add

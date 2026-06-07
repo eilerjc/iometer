@@ -1,6 +1,6 @@
-// PageAccess.cpp -- "Access Specifications" tab
-#include "PageAccess.h"
-#include "IometerEngine.h"
+// QtPageAccess.cpp -- "Access Specifications" tab
+#include "QtPageAccess.h"
+#include "QtIometerEngine.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGridLayout>
@@ -29,19 +29,19 @@
 
 // =============================================================================
 
-PageAccess::PageAccess(IometerEngine *engine, QWidget *parent)
+QtPageAccess::QtPageAccess(QtIometerEngine *engine, QWidget *parent)
     : QWidget(parent), m_engine(engine)
 {
     setupUi();
     loadSpecList();
-    connect(engine, &IometerEngine::configChanged, this, &PageAccess::loadSpecList);
+    connect(engine, &QtIometerEngine::configChanged, this, &QtPageAccess::loadSpecList);
 }
 
 // =============================================================================
 // UI construction -- matches the original Access Specifications tab
 // =============================================================================
 
-void PageAccess::setupUi()
+void QtPageAccess::setupUi()
 {
     auto *root = new QHBoxLayout(this);
     root->setContentsMargins(6, 6, 6, 6);
@@ -107,18 +107,18 @@ void PageAccess::setupUi()
     root->addLayout(rightOuter, 3);
 
     // ---- Connections ---------------------------------------------------------
-    connect(m_addBtn,    &QPushButton::clicked, this, &PageAccess::onAddToAssigned);
-    connect(m_removeBtn, &QPushButton::clicked, this, &PageAccess::onRemoveFromAssigned);
-    connect(m_upBtn,     &QPushButton::clicked, this, &PageAccess::onMoveUp);
-    connect(m_downBtn,   &QPushButton::clicked, this, &PageAccess::onMoveDown);
-    connect(m_newBtn,    &QPushButton::clicked, this, &PageAccess::onNewSpec);
-    connect(m_editBtn,   &QPushButton::clicked, this, &PageAccess::onEditSpec);
-    connect(m_copyBtn,   &QPushButton::clicked, this, &PageAccess::onEditCopySpec);
-    connect(m_delBtn,    &QPushButton::clicked, this, &PageAccess::onDeleteSpec);
+    connect(m_addBtn,    &QPushButton::clicked, this, &QtPageAccess::onAddToAssigned);
+    connect(m_removeBtn, &QPushButton::clicked, this, &QtPageAccess::onRemoveFromAssigned);
+    connect(m_upBtn,     &QPushButton::clicked, this, &QtPageAccess::onMoveUp);
+    connect(m_downBtn,   &QPushButton::clicked, this, &QtPageAccess::onMoveDown);
+    connect(m_newBtn,    &QPushButton::clicked, this, &QtPageAccess::onNewSpec);
+    connect(m_editBtn,   &QPushButton::clicked, this, &QtPageAccess::onEditSpec);
+    connect(m_copyBtn,   &QPushButton::clicked, this, &QtPageAccess::onEditCopySpec);
+    connect(m_delBtn,    &QPushButton::clicked, this, &QtPageAccess::onDeleteSpec);
     connect(m_global,   &QListWidget::itemSelectionChanged,
-            this, &PageAccess::onGlobalSelectionChanged);
+            this, &QtPageAccess::onGlobalSelectionChanged);
     connect(m_assigned, &QListWidget::itemSelectionChanged,
-            this, &PageAccess::onAssignedSelectionChanged);
+            this, &QtPageAccess::onAssignedSelectionChanged);
 }
 
 // =============================================================================
@@ -129,7 +129,7 @@ static QString specLabel(const AccessSpec &s) {
     return QString::fromStdString(s.name);   // all built-in specs carry their full original name
 }
 
-void PageAccess::rebuildGlobalList()
+void QtPageAccess::rebuildGlobalList()
 {
     const int cur = m_global->currentRow();
     m_global->clear();
@@ -147,14 +147,14 @@ void PageAccess::rebuildGlobalList()
         m_global->setCurrentRow(cur);
 }
 
-void PageAccess::rebuildAssignedList()
+void QtPageAccess::rebuildAssignedList()
 {
     // The "assigned" list reflects the global assignment (assignedSpecs of all workers)
     // For now show a placeholder empty list -- workers are configured via the engine
     m_assigned->clear();
 }
 
-void PageAccess::loadSpecList()
+void QtPageAccess::loadSpecList()
 {
     rebuildGlobalList();
     rebuildAssignedList();
@@ -162,7 +162,7 @@ void PageAccess::loadSpecList()
     onAssignedSelectionChanged();
 }
 
-void PageAccess::setActiveSpecIndex(int idx)
+void QtPageAccess::setActiveSpecIndex(int idx)
 {
     // Build a small green right-arrow icon for the running spec
     static QIcon runIcon, blankIcon;
@@ -186,7 +186,7 @@ void PageAccess::setActiveSpecIndex(int idx)
         m_assigned->item(i)->setIcon(i == idx ? runIcon : blankIcon);
 }
 
-QList<AccessSpec> PageAccess::currentAssignedSpecs() const
+QList<AccessSpec> QtPageAccess::currentAssignedSpecs() const
 {
     QList<AccessSpec> result;
     const auto &allSpecs = m_engine->accessSpecs();
@@ -203,7 +203,7 @@ QList<AccessSpec> PageAccess::currentAssignedSpecs() const
 // Slot implementations
 // =============================================================================
 
-void PageAccess::onGlobalSelectionChanged()
+void QtPageAccess::onGlobalSelectionChanged()
 {
     const bool sel = m_global->currentRow() >= 0;
     m_addBtn->setEnabled(sel);
@@ -212,7 +212,7 @@ void PageAccess::onGlobalSelectionChanged()
     m_delBtn->setEnabled(sel);
 }
 
-void PageAccess::onAssignedSelectionChanged()
+void QtPageAccess::onAssignedSelectionChanged()
 {
     const int row = m_assigned->currentRow();
     m_removeBtn->setEnabled(row >= 0);
@@ -220,7 +220,7 @@ void PageAccess::onAssignedSelectionChanged()
     m_downBtn->setEnabled(row >= 0 && row < m_assigned->count() - 1);
 }
 
-void PageAccess::onAddToAssigned()
+void QtPageAccess::onAddToAssigned()
 {
     auto *item = m_global->currentItem();
     if (!item) return;
@@ -234,7 +234,7 @@ void PageAccess::onAddToAssigned()
     onAssignedSelectionChanged();
 }
 
-void PageAccess::onRemoveFromAssigned()
+void QtPageAccess::onRemoveFromAssigned()
 {
     const int row = m_assigned->currentRow();
     if (row < 0) return;
@@ -242,7 +242,7 @@ void PageAccess::onRemoveFromAssigned()
     onAssignedSelectionChanged();
 }
 
-void PageAccess::onMoveUp()
+void QtPageAccess::onMoveUp()
 {
     const int row = m_assigned->currentRow();
     if (row <= 0) return;
@@ -252,7 +252,7 @@ void PageAccess::onMoveUp()
     onAssignedSelectionChanged();
 }
 
-void PageAccess::onMoveDown()
+void QtPageAccess::onMoveDown()
 {
     const int row = m_assigned->currentRow();
     if (row < 0 || row >= m_assigned->count() - 1) return;
@@ -295,7 +295,7 @@ static int readSizeSpinners(QSpinBox *mb, QSpinBox *kb, QSpinBox *b)
 
 // -----------------------------------------------------------------------------
 
-bool PageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
+bool QtPageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
 {
     QDialog dlg(this);
     dlg.setWindowTitle(title);
@@ -641,7 +641,7 @@ bool PageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
     return true;
 }
 
-void PageAccess::onNewSpec()
+void QtPageAccess::onNewSpec()
 {
     AccessSpec s;
     s.name = QString("New Spec %1").arg(m_engine->accessSpecs().size() + 1).toStdString();
@@ -655,7 +655,7 @@ void PageAccess::onNewSpec()
     m_global->setCurrentRow(m_global->count() - 1);
 }
 
-void PageAccess::onEditSpec()
+void QtPageAccess::onEditSpec()
 {
     const int row = m_global->currentRow();
     if (row < 0) return;
@@ -669,7 +669,7 @@ void PageAccess::onEditSpec()
     m_global->setCurrentRow(row);
 }
 
-void PageAccess::onEditCopySpec()
+void QtPageAccess::onEditCopySpec()
 {
     const int row = m_global->currentRow();
     if (row < 0) return;
@@ -685,7 +685,7 @@ void PageAccess::onEditCopySpec()
     m_global->setCurrentRow(row + 1);
 }
 
-void PageAccess::onDeleteSpec()
+void QtPageAccess::onDeleteSpec()
 {
     const int row = m_global->currentRow();
     if (row < 0) return;

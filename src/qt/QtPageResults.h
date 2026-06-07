@@ -1,11 +1,11 @@
-// PageResults.h -- "Test Setup" tab.
+// QtPageResults.h -- "Test Setup" tab.
 // Matches the original Test Setup tab layout:
 //   Test Description, Run Time, Ramp Up Time, Record Results,
 //   Number of Workers to Spawn, Cycling Options.
 #pragma once
-#include "IometerTypes.h"
+#include "QtIometerTypes.h"
 #include <QWidget>
-class IometerEngine;
+class QtIometerEngine;
 class QLineEdit;
 class QSpinBox;
 class QComboBox;
@@ -13,13 +13,13 @@ class QRadioButton;
 class QGroupBox;
 class QCheckBox;
 
-class PageResults : public QWidget
+class QtPageResults : public QWidget
 {
     Q_OBJECT
 public:
-    explicit PageResults(IometerEngine *engine, QWidget *parent = nullptr);
+    explicit QtPageResults(QtIometerEngine *engine, QWidget *parent = nullptr);
 
-    // Still connected from MainWindow for compatibility
+    // Still connected from QtMainWindow for compatibility
     void updateResults(const QVector<WorkerResult> &) {}
     void onTestStopped() {}
 
@@ -31,7 +31,7 @@ private:
     void setupUi();
     void loadConfig();
 
-    IometerEngine *m_engine        = nullptr;
+    QtIometerEngine *m_engine        = nullptr;
     bool           m_updating      = false;
 
     // Test Description

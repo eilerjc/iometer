@@ -1,4 +1,4 @@
-// MeterWidget.cpp
+// QtMeterWidget.cpp
 // Qt port of CMeterCtrl - Iometer speedometer gauge.
 //
 // Geometry notes
@@ -15,7 +15,7 @@
 // Meter θ → Qt degrees: -(θ + 90 + PIVOT_ARC_ANGLE)
 // CW sweep = negative spanAngle in Qt.
 
-#include "MeterWidget.h"
+#include "QtMeterWidget.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QResizeEvent>
@@ -27,14 +27,14 @@ static constexpr double PI = 3.14159265358979323846;
 // Construction
 // -----------------------------------------------------------------------------
 
-MeterWidget::MeterWidget(QWidget *parent)
+QtMeterWidget::QtMeterWidget(QWidget *parent)
     : QWidget(parent)
 {
     setAttribute(Qt::WA_OpaquePaintEvent);   // we fill the entire widget
     setMinimumSize(120, 90);
 }
 
-QSize MeterWidget::sizeHint() const
+QSize QtMeterWidget::sizeHint() const
 {
     return {320, 240};
 }
@@ -43,7 +43,7 @@ QSize MeterWidget::sizeHint() const
 // Geometry helpers
 // -----------------------------------------------------------------------------
 
-QPointF MeterWidget::calcPt(int angle, int radius) const
+QPointF QtMeterWidget::calcPt(int angle, int radius) const
 {
     // Matches CMeterCtrl::CalculatePoint exactly.
     const double a = (angle + 90 + PIVOT_ARC_ANGLE) * PI / 180.0;
@@ -51,7 +51,7 @@ QPointF MeterWidget::calcPt(int angle, int radius) const
              m_pivot.y() + std::sin(a) * radius };
 }
 
-void MeterWidget::recalcGeometry()
+void QtMeterWidget::recalcGeometry()
 {
     const int w = width();
     const int h = height();
@@ -79,7 +79,7 @@ void MeterWidget::recalcGeometry()
 // Scale text  (e.g. "x1,000")
 // -----------------------------------------------------------------------------
 
-void MeterWidget::updateScaleInfo()
+void QtMeterWidget::updateScaleInfo()
 {
     if (m_maxRange <= 10) { m_scaleText.clear(); return; }
 
@@ -101,7 +101,7 @@ void MeterWidget::updateScaleInfo()
 // Label / tick-mark positions (matches CMeterCtrl::UpdateLabelInfo)
 // -----------------------------------------------------------------------------
 
-void MeterWidget::updateLabelInfo()
+void QtMeterWidget::updateLabelInfo()
 {
     m_labels.clear();
     if (m_outerRadius < 10 || m_maxRange <= m_minRange) return;
@@ -146,7 +146,7 @@ void MeterWidget::updateLabelInfo()
 // Needle geometry
 // -----------------------------------------------------------------------------
 
-void MeterWidget::setNeedlePoints()
+void QtMeterWidget::setNeedlePoints()
 {
     // Matches CMeterCtrl::SetNeedlePoints
     m_needle[0] = calcPt(m_actualAngle,             m_innerRadius);
@@ -159,7 +159,7 @@ void MeterWidget::setNeedlePoints()
 // Qt events
 // -----------------------------------------------------------------------------
 
-void MeterWidget::resizeEvent(QResizeEvent *event)
+void QtMeterWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     recalcGeometry();
@@ -170,7 +170,7 @@ void MeterWidget::resizeEvent(QResizeEvent *event)
 // Public API
 // -----------------------------------------------------------------------------
 
-void MeterWidget::setRange(int range1, int range2, bool autoRange)
+void QtMeterWidget::setRange(int range1, int range2, bool autoRange)
 {
     m_autoRange = autoRange;
     if (range1 == range2) return;
@@ -189,14 +189,14 @@ void MeterWidget::setRange(int range1, int range2, bool autoRange)
     update();
 }
 
-void MeterWidget::resetWatermark()
+void QtMeterWidget::resetWatermark()
 {
     m_lowValue  = -1.0;
     m_highValue =  0.0;
     update();
 }
 
-void MeterWidget::setValue(double newValue)
+void QtMeterWidget::setValue(double newValue)
 {
     if (newValue == m_value) return;
 
@@ -233,7 +233,7 @@ void MeterWidget::setValue(double newValue)
 // Paint
 // -----------------------------------------------------------------------------
 
-void MeterWidget::paintEvent(QPaintEvent *)
+void QtMeterWidget::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);

@@ -5,7 +5,7 @@
 // IMPORTANT: any test failure here means a breaking change to the wire protocol.
 #include <QObject>
 #include <QTest>
-#include "DyProto.h"
+#include "QtDyProto.h"
 
 class ProtocolTest : public QObject
 {
