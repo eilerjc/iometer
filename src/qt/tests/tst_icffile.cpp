@@ -145,6 +145,51 @@ private slots:
         QVERIFY(workers[0].targets[0].find("nvme") != std::string::npos);
     }
 
+    // ── Worker type (DISK / TCP) round-trips ─────────────────────────────────
+    void load_networkWorkerType() {
+        TestConfig cfg;
+        std::vector<AccessSpec> specs;
+        std::vector<IcfFile::BatchWorker> workers;
+        QVERIFY(IcfFile::load(fixture("network_worker.icf"), cfg, specs, workers));
+        QCOMPARE(workers.size(), size_t(1));
+        QCOMPARE(workers[0].name, std::string("Worker 1"));
+        QCOMPARE(workers[0].type, std::string("TCP"));   // not dropped to DISK
+        QVERIFY(!workers[0].targets.empty());
+        QCOMPARE(workers[0].targets[0], std::string("127.0.0.1"));
+    }
+    void load_diskWorkerTypeDefaults() {
+        TestConfig cfg;
+        std::vector<AccessSpec> specs;
+        std::vector<IcfFile::BatchWorker> workers;
+        IcfFile::load(fixture("multispec.icf"), cfg, specs, workers);
+        QVERIFY(!workers.empty());
+        QCOMPARE(workers[0].type, std::string("DISK"));
+    }
+    void roundTrip_workerType() {
+        TestConfig cfg; cfg.runSeconds = 5;
+        std::vector<AccessSpec> specs;
+        AccessSpec s; s.name = "4 KiB; 100% Read; 0% random";
+        AccessSpecLine l; l.sizeBytes = 4096; l.readPercent = 100; l.seqPercent = 100; l.ofSize = 100;
+        s.lines.push_back(l); specs.push_back(s);
+        std::vector<IcfFile::BatchWorker> workers;
+        IcfFile::BatchWorker net; net.name = "Net 1"; net.type = "TCP";
+        net.assignedSpecs.push_back(s.name); net.targets.push_back("127.0.0.1");
+        workers.push_back(net);
+        IcfFile::BatchWorker disk; disk.name = "Disk 1"; disk.type = "DISK";
+        disk.assignedSpecs.push_back(s.name); disk.targets.push_back("C");
+        workers.push_back(disk);
+
+        const std::string out = tempPath("workertype.icf");
+        QVERIFY(IcfFile::save(out, cfg, specs, workers));
+        TestConfig cfg2; std::vector<AccessSpec> specs2;
+        std::vector<IcfFile::BatchWorker> workers2;
+        QVERIFY(IcfFile::load(out, cfg2, specs2, workers2));
+        QCOMPARE(workers2.size(), size_t(2));
+        QCOMPARE(workers2[0].type, std::string("TCP"));
+        QCOMPARE(workers2[1].type, std::string("DISK"));
+        std::filesystem::remove(out);
+    }
+
     // ── Robustness: malformed numerics degrade gracefully (no throw) ─────────
     void load_garbledNumericsDoNotThrow() {
         // Non-numeric run-time and access-spec fields must parse to 0 rather

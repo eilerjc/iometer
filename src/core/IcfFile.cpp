@@ -267,7 +267,13 @@ bool IcfFile::load(const std::string &filepath,
 
                 // Parse worker details
                 while (i < lines.size() && lines[i] != "'End worker") {
-                    if (lines[i] == "'Assigned access specs") {
+                    if (lines[i] == "'Worker type") {
+                        ++i;
+                        if (i < lines.size() && !lines[i].empty() && lines[i][0] != '\'') {
+                            bw.type = lines[i];   // DISK / TCP / VI
+                            ++i;
+                        }
+                    } else if (lines[i] == "'Assigned access specs") {
                         ++i;
                         // Capture every assigned spec name (a worker may run several).
                         while (i < lines.size() && lines[i] != "'End assigned access specs") {
@@ -401,7 +407,7 @@ bool IcfFile::save(const std::string &filepath,
             out << "'Worker\n";
             out << "\t" << bw.name << "\n";
             out << "'Worker type\n";
-            out << "\tDISK\n";
+            out << "\t" << (bw.type.empty() ? "DISK" : bw.type) << "\n";
             out << "'Default target settings for worker\n";
             out << "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value\n";
             out << "\t1,DISABLED,1,DISABLED,0\n";

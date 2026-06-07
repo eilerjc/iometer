@@ -13,6 +13,7 @@ public:
     // Represents a worker's batch configuration (from ICF file)
     struct BatchWorker {
         std::string name;
+        std::string type = "DISK";   // worker type from 'Worker type (DISK/TCP/VI)
         std::vector<std::string> assignedSpecs;
         std::vector<std::string> targets;
     };

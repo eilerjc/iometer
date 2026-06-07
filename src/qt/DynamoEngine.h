@@ -256,6 +256,7 @@ private:
     // Per-worker configuration loaded from ICF for batch mode
     struct BatchWorkerConfig {
         QString     name;
+        QString     type = "DISK";   // DISK / TCP / VI, from the ICF 'Worker type
         QStringList assignedSpecs;
         QStringList targets;
     };

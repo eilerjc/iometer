@@ -1067,6 +1067,7 @@ bool DynamoEngine::loadConfig(const QString &filepath)
     for (const auto &bw : batchWorkers) {
         BatchWorkerConfig wc;
         wc.name = QString::fromStdString(bw.name);
+        wc.type = QString::fromStdString(bw.type.empty() ? "DISK" : bw.type);
         wc.assignedSpecs = toQStringList(bw.assignedSpecs);
         wc.targets = toQStringList(bw.targets);
         m_batchWorkers.append(wc);
@@ -1090,6 +1091,8 @@ bool DynamoEngine::saveConfig(const QString &filepath)
             for (const auto &w : m_workerPool.workers(mgr.name)) {
                 IcfFile::BatchWorker bw;
                 bw.name = w.name;                 // std::string -> std::string
+                // WorkerInfo.type is "Disk"/"Network"; map to ICF DISK/TCP.
+                bw.type = (w.type == "Network") ? "TCP" : "DISK";
                 bw.assignedSpecs = w.assignedSpecs;
                 bw.targets = w.targets;
                 batchWorkers.push_back(bw);
@@ -1100,6 +1103,7 @@ bool DynamoEngine::saveConfig(const QString &filepath)
         for (const auto &bw : m_batchWorkers) {
             IcfFile::BatchWorker ibw;
             ibw.name = bw.name.toStdString();
+            ibw.type = bw.type.toStdString();
             ibw.assignedSpecs = toStdStrings(bw.assignedSpecs);
             ibw.targets = toStdStrings(bw.targets);
             batchWorkers.push_back(ibw);
