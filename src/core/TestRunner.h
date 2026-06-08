@@ -18,7 +18,7 @@
 //   - Worker setup and configuration
 //   - Result collection
 //   - Progress tracking
-// Used by both MFC and Qt implementations
+// Used by both the GUI front-ends
 
 class TestRunner {
 
@@ -60,7 +60,7 @@ public:
     const std::vector<WorkerInfo>& workers() const { return m_workers; }
     const std::vector<AccessSpec>& specs() const { return m_specs; }
 
-    // Optional callbacks (for Qt/MFC signal integration)
+    // Optional callbacks (for GUI signal integration)
     std::function<void(State)> onStateChanged;
     std::function<void(const std::string&)> onStatusMessage;
     std::function<void(const std::string&)> onErrorOccurred;

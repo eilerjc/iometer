@@ -28,7 +28,7 @@ bool ResultsWriter::writeBatchResultsCsv(const std::string &filepath,
     std::ofstream out(filepath);
     if (!out) return false;
 
-    // Six-decimal fixed format matches the original QString::number(v, 'f', 6).
+    // Six-decimal fixed format matches the original Iometer output precision.
     auto fmt = [](double v) { return formatDouble(v, 6); };
 
     // -- File header (matches original ManagerList output) -----------------

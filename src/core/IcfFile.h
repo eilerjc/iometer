@@ -5,7 +5,7 @@
 #include "IometerTypes.h"
 
 // Encapsulates ICF 1.1.0 file format parsing and writing (platform-agnostic)
-// Shared interface for MFC and Qt implementations
+// Shared interface for the GUI front-ends
 // Handles: TestConfig + AccessSpecs + worker assignments, version validation
 
 class IcfFile {

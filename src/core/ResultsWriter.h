@@ -5,11 +5,11 @@
 #include "IometerTypes.h"
 
 // CSV output generation (platform-agnostic)
-// Shared interface for MFC and Qt implementations
+// Shared interface for the GUI front-ends
 class ResultsWriter {
 public:
     // Write Iometer results to CSV file (ICF 1.1.0 output format)
-    // Both MFC and Qt use this interface for consistent CSV generation
+    // Both GUI front-ends use this interface for consistent CSV generation
     static bool writeBatchResultsCsv(const std::string &filepath,
                                      const std::vector<WorkerResult> &results,
                                      const TestConfig &cfg);

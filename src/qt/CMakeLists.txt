@@ -40,8 +40,34 @@ function(apply_coverage_flags target)
     endif()
 endfunction()
 
-# ── Engine + widget sources (shared between app and tests via static lib) ────
-set(CORE_SOURCES
+# ── IometerCore: platform-neutral manager logic (pure C++, NO Qt) ────────────
+# The shared "core of the manager" that BOTH the Qt and MFC GUIs wrap. It must
+# not reference Qt or MFC; the MFC project links the same ../core/*.cpp files.
+set(IOMETER_CORE_SOURCES
+    ../core/ResultsWriter.cpp
+    ../core/DynamoConnection.cpp
+    ../core/IcfFile.cpp
+    ../core/WorkerPool.cpp
+    ../core/TestRunner.cpp
+    ../core/NetworkSetup.cpp
+)
+set(IOMETER_CORE_HEADERS
+    ../core/IometerTypes.h
+    ../core/ResultsWriter.h
+    ../core/DynamoConnection.h
+    ../core/IcfFile.h
+    ../core/WorkerPool.h
+    ../core/TestRunner.h
+    ../core/NetworkSetup.h
+)
+add_library(IometerCore STATIC ${IOMETER_CORE_SOURCES} ${IOMETER_CORE_HEADERS})
+target_include_directories(IometerCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../core)
+# Deliberately NO Qt link: IometerCore is pure C++ so MFC can link it too.
+set_target_properties(IometerCore PROPERTIES AUTOMOC OFF)
+apply_coverage_flags(IometerCore)
+
+# ── IometerQtGui: the Qt GUI layer that wraps IometerCore ─────────────────────
+set(QTGUI_SOURCES
     QtDemoEngine.cpp
     QtDynamoEngine.cpp
     QtMeterWidget.cpp
@@ -53,14 +79,8 @@ set(CORE_SOURCES
     QtPageResults.cpp
     QtPageNetwork.cpp
     QtMainWindow.cpp
-    ../core/ResultsWriter.cpp
-    ../core/DynamoConnection.cpp
-    ../core/IcfFile.cpp
-    ../core/WorkerPool.cpp
-    ../core/TestRunner.cpp
-    ../core/NetworkSetup.cpp
 )
-set(CORE_HEADERS
+set(QTGUI_HEADERS
     QtIometerTypes.h
     QtIometerEngine.h
     QtDemoEngine.h
@@ -75,25 +95,15 @@ set(CORE_HEADERS
     QtPageResults.h
     QtPageNetwork.h
     QtMainWindow.h
-    ../core/ResultsWriter.h
-    ../core/DynamoConnection.h
-    ../core/IcfFile.h
-    ../core/WorkerPool.h
-    ../core/TestRunner.h
-    ../core/NetworkSetup.h
 )
-
-# ── Static library shared by app + all test targets ──────────────────────────
-add_library(IometerQtCore STATIC ${CORE_SOURCES} ${CORE_HEADERS})
-target_include_directories(IometerQtCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../core)
-target_link_libraries(IometerQtCore PUBLIC ${_QT}::Widgets ${_QT}::Network)
-
-# Apply coverage instrumentation to the library (so test coverage includes it)
-apply_coverage_flags(IometerQtCore)
+add_library(IometerQtGui STATIC ${QTGUI_SOURCES} ${QTGUI_HEADERS})
+target_include_directories(IometerQtGui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/../core)
+target_link_libraries(IometerQtGui PUBLIC IometerCore ${_QT}::Widgets ${_QT}::Network)
+apply_coverage_flags(IometerQtGui)
 
 # ── Main application ─────────────────────────────────────────────────────────
 add_executable(IometerQt main.cpp resources.qrc)
-target_link_libraries(IometerQt PRIVATE IometerQtCore)
+target_link_libraries(IometerQt PRIVATE IometerQtGui)
 if(WIN32)
     set_target_properties(IometerQt PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
@@ -108,7 +118,7 @@ set(SMOKE_ICF    "${CMAKE_SOURCE_DIR}/../../test/smoke_test.icf")
 # Helper macro: creates one test executable and registers it with CTest
 macro(iometer_test name)
     add_executable(${name} tests/${name}.cpp)
-    target_link_libraries(${name} PRIVATE IometerQtCore ${_QT}::Test)
+    target_link_libraries(${name} PRIVATE IometerQtGui ${_QT}::Test)
     target_compile_definitions(${name} PRIVATE
         IOMETER_TESTING
         IOMETER_FIXTURE_DIR="${FIXTURE_DIR}"

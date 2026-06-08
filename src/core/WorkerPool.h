@@ -10,7 +10,7 @@
 //   - Add/remove workers per manager
 //   - Worker validation
 //   - Worker lifecycle queries
-// Used by both MFC and Qt implementations
+// Used by both the GUI front-ends
 
 class WorkerPool {
 public:

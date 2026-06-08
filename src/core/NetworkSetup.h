@@ -4,13 +4,13 @@
 #include <vector>
 #include <cstddef>
 
-// Platform-agnostic network test setup, shared by BOTH the Qt and MFC GUIs.
+// Platform-agnostic network test setup, shared by BOTH GUI front-ends.
 // Dynamo's network code is proven and does the actual sockets; this only decides
 // server/client ROLES and the TARGET each network worker needs, so a controller
 // can build its SET_TARGETS messages. Deliberately self-contained - it depends
-// on neither Qt, MFC, nor the Qt-core domain model (no WorkerInfo / TargetKind),
+// on neither GUI toolkit nor the core domain model (no WorkerInfo / TargetKind),
 // just std:: types - so either GUI can use it and map the result onto its own
-// wire format (Qt: DyTargetSpec.tcp_info; MFC: Target_Spec.tcp_info).
+// wire format (each GUI maps it onto its own target spec tcp_info).
 //
 // Iometer network model: a CLIENT worker connects to a SERVER worker's network
 // interface. A single-manager "loopback" test pairs workers on 127.0.0.1 so the

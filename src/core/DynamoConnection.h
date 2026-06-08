@@ -14,7 +14,7 @@ struct DyDataMessage;
 //   - DY_LOGIN message exchange
 //   - Manager_Info data reception
 //   - Message framing
-// Used by both Qt (DySession wrapper) and MFC implementations
+// Used by the GUI front-ends (each wraps it with its own socket transport)
 
 class DynamoConnection {
 public:
@@ -50,7 +50,7 @@ public:
     // Close connection gracefully
     void disconnect();
 
-    // Optional callbacks (for Qt/MFC integration)
+    // Optional callbacks (for GUI integration)
     std::function<void(const std::string&)> onConnected;
     std::function<void()> onDisconnected;
     std::function<void(DyDataMessage*)> onDataReceived;
@@ -60,7 +60,7 @@ private:
     bool waitForBytes(int count, int timeoutMs);
     bool receiveExactly(int count);
 
-    void *m_socket;  // Opaque pointer to platform-specific socket (QTcpSocket* on Qt)
+    void *m_socket;  // Opaque pointer to the GUI's platform-specific socket object
     State m_state;
     std::string m_managerName;
     std::string m_buffer;  // Input buffer for partial messages
