@@ -204,10 +204,18 @@
 #if defined(IOMTR_OSFAMILY_WINDOWS)   // Only first, because it is needed here!
  //#define VC_EXTRALEAN
  //#pragma warning (disable: 4242)
+ // IOMTR_NO_MFC: a manager build (e.g. the Qt GUI / IometerCore) that wants the
+ // portable wire types from this header but is NOT an MFC application. It only
+ // needs the Win32 API (<windows.h>), not the MFC framework (StdAfx.h/afxwin.h).
+ // Dynamo and the MFC GUI do not define it and keep their exact StdAfx path.
+#if defined(IOMTR_NO_MFC)
+#include <windows.h>
+#else
 #include "StdAfx.h"
+#endif
 //#define WIN32_LEAN_AND_MEAN 1
 //#include <Windows.h>
-//#include <windef.h>  
+//#include <windef.h>
  #include <process.h>
  #include <io.h>
  #include <direct.h>

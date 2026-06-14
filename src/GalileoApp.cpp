@@ -69,6 +69,7 @@
 /* ######################################################################### */
 
 #include "stdafx.h"
+#include <shellapi.h>		// ShellExecuteEx - launch Dynamo elevated (runas)
 #include "GalileoDefs.h"
 #include "GalileoApp.h"
 #include "MainFrm.h"
@@ -279,6 +280,9 @@ BOOL CGalileoApp::InitInstance()
 	    + "\"" + iometer_path + NEW_WORKER_EXECUTABLE + "%s%s\"" + " "
 	    + "\"" + iometer_path + NEW_WORKER_EXECUTABLE + "\"%s%s";
 
+	// Full path to the Dynamo executable, launched elevated by LaunchDynamo().
+	dynamo_exe_path = (CString) iometer_path + NEW_WORKER_EXECUTABLE + ".exe";
+
 	if (cmdline.GetConfigFile().IsEmpty()) {
 #ifndef	_DEBUG
 		// If the default config file exists, load it.
@@ -420,19 +424,41 @@ BOOL CGalileoApp::IsAddressLocal(const CString & addr)
 //
 void CGalileoApp::LaunchDynamo(const CString & mgr_name /* ="" */ )
 {
-	CString cmd;
-	CString portparam;
+	CString portparam, params;
 
-	// Make sure the formatting string was initialized.
-	ASSERT(!theApp.new_manager_command_line_format.IsEmpty());
+	ASSERT(!theApp.dynamo_exe_path.IsEmpty());
 
 	portparam.Format(" -p %d ", cmdline.GetLoginportnumber());
 
-	// Create a string with the appropriate command line parameters.
-	cmd.Format(new_manager_command_line_format, mgr_name, portparam, mgr_name, portparam);
+	// e.g. " -p 1066 " for the local default manager, or " -n MyMgr -p 1066 "
+	// for a named local manager (mgr_name already includes the " -n <name>").
+	params = mgr_name + portparam;
 
-	// Launch Dynamo.
-	system(cmd);
+	// Launch Dynamo ELEVATED. The GUI runs unelevated (asInvoker manifest);
+	// only Dynamo needs administrator rights (raw-disk access), so we elevate
+	// just Dynamo via the "runas" verb. The user sees one UAC prompt per local
+	// Dynamo. The elevated Dynamo connects back to the GUI's login port over
+	// loopback TCP, which works across the integrity-level boundary.
+	SHELLEXECUTEINFO sei;
+	memset(&sei, 0, sizeof(sei));
+	sei.cbSize = sizeof(sei);
+	sei.fMask = SEE_MASK_NOASYNC;
+	sei.lpVerb = "runas";
+	sei.lpFile = dynamo_exe_path;
+	sei.lpParameters = params;
+	sei.nShow = SW_MINIMIZE;
+
+	if (!ShellExecuteEx(&sei)) {
+		DWORD err = GetLastError();
+		if (err == ERROR_CANCELLED) {
+			// User declined the elevation prompt - nothing was launched.
+			ErrorMessage("Dynamo was not started: the elevation request was cancelled.");
+		} else {
+			CString msg;
+			msg.Format("Failed to launch Dynamo (%s), error %lu.", (LPCTSTR) dynamo_exe_path, err);
+			ErrorMessage(msg);
+		}
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////

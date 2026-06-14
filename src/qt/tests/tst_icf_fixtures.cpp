@@ -62,6 +62,20 @@ private slots:
         QCOMPARE(p.workers[0].targets[0], std::string("SystemA"));
         QCOMPARE(p.workers[1].targets[0], std::string("SystemB"));
     }
+    void twoManagers_workersCarryTheirManager() {
+        auto p = parse("two_managers.icf");
+        QCOMPARE(p.workers[0].managerName, std::string("HOST_A"));
+        QCOMPARE(p.workers[0].managerId,   1);
+        QCOMPARE(p.workers[1].managerName, std::string("HOST_B"));
+        QCOMPARE(p.workers[1].managerId,   2);
+    }
+    void nonlocalManager_workerCarriesNameAndAddress() {
+        auto p = parse("nonlocal_manager.icf");
+        QVERIFY(p.ok);
+        QCOMPARE(p.workers.size(), size_t(1));
+        QCOMPARE(p.workers[0].managerName,    std::string("TESTMGR"));
+        QCOMPARE(p.workers[0].managerAddress, std::string("localhost"));
+    }
 
     // ── multi_target.icf ─────────────────────────────────────────────────────
     void multiTarget_loads() {

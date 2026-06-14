@@ -72,6 +72,8 @@
 #include "ManagerList.h"
 #include "GalileoApp.h"
 #include "GalileoView.h"
+#include "core/IcfDocument.h"	// shared MANAGER LIST parse result types
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -1723,34 +1725,43 @@ char *Manager::GetCommonAccessSpec(int spec_index, char *const specname)
 //              save_aspecs --> should each worker's access spec assignments be saved?
 //              save_targets --> should each worker's target assignments be saved?
 //
-BOOL Manager::SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targets)
+// Gather this manager + its (non-client) workers' live config into a shared
+// iocore::IcfManagerConfig (the byte format is emitted by iocore::IcfWriter).
+BOOL Manager::GatherConfig(iocore::IcfManagerConfig & m, BOOL save_aspecs, BOOL save_targets)
 {
 	int wkr_count = WorkerCount();
 
-	outfile << "'Manager ID, manager name" << endl << "\t" << id << "," << name << endl;
-	outfile << "'Manager network address" << endl << "\t" << network_name << endl;
+	m.id      = id;
+	m.name    = name;
+	m.address = network_name;
 
-	for (int counter = 0; counter < wkr_count; counter++)
-		if (!GetWorker(counter)->SaveConfig(outfile, save_aspecs, save_targets))
+	for (int counter = 0; counter < wkr_count; counter++) {
+		Worker *wkr = GetWorker(counter);
+
+		// Don't record network clients.  They are restored when the network
+		// server's targets are examined.
+		if (IsType(wkr->Type(), GenericClientType))
+			continue;
+
+		iocore::IcfWorkerConfig w;
+		if (!wkr->GatherConfig(w, save_aspecs, save_targets))
 			return FALSE;	// error saving data - propagate back
+		m.workers.push_back(w);
+	}
 
-	outfile << "'End manager" << endl;
 	return TRUE;
 }
 
 //
-// Restore the manager/worker configuration from the specified stream.
-//              load_aspecs --> should each worker's access spec assignments be loaded?
-//              load_targets --> should each worker's target assignments be loaded?
+// Apply a core-parsed manager config (iocore::IcfManagerConfig) to the live
+// manager. This is the parse-then-apply replacement for the stream-based
+// LoadConfig: the PARSE now lives in iocore::IcfDocument::loadManagerList; this
+// reproduces the worker matching/creation side-effects faithfully.
 //
-// Returns TRUE on success, FALSE if any of the requested information
-// couldn't be found in the file.
-//
-BOOL Manager::LoadConfig(ICF_ifstream & infile, BOOL load_aspecs, BOOL load_targets)
+BOOL Manager::LoadConfig(const iocore::IcfManagerConfig & pm, BOOL load_aspecs, BOOL load_targets)
 {
-	CString key, value;
 	int counter;
-	CString wkr_name, token;
+	CString wkr_name;
 	TargetType wkr_type_hex = InvalidType;
 	Worker *wkr;
 	int wkr_count, wkr_svr_count;
@@ -1760,15 +1771,10 @@ BOOL Manager::LoadConfig(ICF_ifstream & infile, BOOL load_aspecs, BOOL load_targ
 	CArray < Worker *, int >wkr_svr_list;	// Pointers to each of the workers (they may move)
 
 	wkr_count = WorkerCount();
-
-	// The number of array elements needed is really (wkr_count - n),
-	// where n is the number of network clients, but n is unknown and
-	// this doesn't waste much space, as n should always be small.
 	wkr_svr_loaded.SetSize(wkr_count);
 	wkr_svr_list.SetSize(wkr_count);
 
 	// Identify all workers that are not clients.
-	// (We don't want to deal with the clients here - that's the job of target selection.)
 	wkr_svr_count = 0;
 	for (counter = 0; counter < wkr_count; counter++) {
 		wkr = GetWorker(counter);
@@ -1779,91 +1785,45 @@ BOOL Manager::LoadConfig(ICF_ifstream & infile, BOOL load_aspecs, BOOL load_targ
 		}
 	}
 
-	while (1) {
-		if (!infile.GetPair(key, value)) {
-			ErrorMessage("File is improperly formatted.  Expected a " "worker or \"End manager\".");
-			return FALSE;
+	for (size_t w = 0; w < pm.workers.size(); w++) {
+		const iocore::IcfWorkerConfig & pw = pm.workers[w];
+		wkr_name = pw.name.c_str();
+
+		switch (pw.kind) {
+		case iocore::IcfWorkerKind::Disk:	wkr_type_hex = GenericDiskType;	break;
+		case iocore::IcfWorkerKind::NetTCP:	wkr_type_hex = TCPServerType;	break;
+		case iocore::IcfWorkerKind::NetVI:	wkr_type_hex = VIServerType;	break;
+		default:				wkr_type_hex = InvalidType;	break;
 		}
 
-		if (key.CompareNoCase("'End manager") == 0) {
-			break;
-		} else if (key.CompareNoCase("'Worker") == 0) {
-			wkr_name = value;
+		// See if this worker already exists on this manager.
+		for (counter = 0; counter < wkr_svr_count; counter++) {
+			if (wkr_name.CompareNoCase(wkr_svr_list[counter]->name) == 0
+			    && IsType(wkr_svr_list[counter]->Type(),
+				      (TargetType) (wkr_type_hex & WORKER_COMPATIBILITY_MASK))
+			    && !wkr_svr_loaded[counter]) {
+				wkr_svr_loaded[counter] = TRUE;
+				wkr = wkr_svr_list[counter];
 
-			if (!infile.GetPair(key, value)) {
-				ErrorMessage("File is improperly formatted.  Expected " "\"Worker type\".");
-				return FALSE;
+				break;	// Worker was found, stop looking.
 			}
-
-			if (key.CompareNoCase("'Worker type") != 0) {
-				ErrorMessage("File is improperly formatted.  Worker name "
-					     "should be followed by \"Worker type\" comment.");
-				return FALSE;
-			}
-
-			token = ICF_ifstream::ExtractFirstToken(value);
-			if (token.CompareNoCase("DISK") == 0) {
-				wkr_type_hex = GenericDiskType;
-			} else if (token.CompareNoCase("NETWORK") == 0) {
-				token = ICF_ifstream::ExtractFirstToken(value);
-				if (token.CompareNoCase("TCP") == 0) {
-					wkr_type_hex = TCPServerType;
-				} else if (token.CompareNoCase("VI") == 0) {
-					wkr_type_hex = VIServerType;
-				} else {
-					ErrorMessage("Unknown network worker subtype encountered "
-						     "for worker \"" + wkr_name + "\": \"" + token
-						     + "\".  Should be either TCP or VI.");
-				}
-			} else {
-				ErrorMessage("Unknown worker type encountered for worker \""
-					     + wkr_name + "\": \"" + token + "\".  Should be either DISK or NETWORK.");
-				return FALSE;
-			}
-
-			// See if this worker already exists on this manager.
-			for (counter = 0; counter < wkr_svr_count; counter++) {
-				if (wkr_name.CompareNoCase(wkr_svr_list[counter]->name) == 0
-				    && IsType(wkr_svr_list[counter]->Type(),
-					      (TargetType) (wkr_type_hex & WORKER_COMPATIBILITY_MASK))
-				    && !wkr_svr_loaded[counter]) {
-					wkr_svr_loaded[counter] = TRUE;
-					wkr = wkr_svr_list[counter];
-
-					break;	// Worker was found, stop looking.
-				}
-			}
-
-			// See if we weren't able to find a match.
-			if (counter >= wkr_svr_count) {
-				// This worker doesn't already exist, or two workers of the
-				// same name have been defined for a single manager, and only
-				// one worker by that name exists in the running copy of
-				// Iometer.
-
-				// So this worker needs to be created.
-
-				// wkr_count is intentionally not being incremented after the
-				// addition of this new worker.  It is only used above, to
-				// search for previously existing workers.
-
-				wkr = theApp.pView->AddWorker(wkr_type_hex, this, wkr_name);
-
-				if (load_aspecs) {
-					// If the user has specified that he wishes to restore
-					// access spec assignments, no default assignments should
-					// take place.
-					wkr->RemoveAllAccessSpecs();
-				}
-			}
-			// Load the worker.
-			if (!wkr->LoadConfig(infile, load_aspecs, load_targets))
-				return FALSE;
-		} else {
-			ErrorMessage("File is improperly formatted.  MANAGER section "
-				     "contained an unrecognized \"" + key + "\" comment.");
-			return FALSE;
 		}
+
+		// See if we weren't able to find a match.
+		if (counter >= wkr_svr_count) {
+			// This worker doesn't already exist (or a duplicate name); create it.
+			// wkr_count is intentionally not incremented (only used above to
+			// search for previously existing workers).
+			wkr = theApp.pView->AddWorker(wkr_type_hex, this, wkr_name);
+
+			if (load_aspecs) {
+				// Restoring assignments explicitly -> no default assignments.
+				wkr->RemoveAllAccessSpecs();
+			}
+		}
+		// Load the worker.
+		if (!wkr->LoadConfig(pw, load_aspecs, load_targets))
+			return FALSE;
 	}
 
 	return TRUE;

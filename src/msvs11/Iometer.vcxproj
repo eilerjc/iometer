@@ -121,7 +121,7 @@
       <AdditionalDependencies>MSWSOCK.LIB;VERSION.LIB;WS2_32.LIB;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)IOmeter.exe</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+      <UACExecutionLevel>AsInvoker</UACExecutionLevel>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>$(OutDir)IOmeter.pdb</ProgramDatabaseFile>
@@ -161,7 +161,7 @@
       <AdditionalDependencies>Ws2_32.lib;Mswsock.lib;Version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)IOmeter.exe</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
+      <UACExecutionLevel>AsInvoker</UACExecutionLevel>
       <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>$(OutDir)IOmeter.pdb</ProgramDatabaseFile>
@@ -271,6 +271,21 @@
     <ClCompile Include="..\Manager.cpp" />
     <ClCompile Include="..\ManagerList.cpp" />
     <ClCompile Include="..\ManagerMap.cpp" />
+    <ClCompile Include="..\core\ManagerMap.cpp">
+      <ObjectFileName>$(IntDir)core_ManagerMap.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\core\AccessSpecCatalog.cpp">
+      <ObjectFileName>$(IntDir)core_AccessSpecCatalog.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\core\IcfStream.cpp">
+      <ObjectFileName>$(IntDir)core_IcfStream.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\core\IcfDocument.cpp">
+      <ObjectFileName>$(IntDir)core_IcfDocument.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\core\IcfWriter.cpp">
+      <ObjectFileName>$(IntDir)core_IcfWriter.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="..\MeterCtrl.cpp" />
     <ClCompile Include="..\PageAccess.cpp" />
     <ClCompile Include="..\PageDisk.cpp" />
@@ -306,6 +321,11 @@
     <ClInclude Include="..\Manager.h" />
     <ClInclude Include="..\ManagerList.h" />
     <ClInclude Include="..\ManagerMap.h" />
+    <ClInclude Include="..\core\ManagerMap.h" />
+    <ClInclude Include="..\core\AccessSpecCatalog.h" />
+    <ClInclude Include="..\core\IcfStream.h" />
+    <ClInclude Include="..\core\IcfDocument.h" />
+    <ClInclude Include="..\core\IcfWriter.h" />
     <ClInclude Include="..\MeterCtrl.h" />
     <ClInclude Include="..\ostream64.h" />
     <ClInclude Include="..\pack.h" />

@@ -1,10 +1,10 @@
 #include "ResultsWriter.h"
+#include "ResultsAggregator.h"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <cmath>
 #include <ctime>
-#include <set>
 
 // Format a timestamp matching the original Iometer output ("yyyy/MM/dd hh:mm:ss")
 static std::string currentTimestamp()
@@ -61,32 +61,12 @@ bool ResultsWriter::writeBatchResultsCsv(const std::string &filepath,
            "CPU % Utilization (total),CPU % User,CPU % Privileged,"
            "CPU % DPC,CPU % Interrupt,CPU Interrupts/sec,CPU Effectiveness\n";
 
-    // Build aggregate from non-aggregate worker rows (existing ALL rows are skipped)
-    WorkerResult agg;
-    agg.managerName = "ALL";
-    agg.workerName  = "All";
-    agg.isAggregate = true;
-    int workerCount = 0;
-    std::set<std::string> managers;
-
-    for (const auto &r : results) {
-        if (r.isAggregate) continue;
-        agg.iops         += r.iops;
-        agg.readIops     += r.readIops;
-        agg.writeIops    += r.writeIops;
-        agg.mbpsDec      += r.mbpsDec;
-        agg.readMbpsDec  += r.readMbpsDec;
-        agg.writeMbpsDec += r.writeMbpsDec;
-        agg.mbpsBin      += r.mbpsBin;
-        agg.avgLatencyMs += r.avgLatencyMs;
-        agg.maxLatencyMs  = std::max(agg.maxLatencyMs, r.maxLatencyMs);
-        agg.cpuUtil      += r.cpuUtil;
-        agg.errors       += r.errors;
-        managers.insert(r.managerName);
-        ++workerCount;
-    }
-    if (workerCount > 0) agg.avgLatencyMs /= workerCount;
-    const int mgCount = static_cast<int>(managers.size());
+    // Build the ALL aggregate from non-aggregate worker rows (existing ALL rows
+    // are skipped) - shared core logic, same as the GUIs' live displays.
+    const iocore::AggregateResult aggRes = iocore::aggregateResults(results);
+    const WorkerResult &agg   = aggRes.all;
+    const int workerCount     = aggRes.workerCount;
+    const int mgCount         = aggRes.managerCount;
 
     // Write the ALL aggregate row - column positions must match the header above.
     // [0]ALL [1]All [2]manager [3]workers [4]managers [5]targets

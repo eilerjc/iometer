@@ -55,12 +55,10 @@ Version 1.1.0
 'Worker
 	Worker 1
 'Worker type
-	TCP
+	NETWORK,TCP
 'Default target settings for worker
 'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value
 	1,DISABLED,1,DISABLED,0
-'Disk maximum size,starting sector,Data pattern
-	0,0,0
 'End default target settings for worker
 'Assigned access specs
 	4 KiB; 100% Read; 0% random
@@ -69,7 +67,9 @@ Version 1.1.0
 'Target
 	127.0.0.1
 'Target type
-	TCP
+	NETWORK,TCP
+'Target manager ID, manager name
+	1,TESTMGR
 'End target
 'End target assignments
 'End worker

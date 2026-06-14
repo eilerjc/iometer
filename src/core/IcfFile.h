@@ -16,6 +16,13 @@ public:
         std::string type = "DISK";   // worker type from 'Worker type (DISK/TCP/VI)
         std::vector<std::string> assignedSpecs;
         std::vector<std::string> targets;
+
+        // The manager (from the ICF MANAGER LIST) this worker belongs to, so a
+        // front-end can reconstruct the manager grouping and drive restore via
+        // iocore::ManagerMap. managerAddress "" means the local machine.
+        std::string managerName;
+        std::string managerAddress;
+        int         managerId = 1;
     };
 
     // Load ICF configuration from file

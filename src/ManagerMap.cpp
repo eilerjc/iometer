@@ -92,8 +92,14 @@ ManagerMap::ManagerMap()
 //
 void ManagerMap::Reset()
 {
-	map.RemoveAll();
+	m_core.reset();
 	waiting_dialog.Reset();
+}
+
+// Convert an MFC CString to std::string for the core layer.
+static std::string ToStd(const CString & s)
+{
+	return std::string((LPCTSTR) s);
 }
 
 //
@@ -106,14 +112,7 @@ void ManagerMap::Reset()
 //
 void ManagerMap::Store(const CString & name, const int id, const CString & address, Manager * mgr)
 {
-	int new_index = (int)map.GetSize();
-
-	map.SetSize(new_index + 1);	// grow the array by one
-
-	map[new_index].name = name;
-	map[new_index].id = id;
-	map[new_index].address = address;
-	map[new_index].mgr = mgr;
+	m_core.store(ToStd(name), id, ToStd(address), mgr);
 
 	// Add this manager to the waiting list if necessary.
 	if (mgr == NULL)
@@ -127,20 +126,10 @@ void ManagerMap::Store(const CString & name, const int id, const CString & addre
 //
 Manager *ManagerMap::Retrieve(const CString & name, const int id)
 {
-	int mapsize = (int)map.GetSize();
-
 	// Make sure the ManagerMap isn't in a waiting list state (DEBUG only)
 	ASSERT(!IsWaitingList());
 
-	for (int counter = 0; counter < mapsize; counter++) {
-		if ((name.CompareNoCase(map[counter].name) == 0 && id == map[counter].id)
-		    || (map[counter].name == HOSTNAME_LOCAL))	// "special local host" case
-		{
-			return map[counter].mgr;
-		}
-	}
-
-	return NULL;
+	return (Manager *) m_core.retrieve(ToStd(name), id);
 }
 
 //
@@ -152,25 +141,11 @@ Manager *ManagerMap::Retrieve(const CString & name, const int id)
 //
 BOOL ManagerMap::ManagerLoggedIn(const CString & name, const CString & address, Manager * mgr)
 {
-	int mapsize = (int)map.GetSize();
-
-	for (int counter = 0; counter < mapsize; counter++) {
-		// If manager is unassigned (waiting) and all other criteria
-		// match, assign it the passed-in pointer.
-		if (map[counter].mgr == NULL
-		    &&
-		    ((name.CompareNoCase(map[counter].name) == 0 && address.CompareNoCase(map[counter].address) == 0))
-		    || ((map[counter].address == "")	// "special local host" case
-			&& (map[counter].name.Compare(HOSTNAME_LOCAL) == 0))) {
-			map[counter].mgr = mgr;
-
-			// Remove this manager from the waiting list.
-			(void)waiting_dialog.RemoveWaitingManager(name, address);
-
-			return TRUE;
-		}
+	if (m_core.managerLoggedIn(ToStd(name), ToStd(address), mgr)) {
+		// Remove this manager from the waiting list.
+		(void)waiting_dialog.RemoveWaitingManager(name, address);
+		return TRUE;
 	}
-
 	return FALSE;
 }
 
@@ -181,17 +156,7 @@ BOOL ManagerMap::ManagerLoggedIn(const CString & name, const CString & address, 
 //
 BOOL ManagerMap::SetIfOneManager(Manager * mgr)
 {
-	// Make sure there's exactly one manager in the map...
-	if (map.GetSize() != 1)
-		return FALSE;
-
-	// Make sure the manager is unassigned...
-	if (map[0].mgr != NULL)
-		return FALSE;
-
-	// Assign it the passed-in pointer.
-	map[0].mgr = mgr;
-	return TRUE;
+	return m_core.setIfOneManager(mgr) ? TRUE : FALSE;
 }
 
 //
@@ -200,14 +165,7 @@ BOOL ManagerMap::SetIfOneManager(Manager * mgr)
 //
 BOOL ManagerMap::IsWaitingList()
 {
-	int mapsize = (int)map.GetSize();
-
-	for (int counter = 0; counter < mapsize; counter++) {
-		if (map[counter].mgr == NULL)
-			return TRUE;
-	}
-
-	return FALSE;
+	return m_core.isWaitingList() ? TRUE : FALSE;
 }
 
 //
@@ -219,14 +177,8 @@ BOOL ManagerMap::IsWaitingList()
 //
 BOOL ManagerMap::IsThisManagerNeeded(const Manager * const mgr)
 {
-	int mapsize = (int)map.GetSize();
-
-	for (int counter = 0; counter < mapsize; counter++) {
-		if (map[counter].mgr == mgr)
-			return TRUE;
-	}
-
-	return FALSE;
+	return m_core.isManagerNeeded((iocore::ManagerMap::Handle) const_cast<Manager *>(mgr))
+	    ? TRUE : FALSE;
 }
 
 //
@@ -235,38 +187,27 @@ BOOL ManagerMap::IsThisManagerNeeded(const Manager * const mgr)
 //
 void ManagerMap::SpawnLocalManagers()
 {
-	int mapsize = (int)map.GetSize();
+	// Get the local machine's NetBIOS/NT name first.
+	// (IsAddressLocal would also match IP addresses, which is undesirable for the
+	// name-based local check; the core does both, given the name and an isLocal fn.)
 	CString nt_name;
 	DWORD namelength = MAX_NETWORK_NAME;
-
-	// Get the local machine's NetBIOS/NT name first.
-	// This can be done using CGalileoApp::IsAddressLocal, but that
-	// would match IP addresses as well, which is undesirable.
 	::GetComputerName(nt_name.GetBuffer(MAX_NETWORK_NAME), &namelength);
-	nt_name.ReleaseBuffer();	
+	nt_name.ReleaseBuffer();
 
-	// Go through each manager entry in the map.
-	for (int counter = 0; counter < mapsize; counter++) {
+	// Core decides WHICH unassigned local managers to spawn (and with what -n);
+	// this wrapper performs the actual spawn via LaunchDynamo().
+	std::vector<iocore::ManagerMap::SpawnRequest> requests = m_core.localManagersToSpawn(
+	    [](const std::string & addr) -> bool {
+		    return theApp.IsAddressLocal(CString(addr.c_str())) != FALSE;
+	    },
+	    ToStd(nt_name));
 
-		//
-		// Fix the failure to load managers when more than 1  are specified in an ICF file. 
-		// Looks for the netbios and "(Local)" names first, then match only the local 
-		// address to match the original behavior.
-		//
-		
-		// If this manager's address is local and the manager is unassigned...
-		if (map[counter].mgr == NULL) {
-			if (((map[counter].address == "") && (map[counter].name.Compare(HOSTNAME_LOCAL) == 0))
-				|| (map[counter].name.CompareNoCase(nt_name) == 0) // match local netbios name only
-				){
-					// Spawn a Dynamo with local defaults
-					theApp.LaunchDynamo();
-			} else if (theApp.IsAddressLocal(map[counter].address)) {
-				// Spawn a Dynamo with the appropriate name parameter.
-				// For local Dynamo with a non-default name.
-				theApp.LaunchDynamo(" -n " + map[counter].name);
-			}
-		}
+	for (size_t i = 0; i < requests.size(); i++) {
+		if (requests[i].nameArg.empty())
+			theApp.LaunchDynamo();	// spawn a Dynamo with local defaults
+		else
+			theApp.LaunchDynamo(" -n " + CString(requests[i].nameArg.c_str()));
 	}
 }
 

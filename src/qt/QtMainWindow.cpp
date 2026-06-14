@@ -352,8 +352,20 @@ void QtMainWindow::rebuildWorkerTree()
     }
     root->setExpanded(true);
 
-    m_statusRight->setText(QString("%1 worker(s) | %2 manager(s)")
-        .arg(workerCount).arg(m_engine->managers().size()));
+    // Manager summary. When a config has been loaded that names managers, show
+    // restore progress (connected/expected) and a waiting indicator; otherwise
+    // just the live manager count.
+    const int expectedMgrs = m_engine->expectedManagers().size();
+    QString mgrText;
+    if (expectedMgrs > 0) {
+        mgrText = QString("%1/%2 manager(s)%3")
+            .arg(m_engine->connectedManagerCount())
+            .arg(expectedMgrs)
+            .arg(m_engine->isWaitingForManagers() ? QStringLiteral(" — waiting") : QString());
+    } else {
+        mgrText = QString("%1 manager(s)").arg(m_engine->managers().size());
+    }
+    m_statusRight->setText(QString("%1 worker(s) | %2").arg(workerCount).arg(mgrText));
 
     m_workerTree->blockSignals(false);
 

@@ -120,18 +120,20 @@ if (Test-Path $covCtrlOut) { $covFiles += $covCtrlOut; Write-Host "  [cov] iomet
 else { Write-Host "  [miss] iometerqt_run" -ForegroundColor Yellow }
 
 # --- 4b. MFC IOmeter GUI (opt-in; launches a window) -------------------------
-# Uses the AsInvoker IOmetertest.exe + a NON-LOCAL manager ICF so the GUI does
-# NOT auto-spawn the elevated local Dynamo (no UAC). dynamotest fills the
-# manager externally. The GUI is slow under the debugger, so we wait for the
-# login port before connecting and rely on the batch login-timeout to exit.
+# Uses the now-AsInvoker IOmeter.exe + a NON-LOCAL manager ICF so the GUI does
+# NOT auto-spawn a local Dynamo (no UAC). dynamotest fills the manager
+# externally. (The GUI's manifest is asInvoker and it only elevates Dynamo, via
+# ShellExecuteEx(runas), when it spawns a LOCAL manager - which this ICF avoids.)
+# The GUI is slow under the debugger, so we wait for the login port before
+# connecting and rely on the batch login-timeout to exit.
 if ($IncludeMfc) {
-    Write-Host "[4b] MFC IOmeter GUI (IOmetertest, non-local manager)..." -ForegroundColor Cyan
-    $iomTest = Join-Path $PSScriptRoot "..\msvs11\Release\x64\IOmetertest.exe"
+    Write-Host "[4b] MFC IOmeter GUI (non-local manager)..." -ForegroundColor Cyan
+    $iomTest = Join-Path $PSScriptRoot "..\msvs11\Release\x64\IOmeter.exe"
     $nlIcf   = Join-Path $fixtures "fixtures\nonlocal_manager.icf"
     if ((Test-Path $iomTest) -and (Test-Path $nlIcf)) {
-        Get-Process IOmetertest,dynamotest,Dynamo -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Get-Process IOmeter,dynamotest,Dynamo -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         $mfcOut = Join-Path $covRaw "mfc_iometer.cov"
-        $occArgs = @("--quiet","--sources",$srcFilt,"--modules","IOmetertest.exe",
+        $occArgs = @("--quiet","--sources",$srcFilt,"--modules","IOmeter.exe",
                      "--excluded_sources","tests","--export_type","binary:$mfcOut","--",
                      $iomTest,"/c",$nlIcf,"/r","$env:TEMP\occ_mfc.csv","/t","30")
         $covMfc = Start-Process $occ -ArgumentList $occArgs -PassThru -NoNewWindow
@@ -139,7 +141,7 @@ if ($IncludeMfc) {
             Start-Sleep 2
             if (Get-NetTCPConnection -LocalPort 1066 -State Listen -ErrorAction SilentlyContinue) { break }
         }
-        $dynM = Start-Process $dynTest -ArgumentList "-n TESTMGR -m TESTNET --rdelay 50 -i 127.0.0.1" -PassThru
+        $dynM = Start-Process $dynTest -ArgumentList "-n TESTMGR -m localhost --rdelay 50 -i 127.0.0.1" -PassThru
         if (-not $covMfc.WaitForExit(300000)) { try { $covMfc.Kill() } catch {} }
         if (-not $dynM.HasExited) { Stop-Process -Id $dynM.Id -Force -ErrorAction SilentlyContinue }
         if (Test-Path $mfcOut) { $covFiles += $mfcOut; Write-Host "  [cov] mfc_iometer" -ForegroundColor Green }

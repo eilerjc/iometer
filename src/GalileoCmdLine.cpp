@@ -166,6 +166,20 @@ void CGalileoCmdLine::ParseParam(const char *pszParam, BOOL bFlag, BOOL bLast)
 				Fail("R switch should be followed by the name of the desired result file.");
 			}
 			return;
+			// Expecting the save-config file (ICF save-golden harness).
+		case 'S':
+			if (!m_sSaveConfigFile.IsEmpty())	// has it already been set?
+			{
+				Fail("Save-config file parameter was specified more than once.");
+			} else if (IsValidFilename(pszParam)) {
+				if (VerifyWritable(pszParam))
+					m_sSaveConfigFile = pszParam;
+				else
+					m_bFail = TRUE;
+			} else {
+				Fail("S switch should be followed by the name of the desired save-config file.");
+			}
+			return;
 			// Expecting the timeout value.
 		case 'T':
 			if (m_iTimeout >= 0)	// has it already been set?
@@ -302,6 +316,11 @@ CString CGalileoCmdLine::GetConfigFile()
 CString CGalileoCmdLine::GetResultFile()
 {
 	return m_sResultFile;
+}
+
+CString CGalileoCmdLine::GetSaveConfigFile()
+{
+	return m_sSaveConfigFile;
 }
 
 int CGalileoCmdLine::GetTimeout()

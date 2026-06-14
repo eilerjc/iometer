@@ -12,7 +12,7 @@ Version 1.1.0
 'Default Network Workers to Spawn
 	0
 'Record Results
-	LAST_UPDATE
+	NONE
 'Worker Cycling
 '	start      step       step type
 	1          1          LINEAR
@@ -43,7 +43,7 @@ Version 1.1.0
 'END results display
 'ACCESS SPECIFICATIONS =========================================================
 'Access specification name,default assignment
-	2 KiB; 67% Read; 100% random,DEFAULT
+	2 KiB; 67% Read; 100% random,ALL
 'size,% of size,% reads,% random,delay,burst,align,reply
 	2048,100,67,100,0,1,2048,0
 'END access specifications

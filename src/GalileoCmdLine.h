@@ -72,6 +72,10 @@ class CGalileoCmdLine:public CCommandLineInfo {
 
 	CString GetConfigFile();
 	CString GetResultFile();
+	// Optional /s <file>: in batch mode, re-save the (loaded) config to <file>
+	// after the run completes, then exit. Used to capture/compare the canonical
+	// save output (the ICF save-golden harness); empty in normal operation.
+	CString GetSaveConfigFile();
 	int GetTimeout();
 	int GetLoginportnumber();
 	BOOL GetShowBigmeter();
@@ -102,6 +106,7 @@ class CGalileoCmdLine:public CCommandLineInfo {
 
 	CString m_sConfigFile;	// the specified config file
 	CString m_sResultFile;	// the specified result file
+	CString m_sSaveConfigFile;	// /s: re-save the loaded config here, then exit
 	int m_iTimeout;		// the specified timeout value
 	int m_iLoginportnumber; // the specified port number
 	BOOL m_bShowBigmeter;// automatically show bigmeter

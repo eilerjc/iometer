@@ -1,14 +1,14 @@
 Version 1.1.0
 'TEST SETUP ====================================================================
 'Test Description
-	dynamotest coverage (non-local manager, no auto-Dynamo)
+	dynamotest (non-local manager on loopback, no auto-Dynamo)
 'Run Time
 '	hours      minutes    seconds
 	0          0          3
 'Ramp Up Time (s)
 	0
 'Default Disk Workers to Spawn
-	1
+	0
 'Default Network Workers to Spawn
 	0
 'Record Results
@@ -51,7 +51,7 @@ Version 1.1.0
 'Manager ID, manager name
 	1,TESTMGR
 'Manager network address
-	TESTNET
+	localhost
 'Worker
 	Worker 1
 'Worker type

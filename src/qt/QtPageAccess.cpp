@@ -1,6 +1,7 @@
 // QtPageAccess.cpp -- "Access Specifications" tab
 #include "QtPageAccess.h"
 #include "QtIometerEngine.h"
+#include "../core/AccessSpecLibrary.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGridLayout>
@@ -641,16 +642,35 @@ bool QtPageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
     return true;
 }
 
+// Load the engine's spec list into a transient core library so the list
+// operations (new/copy naming, removal) use the shared MFC-canonical semantics.
+static iocore::AccessSpecLibrary libraryFromEngine(QtIometerEngine *engine)
+{
+    iocore::AccessSpecLibrary lib;
+    std::vector<AccessSpec> v;
+    const auto specs = engine->accessSpecs();
+    v.reserve(specs.size());
+    for (const auto &s : specs) v.push_back(s);
+    lib.setSpecs(std::move(v));
+    return lib;
+}
+
+static void libraryToEngine(const iocore::AccessSpecLibrary &lib, QtIometerEngine *engine)
+{
+    QList<AccessSpec> out;
+    for (const auto &s : lib.specs()) out.append(s);
+    engine->setAccessSpecs(out);
+}
+
 void QtPageAccess::onNewSpec()
 {
-    AccessSpec s;
-    s.name = QString("New Spec %1").arg(m_engine->accessSpecs().size() + 1).toStdString();
-    AccessSpecLine l; l.sizeBytes = 4096; l.ofSize = 100;
-    s.lines.push_back(l);
+    // Core semantics: "Untitled n" + the default line (2 KiB, 67% read, random).
+    iocore::AccessSpecLibrary lib = libraryFromEngine(m_engine);
+    const int idx = lib.newSpec();
+    AccessSpec s = lib.at(idx);
     if (!editSpecDialog(s, "New Access Specification")) return;
-    auto specs = m_engine->accessSpecs();
-    specs.append(s);
-    m_engine->setAccessSpecs(specs);
+    lib.at(idx) = s;
+    libraryToEngine(lib, m_engine);
     loadSpecList();
     m_global->setCurrentRow(m_global->count() - 1);
 }
@@ -673,28 +693,30 @@ void QtPageAccess::onEditCopySpec()
 {
     const int row = m_global->currentRow();
     if (row < 0) return;
-    auto specs = m_engine->accessSpecs();
-    if (row >= specs.size()) return;
-    AccessSpec s   = specs[row];
-    s.name        += " (copy)";
-    s.defaultSpec  = false;
+    // Core semantics: unique "Copy of <name> (n)" (appended at the end, as the
+    // original Iometer does).
+    iocore::AccessSpecLibrary lib = libraryFromEngine(m_engine);
+    if (row >= lib.count()) return;
+    const int idx = lib.copySpec(row);
+    if (idx < 0) return;
+    AccessSpec s = lib.at(idx);
     if (!editSpecDialog(s, "Edit Copy of Access Specification")) return;
-    specs.insert(row + 1, s);
-    m_engine->setAccessSpecs(specs);
+    lib.at(idx) = s;
+    libraryToEngine(lib, m_engine);
     loadSpecList();
-    m_global->setCurrentRow(row + 1);
+    m_global->setCurrentRow(m_global->count() - 1);
 }
 
 void QtPageAccess::onDeleteSpec()
 {
     const int row = m_global->currentRow();
     if (row < 0) return;
-    auto specs = m_engine->accessSpecs();
-    if (row >= specs.size()) return;
+    iocore::AccessSpecLibrary lib = libraryFromEngine(m_engine);
+    if (row >= lib.count()) return;
     const auto btn = QMessageBox::question(this, "Delete Spec",
-        QString("Delete \"%1\"?").arg(QString::fromStdString(specs[row].name)));
+        QString("Delete \"%1\"?").arg(QString::fromStdString(lib.at(row).name)));
     if (btn != QMessageBox::Yes) return;
-    specs.removeAt(row);
-    m_engine->setAccessSpecs(specs);
+    lib.removeAt(row);
+    libraryToEngine(lib, m_engine);
     loadSpecList();
 }

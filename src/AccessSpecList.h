@@ -64,7 +64,6 @@
 
 #include "IOAccess.h"
 #include "IOTest.h"
-#include "ICF_ifstream.h"
 #include <afxtempl.h>
 
 #define IDLE_SPEC		0	// The index of the idle spec.
@@ -100,9 +99,7 @@ class AccessSpecList {
 	BOOL SaveResults(ostream & outfile);	// Saves only the currently active access specs to a result file.
 
 	BOOL SaveConfig(ostream & outfile);	// Saves all access specs to a config file.
-	BOOL LoadConfig(const CString & infilename, BOOL replace);	// Gets the file version and calls the appropriate LoadConfigXXX function.
-	BOOL LoadConfigNew(ICF_ifstream & infile);	// Loads the global access spec list from a current version's setup file.
-	BOOL LoadConfigOld(ICF_ifstream & infile);	// Loads the global access spec list from a previous version's setup file.
+	BOOL LoadConfig(const CString & infilename, BOOL replace);	// Restores the access spec list via the shared core loader (iocore::IcfDocument).
 
       protected:
 // Private Functions

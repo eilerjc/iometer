@@ -150,6 +150,12 @@ class CGalileoApp:public CWinApp {
 	// This is not the actual command line string.
 	// It is used by CGalileoApp::LaunchDynamo().
 	CString new_manager_command_line_format;
+
+	// Full path to the Dynamo executable (set in InitInstance). LaunchDynamo()
+	// starts it ELEVATED via ShellExecuteEx("runas") so the GUI itself can run
+	// unelevated (asInvoker manifest) while Dynamo gets the admin rights it needs
+	// for raw-disk access. Only Dynamo prompts for UAC, not the whole GUI.
+	CString dynamo_exe_path;
       private:
 	char *m_pVersionString;
 	char *m_pVersionStringWithDebug;

@@ -154,9 +154,9 @@ $tests = @(
 foreach ($t in $tests) {
     $ok, $msg = Compare-Field $origRow $qtRow $t.Col
     if ($ok) {
-        Write-Host "  ✓ $($t.Name): $msg" -ForegroundColor Green; $passed++
+        Write-Host "  [PASS] $($t.Name): $msg" -ForegroundColor Green; $passed++
     } else {
-        Write-Host "  ✗ $($t.Name): $msg" -ForegroundColor Red
+        Write-Host "  [FAIL] $($t.Name): $msg" -ForegroundColor Red
     }
 }
 

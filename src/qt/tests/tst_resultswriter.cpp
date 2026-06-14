@@ -271,6 +271,18 @@ private slots:
         QVERIFY(readAll(p).find("\"drive \"\"C\"\"\"") != std::string::npos);
         std::filesystem::remove(p);
     }
+    void perWorker_nameWithNewlineIsQuoted() {
+        // A worker name containing a newline must be CSV-quoted so the embedded
+        // line break stays inside one field (exercises escapeCsvField's '\n'
+        // branch, which the comma/quote tests don't reach).
+        const std::string p = tempCsv("newline.csv");
+        std::vector<WorkerResult> r{
+            makeResult("mgr", "line1\nline2", 1000, 100, 95, 0.04, 10, 0)
+        };
+        QVERIFY(ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{}));
+        QVERIFY(readAll(p).find("\"line1\nline2\"") != std::string::npos);
+        std::filesystem::remove(p);
+    }
 
     // ── Empty results still produce a valid ALL row ──────────────────────────
     void empty_writesZeroRow() {

@@ -2,6 +2,7 @@
 #include "QtDemoEngine.h"
 #include "QtIometerEngine.h"
 #include "../core/IcfFile.h"
+#include "../core/ResultsAggregator.h"
 #include <cmath>
 #include <QRandomGenerator>
 
@@ -127,35 +128,17 @@ void QtDemoEngine::tick()
     m_t += 0.5;
     m_current.clear();
 
-    WorkerResult aggregate;
-    aggregate.managerName = "ALL";
-    aggregate.workerName  = "ALL";
-    aggregate.isAggregate = true;
-
     for (const auto &mgr : std::as_const(m_managers)) {
         if (!mgr.connected) continue;
-        for (const auto &w : mgr.workers) {
-            WorkerResult r = makeResult(w, mgr.name, m_t);   // mgr.name is std::string
-            m_current.append(r);
-
-            aggregate.iops         += r.iops;
-            aggregate.readIops     += r.readIops;
-            aggregate.writeIops    += r.writeIops;
-            aggregate.mbpsDec      += r.mbpsDec;
-            aggregate.readMbpsDec  += r.readMbpsDec;
-            aggregate.writeMbpsDec += r.writeMbpsDec;
-            aggregate.mbpsBin      += r.mbpsBin;
-            aggregate.avgLatencyMs  = std::max(aggregate.avgLatencyMs, r.avgLatencyMs);
-            aggregate.maxLatencyMs  = std::max(aggregate.maxLatencyMs, r.maxLatencyMs);
-            aggregate.cpuUtil       = std::max(aggregate.cpuUtil, r.cpuUtil);
-            aggregate.cpuUser       = std::max(aggregate.cpuUser, r.cpuUser);
-            aggregate.cpuKernel     = std::max(aggregate.cpuKernel, r.cpuKernel);
-            aggregate.errors       += r.errors;
-        }
+        for (const auto &w : mgr.workers)
+            m_current.append(makeResult(w, mgr.name, m_t));   // mgr.name is std::string
     }
 
-    if (!m_current.isEmpty())
-        m_current.prepend(aggregate);
+    // Prepend the ALL aggregate (shared core logic - same math everywhere).
+    if (!m_current.isEmpty()) {
+        const std::vector<WorkerResult> v(m_current.begin(), m_current.end());
+        m_current.prepend(iocore::aggregateResults(v).all);
+    }
 
     emit resultsUpdated(m_current);
 }

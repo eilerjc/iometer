@@ -76,6 +76,8 @@
 #include "ManagerList.h"
 #include "GalileoView.h"
 #include "IOPortTCP.h"
+#include "core/IcfDocument.h"	// shared MANAGER LIST parser (iocore)
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -1341,13 +1343,19 @@ BOOL ManagerList::SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targ
 {
 	int mgr_count = ManagerCount();
 
-	outfile << "'MANAGER LIST ==========================" "========================================" << endl;
+	// Gather every manager's (non-client) workers into the shared structs, then
+	// emit the canonical 'MANAGER LIST via the shared writer (iocore::IcfWriter).
+	std::vector<iocore::IcfManagerConfig> managers;
 
-	for (int counter = 0; counter < mgr_count; counter++)
-		if (!GetManager(counter)->SaveConfig(outfile, save_aspecs, save_targets))
+	for (int counter = 0; counter < mgr_count; counter++) {
+		iocore::IcfManagerConfig m;
+		if (!GetManager(counter)->GatherConfig(m, save_aspecs, save_targets))
 			return FALSE;	// error saving data - propagate back
+		managers.push_back(m);
+	}
 
-	outfile << "'END manager list" << endl;
+	iocore::IcfWriter::writeManagerList(outfile, managers,
+					    save_aspecs ? true : false, save_targets ? true : false);
 
 	return TRUE;
 }
@@ -1416,8 +1424,23 @@ BOOL ManagerList::LoadConfigPreprocess(const CString & infilename, BOOL * flags,
 
 		// Did we go past the end without a match?
 		if (counter >= mgr_count) {
-			if (mgr_count == 0 && icfManagerCount == 1) {
-				// Special case:  No managers logged in, and exactly one in the file.
+			// A lone saved manager is treated as "this machine" ONLY when it
+			// actually refers to the local host - an empty/local network address
+			// or this machine's own name. A one-manager ICF that names a REMOTE
+			// or external manager (e.g. a test Dynamo reachable on loopback) must
+			// WAIT for that manager to log in; auto-spawning a local Dynamo for it
+			// is wrong and would also raise an unwanted elevation prompt.
+			CString local_name;
+			DWORD local_name_len = MAX_NETWORK_NAME;
+			::GetComputerName(local_name.GetBuffer(MAX_NETWORK_NAME), &local_name_len);
+			local_name.ReleaseBuffer();
+			BOOL single_manager_is_local = mgr_network.IsEmpty()
+			    || theApp.IsAddressLocal(mgr_network)
+			    || (mgr_name.CompareNoCase(local_name) == 0);
+
+			if (mgr_count == 0 && icfManagerCount == 1 && single_manager_is_local) {
+				// Special case:  No managers logged in, and exactly one LOCAL
+				// manager in the file.
 				// Create a special entry with a null address and a special local
 				// manager name.  This special entry is used to identify the need to
 				// create a local manager in ManagerMap::SpawnLocalManager(), and to
@@ -1465,21 +1488,31 @@ BOOL ManagerList::LoadConfigPreprocess(const CString & infilename, BOOL * flags,
 //
 BOOL ManagerList::LoadConfig(const CString & infilename, BOOL load_aspecs, BOOL load_targets, BOOL replace)
 {
-	ICF_ifstream infile;
-	DWORDLONG version;
-	CString key, value;
 	int counter;
 	Manager *mgr;
 	int mgr_count;
 
-	infile.open(infilename);
-	version = infile.GetVersion();
-	if (version == -1)
+	// Parsing the whole MANAGER LIST section is shared core logic
+	// (iocore::IcfDocument::loadManagerList). This adapter applies the parsed
+	// data to the live managers/workers - the loadmap lookup, worker matching/
+	// creation, access-spec resolution and target matching are MFC side-effects
+	// kept here - and replays the recorded MFC error dialogs.
+	iocore::IcfDocument doc((LPCTSTR) infilename);
+
+	std::vector<iocore::IcfManagerConfig> parsed;
+	const bool ok = doc.loadManagerList(parsed, load_aspecs ? true : false,
+					    load_targets ? true : false);
+
+	// Replay any parse-stage dialogs (incl. non-fatal ones like an unknown
+	// network worker subtype, which MFC reports but does not abort on).
+	for (size_t e = 0; e < doc.errors().size(); e++)
+		ErrorMessage(CString(doc.errors()[e].c_str()));
+
+	if (!ok)
 		return FALSE;
 
-	// Skip into the MANAGER LIST section.
-	// If it can't find it, return TRUE.  (This is okay.)
-	if (!infile.SkipTo("'MANAGER LIST"))
+	// An absent MANAGER LIST section yields an empty list - nothing to restore.
+	if (parsed.empty())
 		return TRUE;
 
 	mgr_count = ManagerCount();
@@ -1495,38 +1528,21 @@ BOOL ManagerList::LoadConfig(const CString & infilename, BOOL load_aspecs, BOOL 
 		}
 	}
 
-	while (1) {
-		key = infile.GetNextLine();
+	for (size_t m = 0; m < parsed.size(); m++) {
+		const iocore::IcfManagerConfig & pm = parsed[m];
 
-		if (key.CompareNoCase("'END manager list") == 0) {
-			break;
-		} else if (key.CompareNoCase("'Manager ID, manager name") == 0) {
-			CString mgr_name, mgr_netaddr;
-			int mgr_id;
+		// Gets the pointer to the specified manager from the ManagerMap.
+		mgr = loadmap.Retrieve(CString(pm.name.c_str()), pm.id);
 
-			// Read the manager info from the config file.
-			if (!GetManagerInfo(infile, mgr_name, mgr_id, mgr_netaddr))
-				return FALSE;
-
-			// Gets the pointer to the specified manager from the ManagerMap.
-			mgr = loadmap.Retrieve(mgr_name, mgr_id);
-
-			if (mgr == NULL) {
-				ErrorMessage("Manager could not be found in the ManagerMap.  "
-					     "Please report this as an Iometer bug.");
-				return FALSE;
-			}
-			// Load the manager.
-			if (!mgr->LoadConfig(infile, load_aspecs, load_targets))
-				return FALSE;
-		} else {
-			ErrorMessage("File is improperly formatted.  Expected another "
-				     "manager or \"End manager list\" comment.");
+		if (mgr == NULL) {
+			ErrorMessage("Manager could not be found in the ManagerMap.  "
+				     "Please report this as an Iometer bug.");
 			return FALSE;
 		}
+		// Apply the parsed manager config to the live manager.
+		if (!mgr->LoadConfig(pm, load_aspecs, load_targets))
+			return FALSE;
 	}
-
-	infile.close();
 
 	// If a manager connected to Iometer wasn't mentioned in the config file, remove it.
 	if (replace) {

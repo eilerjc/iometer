@@ -5,6 +5,8 @@
 #include "QtDyProto.h"
 #include "../core/WorkerPool.h"
 #include "../core/TestRunner.h"
+#include "../core/IcfFile.h"
+#include "../core/ManagerMap.h"
 #include <QObject>
 #include <QList>
 #include <QVector>
@@ -235,6 +237,20 @@ public:
 
     int listenPort() const { return DY_PORT; }
 
+    // -- Manager restore (shared iocore::ManagerMap) -----------------------------
+    // Build a restore map from a parsed ICF's batch workers: one entry per
+    // distinct manager named in the MANAGER LIST, unassigned (waiting). Pure and
+    // static so it can be unit-tested without a live engine.
+    static iocore::ManagerMap buildRestoreMap(
+        const std::vector<IcfFile::BatchWorker> &workers);
+
+    // The distinct manager names the loaded ICF expects (in first-seen order).
+    QStringList expectedManagers() const override;
+    // True while any ICF-named manager has not yet connected (logged in).
+    bool        isWaitingForManagers() const override { return m_restoreMap.isWaitingList(); }
+    // How many of the expected managers are currently connected.
+    int         connectedManagerCount() const override;
+
 private slots:
     void onNewConnection();
     void onSessionConnected(QtDySession *s);
@@ -250,6 +266,7 @@ private:
     QList<QtDySession*>         m_sessions;
     WorkerPool                m_workerPool;   // core domain model (manager/worker lifecycle)
     TestRunner                m_testRunner;   // core domain model (test state machine)
+    iocore::ManagerMap        m_restoreMap;   // ICF manager restore (match/wait), shared core logic
     QList<AccessSpec>         m_specs;
     AccessSpec            m_currentTestSpec;
     bool                  m_hasCurrentTestSpec = false;
@@ -259,6 +276,7 @@ private:
         QString     type = "DISK";   // DISK / TCP / VI, from the ICF 'Worker type
         QStringList assignedSpecs;
         QStringList targets;
+        QString     managerName;     // ICF manager this worker belongs to
     };
     QList<BatchWorkerConfig> m_batchWorkers;
 
@@ -269,6 +287,8 @@ public:
                : m_batchWorkers[0].assignedSpecs.value(0);
     }
     QList<BatchWorkerConfig> batchWorkers() const { return m_batchWorkers; }
+    // The batch workers belonging to a given ICF manager (per-manager restore).
+    QList<BatchWorkerConfig> workersForManager(const QString &mgrName) const;
 private:
     TestConfig            m_testConfig;
     QVector<WorkerResult> m_currentResults;

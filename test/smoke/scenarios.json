@@ -1,0 +1,92 @@
+{
+  "_comment": "Shared, platform-neutral smoke-test scenario manifest. Consumed by BOTH run_smoke.ps1 (Windows) and run_smoke.sh (Linux/macOS). Each runner maps the logical binary names (IometerQt, dynamotest, Dynamo, Iometertest, IOmeter) to real per-OS paths; everything else here is shared. 'modes': test=dynamotest/synthetic non-elevated, real=production Dynamo (real disk, needs elevation). 'kind' selects the runner behavior. 'status':'pending' scenarios are skipped unless -IncludePending/--include-pending.",
+  "config": {
+    "loginTimeout": 40,
+    "rdelay": 50,
+    "qtRunSeconds": 8,
+    "batchMaxWaitSeconds": 150
+  },
+  "scenarios": [
+    {
+      "name": "unit-tests",
+      "kind": "ctest",
+      "modes": ["test"],
+      "platforms": ["windows", "linux"],
+      "description": "Qt GUI + IometerCore unit suites (ctest)."
+    },
+    {
+      "name": "icf-validate",
+      "kind": "validate-icf",
+      "modes": ["test"],
+      "platforms": ["windows", "linux"],
+      "controller": "IometerQt",
+      "icfs": [
+        "smoke_test.icf",
+        "fixtures/minimal.icf",
+        "fixtures/multispec.icf",
+        "fixtures/two_managers.icf",
+        "fixtures/multi_target.icf",
+        "fixtures/multispec_worker.icf",
+        "fixtures/default_assign.icf"
+      ],
+      "description": "Shipped app parses every fixture ICF through the shared core (no Dynamo)."
+    },
+    {
+      "name": "qt-demo",
+      "kind": "demo",
+      "modes": ["test"],
+      "platforms": ["windows", "linux"],
+      "controller": "IometerQt",
+      "description": "Qt demo engine starts, runs, and exits cleanly (no Dynamo)."
+    },
+    {
+      "name": "qt-dynamotest",
+      "kind": "batch-worker",
+      "modes": ["test"],
+      "platforms": ["windows", "linux"],
+      "controller": "IometerQt",
+      "worker": "dynamotest",
+      "workerArgs": "-m {host} --rdelay {rdelay} -i 127.0.0.1",
+      "icf": "smoke_test.icf",
+      "verify": { "iopsGt": 0, "errorsEq": 0 },
+      "description": "Qt GUI (batch) + dynamotest synthetic worker. Non-elevated."
+    },
+    {
+      "name": "mfc-dynamotest",
+      "kind": "batch-worker",
+      "modes": ["test"],
+      "platforms": ["windows"],
+      "controller": "IOmeter",
+      "worker": "dynamotest",
+      "workerArgs": "-n TESTMGR -m localhost --rdelay {rdelay} -i 127.0.0.1",
+      "icf": "fixtures/nonlocal_manager.icf",
+      "verify": { "iopsGt": 0, "errorsEq": 0 },
+      "description": "MFC GUI (asInvoker) + a non-local-manager ICF (TESTMGR @ localhost) so the GUI spawns nothing, with dynamotest launched separately as the TESTMGR worker. Fully non-elevated, no UAC. The '-m localhost' is required so IOmeter can call back to the worker (a placeholder name would hang); the manager-restore fix in ManagerList.cpp (single non-local manager -> wait, don't auto-spawn local) is what makes this work."
+    },
+    {
+      "name": "qt-real",
+      "kind": "batch-worker",
+      "modes": ["real"],
+      "platforms": ["windows"],
+      "elevated": true,
+      "controller": "IometerQt",
+      "worker": "Dynamo",
+      "workerArgs": "-i 127.0.0.1 -m {host}",
+      "icf": "smoke_test.icf",
+      "verify": { "errorsEq": 0 },
+      "status": "pending",
+      "description": "Qt GUI (batch) + REAL Dynamo on a real disk (elevated). KNOWN ISSUE: Qt real-disk path errors on every I/O (0 IOps / high error count). See README."
+    },
+    {
+      "name": "mfc-real",
+      "kind": "batch-selfspawn",
+      "modes": ["real"],
+      "platforms": ["windows"],
+      "elevated": true,
+      "controller": "IOmeter",
+      "icf": "smoke_test.icf",
+      "verify": { "iopsGt": 0, "errorsEq": 0 },
+      "description": "MFC GUI (asInvoker) auto-spawns the REAL Dynamo ELEVATED via ShellExecuteEx(runas) for raw-disk access; the GUI itself stays unelevated. Known-good reference path."
+    }
+  ]
+}

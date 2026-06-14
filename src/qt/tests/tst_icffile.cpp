@@ -191,9 +191,10 @@ private slots:
     }
 
     // ── Robustness: malformed numerics degrade gracefully (no throw) ─────────
-    void load_garbledNumericsDoNotThrow() {
-        // Non-numeric run-time and access-spec fields must parse to 0 rather
-        // than throwing (exercises the parseInt/parseDouble catch paths).
+    void load_garbledRunTime_failsLikeMfc() {
+        // Non-numeric run-time values: the MFC GUI rejects the file ("Run time
+        // should be specified as three integer values"); load now uses the
+        // shared MFC-faithful TEST SETUP loader, so it must fail the same way.
         const std::string out = tempPath("garbled.icf");
         {
             std::ofstream f(out);
@@ -201,7 +202,26 @@ private slots:
               << "'TEST SETUP ===\n"
               << "'Run Time\n'\thours      minutes    seconds\n"
               << "\tx          y          z\n"
-              << "'Ramp Up Time (s)\n\tnope\n"
+              << "'END test setup\n"
+              << "'MANAGER LIST ===\n'END manager list\nVersion 1.1.0\n";
+        }
+        TestConfig cfg;
+        std::vector<AccessSpec> specs;
+        std::vector<IcfFile::BatchWorker> workers;
+        QVERIFY(!IcfFile::load(out, cfg, specs, workers));
+        std::filesystem::remove(out);
+    }
+    void load_garbledSpecNumericsFailLikeMfc() {
+        // Non-numeric spec fields atoi to 0, so the percentages don't sum to
+        // 100 and the MFC parser rejects the file ("Percentages don't add to
+        // 100"). The shared loader must fail the same way - cleanly, no throw.
+        const std::string out = tempPath("garbled_spec.icf");
+        {
+            std::ofstream f(out);
+            f << "Version 1.1.0\n"
+              << "'TEST SETUP ===\n"
+              << "'Run Time\n'\thours      minutes    seconds\n"
+              << "\t0          0          5\n"
               << "'END test setup\n"
               << "'RESULTS DISPLAY ===\n'END results display\n"
               << "'ACCESS SPECIFICATIONS ===\n"
@@ -215,19 +235,13 @@ private slots:
         TestConfig cfg;
         std::vector<AccessSpec> specs;
         std::vector<IcfFile::BatchWorker> workers;
-        QVERIFY(IcfFile::load(out, cfg, specs, workers));   // graceful, no throw
-        QCOMPARE(cfg.runHours, 0);
-        QCOMPARE(cfg.runSeconds, 0);
-        QCOMPARE(cfg.rampSeconds, 0);
-        // The spec line still parsed structurally; numeric fields fell back to 0
-        const AccessSpec *g = findSpec(specs, "Garbled");
-        QVERIFY(g != nullptr);
-        QCOMPARE(g->lines.size(), size_t(1));
-        QCOMPARE(g->lines[0].sizeBytes, 0);
+        QVERIFY(!IcfFile::load(out, cfg, specs, workers));  // clean failure, no throw
+        QCOMPARE(cfg.runSeconds, 5);   // test setup parsed before the spec failure
         std::filesystem::remove(out);
     }
     void load_truncatedMidSpecDoesNotCrash() {
         // File cut off mid-access-spec: parser must bail cleanly, not over-read.
+        // The MFC GUI rejects such a file, so load now fails (no crash, no hang).
         const std::string out = tempPath("trunc.icf");
         {
             std::ofstream f(out);
@@ -242,8 +256,8 @@ private slots:
         TestConfig cfg;
         std::vector<AccessSpec> specs;
         std::vector<IcfFile::BatchWorker> workers;
-        QVERIFY(IcfFile::load(out, cfg, specs, workers));
-        QCOMPARE(cfg.runSeconds, 9);   // earlier sections still parsed
+        QVERIFY(!IcfFile::load(out, cfg, specs, workers));
+        QCOMPARE(cfg.runSeconds, 9);   // earlier sections were parsed before the failure
         std::filesystem::remove(out);
     }
 

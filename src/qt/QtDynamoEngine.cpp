@@ -2,6 +2,7 @@
 #include "QtDynamoEngine.h"
 #include "QtIometerEngine.h"
 #include "../core/ResultsWriter.h"
+#include "../core/ResultsAggregator.h"
 #include "../core/IcfFile.h"
 #include "../core/NetworkSetup.h"
 #include <QTcpServer>
@@ -788,19 +789,8 @@ void QtDySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &spec)
 
     const int n = qMin(static_cast<int>(spec.lines.size()), DY_MAX_ACCESS_SPECS - 1);
     for (int i = 0; i < n; ++i) {
-        const AccessSpecLine &line = spec.lines[i];
-        DyAccessSpec &a = ts.access[i];
-        a.of_size = line.ofSize;
-        a.reads   = line.readPercent;
-        a.random  = 100 - line.seqPercent;
-        a.delay   = static_cast<int32_t>(line.delayMs);
-        a.burst   = line.burstLength;
-        a.reply   = static_cast<uint32_t>(line.replyBytes);
-        a.size    = static_cast<uint32_t>(line.sizeBytes > 0 ? line.sizeBytes : 65536);
-        // Alignment: -1 = request-size (use transfer size), 0 = sector (512), >0 = explicit
-        if      (line.alignBytes < 0)  a.align = a.size;   // request-size boundaries
-        else if (line.alignBytes == 0) a.align = 512;       // sector boundaries
-        else                           a.align = static_cast<uint32_t>(line.alignBytes);
+        // Friendly-model -> wire mapping is shared core logic (iocore).
+        iocore::fillWireAccess(ts.access[i], spec.lines[i]);
     }
     // Terminator
     if (n < DY_MAX_ACCESS_SPECS)
@@ -938,6 +928,16 @@ void QtDynamoEngine::onSessionConnected(QtDySession *s)
     mgr.availableTargets = toVec(s->diskTargetInfos());
 
     emit managerConnected(mgr);
+
+    // Restore: match this Dynamo to an expected ICF manager (shared core logic).
+    if (m_restoreMap.managerLoggedIn(s->managerName().toStdString(),
+                                     s->address().toStdString(), s)) {
+        emit statusMessage(QString("Manager '%1' matched config (%2/%3 expected connected)")
+                           .arg(s->managerName())
+                           .arg(connectedManagerCount())
+                           .arg(expectedManagers().size()));
+    }
+
     emit statusMessage(QString("Dynamo manager '%1' connected (%2 targets)")
                        .arg(s->managerName())
                        .arg(s->discoveredTargets().size()));
@@ -948,6 +948,9 @@ void QtDynamoEngine::onSessionDisconnected(QtDySession *s)
 {
     const QString name = s->managerName();
     m_sessions.removeAll(s);
+
+    // Restore: this manager slot returns to the waiting state (shared core logic).
+    m_restoreMap.managerLoggedOut(s);
     s->deleteLater();
 
     rebuildManagers();
@@ -963,32 +966,10 @@ void QtDynamoEngine::onSessionResults(QtDySession *s)
     for (auto *sess : m_sessions)
         all += sess->pendingResults();
 
-    // Append aggregate
+    // Prepend the ALL aggregate (shared core logic - same math as the CSV writer).
     if (!all.isEmpty()) {
-        WorkerResult agg;
-        agg.managerName = "ALL";
-        agg.workerName  = "ALL";
-        agg.isAggregate = true;
-        for (const auto &r : all) {
-            agg.iops         += r.iops;
-            agg.readIops     += r.readIops;
-            agg.writeIops    += r.writeIops;
-            agg.mbpsDec      += r.mbpsDec;
-            agg.readMbpsDec  += r.readMbpsDec;
-            agg.writeMbpsDec += r.writeMbpsDec;
-            agg.mbpsBin      += r.mbpsBin;
-            agg.errors       += r.errors;
-        }
-        agg.avgLatencyMs = 0.0;
-        for (const auto &r : all) agg.avgLatencyMs += r.avgLatencyMs;
-        if (!all.isEmpty()) agg.avgLatencyMs /= all.size();
-        agg.maxLatencyMs = 0.0;
-        for (const auto &r : all)
-            agg.maxLatencyMs = std::max(agg.maxLatencyMs, r.maxLatencyMs);
-        agg.cpuUtil = 0.0;
-        for (const auto &r : all) agg.cpuUtil += r.cpuUtil;
-        if (!all.isEmpty()) agg.cpuUtil /= all.size();
-        all.prepend(agg);
+        const std::vector<WorkerResult> v(all.begin(), all.end());
+        all.prepend(iocore::aggregateResults(v).all);
     }
 
     m_currentResults = all;
@@ -1100,13 +1081,63 @@ bool QtDynamoEngine::loadConfig(const QString &filepath)
         wc.type = QString::fromStdString(bw.type.empty() ? "DISK" : bw.type);
         wc.assignedSpecs = toQStringList(bw.assignedSpecs);
         wc.targets = toQStringList(bw.targets);
+        wc.managerName = QString::fromStdString(bw.managerName);
         m_batchWorkers.append(wc);
     }
+
+    // Build the manager restore map (shared core logic) from the ICF's managers,
+    // so connecting Dynamos can be matched to the named managers / waited for.
+    m_restoreMap = buildRestoreMap(batchWorkers);
 
     setAccessSpecs(specs.empty() ? builtinAccessSpecs() : toQList(specs));
     m_testConfig = cfg;
     emit configChanged();
     return true;
+}
+
+iocore::ManagerMap QtDynamoEngine::buildRestoreMap(
+    const std::vector<IcfFile::BatchWorker> &workers)
+{
+    iocore::ManagerMap map;
+    for (const auto &bw : workers) {
+        if (bw.managerName.empty())
+            continue;
+        // One entry per distinct manager (name+id); store unassigned (waiting).
+        bool exists = false;
+        for (const auto &e : map.entries()) {
+            if (e.name == bw.managerName && e.id == bw.managerId) { exists = true; break; }
+        }
+        if (!exists)
+            map.store(bw.managerName, bw.managerId, bw.managerAddress, nullptr);
+    }
+    return map;
+}
+
+QList<QtDynamoEngine::BatchWorkerConfig>
+QtDynamoEngine::workersForManager(const QString &mgrName) const
+{
+    QList<BatchWorkerConfig> out;
+    for (const auto &wc : m_batchWorkers)
+        if (wc.managerName == mgrName)
+            out.append(wc);
+    return out;
+}
+
+QStringList QtDynamoEngine::expectedManagers() const
+{
+    QStringList names;
+    for (const auto &e : m_restoreMap.entries())
+        names << QString::fromStdString(e.name);
+    return names;
+}
+
+int QtDynamoEngine::connectedManagerCount() const
+{
+    int n = 0;
+    for (const auto &e : m_restoreMap.entries())
+        if (e.handle != nullptr)
+            ++n;
+    return n;
 }
 
 bool QtDynamoEngine::saveConfig(const QString &filepath)

@@ -71,6 +71,7 @@
 #include <afxtempl.h>
 
 class Manager;			// forward declaration
+namespace iocore { struct IcfWorkerConfig; }	// shared worker parse result
 
 #include "pack.h"
 
@@ -218,11 +219,14 @@ class Worker {
 	///////////////////////////////////////////////////////////////////////////
 	// Functions to deal with the saving and loading of config files.
 	//
-	BOOL SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targets);
-	BOOL LoadConfig(ICF_ifstream & infile, BOOL load_aspecs, BOOL load_targets);
-	BOOL LoadConfigDefault(ICF_ifstream & infile);
-	BOOL LoadConfigAccess(ICF_ifstream & infile);
-	BOOL LoadConfigTargets(ICF_ifstream & infile);
+	// Gather this worker's live config into the shared struct (the byte format
+	// is emitted by iocore::IcfWriter). Replaces the stream-based SaveConfig.
+	// The caller skips network-client workers (as the old SaveConfig did).
+	BOOL GatherConfig(iocore::IcfWorkerConfig & w, BOOL save_aspecs, BOOL save_targets);
+	// Apply a core-parsed worker config (default settings + access specs +
+	// target matching) to the live worker. Parsing lives in iocore::IcfDocument.
+	BOOL LoadConfig(const iocore::IcfWorkerConfig & pw, BOOL load_aspecs, BOOL load_targets);
+	BOOL LoadConfigTargets(const iocore::IcfWorkerConfig & pw);
 	//
 	///////////////////////////////////////////////////////////////////////////
 

@@ -18,6 +18,28 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
+# ── Wire-protocol portability config ────────────────────────────────────────
+# Manager-core / Qt code consumes the PROJECT-WIDE headers (IOCommon.h and the
+# canonical wire structs in IOAccess.h / IOTest.h). IOCommon.h is Iometer's
+# cross-platform portability layer, so we feed it the same IOMTR_* selectors the
+# rest of the project uses - but as a NON-MFC build (IOMTR_NO_MFC), so IOCommon
+# pulls <windows.h> instead of StdAfx.h/afxwin.h. FORCE_STRUCT_ALIGN matches the
+# 1-byte wire packing every Dynamo/Iometer .vcxproj sets, keeping the structs
+# byte-identical on the wire. Dynamo and the MFC GUI are untouched - they set
+# these in their own projects and never define IOMTR_NO_MFC.
+if(WIN32)
+    add_compile_definitions(
+        IOMTR_NO_MFC
+        IOMTR_OSFAMILY_WINDOWS
+        FORCE_STRUCT_ALIGN
+    )
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_compile_definitions(IOMTR_OS_WIN64 IOMTR_CPU_X86_64)
+    else()
+        add_compile_definitions(IOMTR_OS_WIN32 IOMTR_CPU_I386)
+    endif()
+endif()
+
 # ── Find Qt (prefer Qt6, fall back to Qt5) ──────────────────────────────────
 find_package(Qt6 QUIET COMPONENTS Widgets Network Test)
 if(Qt6_FOUND)
@@ -50,6 +72,13 @@ set(IOMETER_CORE_SOURCES
     ../core/WorkerPool.cpp
     ../core/TestRunner.cpp
     ../core/NetworkSetup.cpp
+    ../core/ManagerMap.cpp
+    ../core/AccessSpecCatalog.cpp
+    ../core/AccessSpecLibrary.cpp
+    ../core/ResultsAggregator.cpp
+    ../core/IcfStream.cpp
+    ../core/IcfDocument.cpp
+    ../core/IcfWriter.cpp
 )
 set(IOMETER_CORE_HEADERS
     ../core/IometerTypes.h
@@ -59,9 +88,20 @@ set(IOMETER_CORE_HEADERS
     ../core/WorkerPool.h
     ../core/TestRunner.h
     ../core/NetworkSetup.h
+    ../core/ManagerMap.h
+    ../core/AccessSpecCatalog.h
+    ../core/AccessSpecLibrary.h
+    ../core/ResultsAggregator.h
+    ../core/IcfStream.h
+    ../core/IcfDocument.h
+    ../core/IcfWriter.h
 )
 add_library(IometerCore STATIC ${IOMETER_CORE_SOURCES} ${IOMETER_CORE_HEADERS})
-target_include_directories(IometerCore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../core)
+# ../core for the manager core; .. (src root) for the project-wide protocol
+# headers (IOCommon.h / IOAccess.h / IOTest.h) the core consumes.
+target_include_directories(IometerCore PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/../core
+    ${CMAKE_CURRENT_SOURCE_DIR}/..)
 # Deliberately NO Qt link: IometerCore is pure C++ so MFC can link it too.
 set_target_properties(IometerCore PROPERTIES AUTOMOC OFF)
 apply_coverage_flags(IometerCore)
@@ -148,7 +188,17 @@ iometer_test(tst_icffile)
 iometer_test(tst_resultswriter)
 iometer_test(tst_dynamoconn)
  iometer_test(tst_networksetup)
+iometer_test(tst_managermap)
+iometer_test(tst_managerrestore)
+iometer_test(tst_accessspeccatalog)
+iometer_test(tst_accessspeclibrary)
+iometer_test(tst_resultsaggregator)
+iometer_test(tst_icfstream)
+iometer_test(tst_icfdocument)
+iometer_test(tst_icfwriter)
 iometer_test(tst_icf_fixtures)
+# Proves core/Qt can include the project-wide canonical wire structs MFC-free
+iometer_test(tst_wirestructs)
 
 # ── UI Tests (Qt widget tests) ──────────────────────────────────────────────
 iometer_test(tst_meters)
