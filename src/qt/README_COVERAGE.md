@@ -134,3 +134,13 @@ For GitHub Actions:
 - **Build Time**: First coverage build is slower due to instrumentation. Link is the main bottleneck.
 - **Report Size**: HTML report is typically 2–5 MB depending on code size.
 - **Line vs Branch Coverage**: llvm-cov provides both; the HTML report shows both metrics.
+
+## One-command report (recommended)
+
+`src/qt/make_coverage_report.ps1` runs both engines and assembles the committed,
+browsable report under `/coverage` (open `coverage/index.html`):
+
+- **full/** — OpenCppCoverage line coverage over every MSVC binary incl. the MFC GUI
+- **branch/** — llvm-cov line+branch for the clang-cl-buildable core+Qt
+
+The steps below describe the llvm-cov pass alone (what `collect_coverage.ps1` does).

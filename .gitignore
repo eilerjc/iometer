@@ -35,3 +35,17 @@ test/results_*.csv
 Thumbs.db
 Desktop.ini
 LastCoverageResults.log
+
+# Coverage instrumentation/build outputs (generated). The published, browsable
+# report is committed under /coverage instead.
+src/qt/build_cov/
+src/qt/build_cov_occ/
+src/qt/build_coverage/
+**/$htmlDir/
+**/$h2/
+**/$html/
+**/$h3/
+**/$h4/
+
+# Generated coverage report - published to the gh-pages branch, not committed here
+coverage/

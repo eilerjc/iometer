@@ -262,3 +262,9 @@ llvm-cov show -format=html ...
 
 **Last Updated:** 2026-06-05  
 **Status:** Strategy documented, connection-only scenario ready, full scenario blocked on display
+
+> **Update (2026-06-14):** MFC GUI coverage *is* now produced — OpenCppCoverage
+> (PDB-based) runs the real MSVC `IOmeter.exe`, so MFC files appear in the report at
+> **line** granularity (no branch data). The single entry point is
+> `src/qt/make_coverage_report.ps1`, which combines OpenCppCoverage (all files incl.
+> MFC) with llvm-cov (branch detail for core+Qt) into the committed `/coverage` site.

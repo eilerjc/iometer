@@ -241,11 +241,21 @@ $summary = & $llvmCov report $firstObj @restObj "-instr-profile=$profdata" `
 $summaryFile = Join-Path $covDir "summary.txt"
 $summary | Set-Content -Path $summaryFile -Encoding utf8
 
-# HTML (line-by-line) for all first-party sources.
+# HTML (line-by-line) for all first-party sources. Two gotchas vs the 'report'
+# command above: (1) 'show' needs source FILE paths, not directories (dirs are
+# silently ignored); (2) -output-dir silently produces NOTHING when combined with
+# -show-line-counts-or-regions, so that flag is omitted here. Output is not fully
+# suppressed so a real failure is visible.
 Remove-Item $htmlDir -Recurse -Force -ErrorAction SilentlyContinue
+$showSrc = Get-ChildItem -Recurse -File -Include *.cpp,*.h -Path $coreDir,$qtDir |
+    Where-Object { $_.FullName -notmatch 'tests|autogen|moc_|qrc_|build_cov' } |
+    ForEach-Object { $_.FullName }
 & $llvmCov show $firstObj @restObj "-instr-profile=$profdata" `
     "-ignore-filename-regex=$ignore" `
-    -format=html -output-dir=$htmlDir -show-line-counts-or-regions $coreDir $qtDir *> $null
+    -format=html -output-dir=$htmlDir @showSrc 2> $null
+if (-not (Test-Path (Join-Path $htmlDir 'index.html'))) {
+    Write-Host "WARNING: llvm-cov HTML was not generated" -ForegroundColor Yellow
+}
 
 # --- Print summary + optional CI gate ----------------------------------------
 Write-Host ""
