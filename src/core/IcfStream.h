@@ -7,7 +7,7 @@
 
 // Platform-neutral port of the MFC ICF_ifstream (ICF_ifstream.h/.cpp) - the
 // low-level primitives every ICF section loader is built on. The MFC behavior is
-// CANONICAL (see ICF_PARSER_UNIFICATION_PLAN.md): line length limit, trimming,
+// CANONICAL (see docs/dev/ICF_PARSER_UNIFICATION_PLAN.md): line length limit, trimming,
 // case-insensitive prefix matching, the dual version-encoding scheme (including
 // its dead 3.26.97 special case), and the exact error-message texts (the MFC
 // code shows them in dialogs; here they are collected via errors()/lastError()

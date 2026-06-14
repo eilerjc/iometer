@@ -5,7 +5,7 @@
 #include <cstdint>
 
 // Section loaders for ICF configuration files - faithful ports of the MFC
-// section parsers (the canonical behavior; see ICF_PARSER_UNIFICATION_PLAN.md).
+// section parsers (the canonical behavior; see docs/dev/ICF_PARSER_UNIFICATION_PLAN.md).
 // Phase 2 covers 'TEST SETUP (CPageSetup::LoadConfig) and 'RESULTS DISPLAY
 // (CPageDisplay::LoadConfig). Each loader opens its own stream and seeks its
 // own section, exactly like the MFC code, so loaders are independent and a

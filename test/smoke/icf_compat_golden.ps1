@@ -1,5 +1,5 @@
 # icf_compat_golden.ps1 - Phase 0 golden harness for the ICF parser unification
-# (see ICF_PARSER_UNIFICATION_PLAN.md).
+# (see docs/dev/ICF_PARSER_UNIFICATION_PLAN.md).
 #
 # Runs the MFC IOmeter.exe in batch mode over every fixture in
 # test/fixtures/icf_compat/ (non-elevated: TESTMGR @ localhost + external

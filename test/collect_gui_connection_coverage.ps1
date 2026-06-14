@@ -33,7 +33,7 @@ if ($IncludeMFC) {
     Write-Host "  Instead, we:" -ForegroundColor DarkYellow
     Write-Host "  ✓ Instrument Qt GUI with clang-cl" -ForegroundColor Green
     Write-Host "  ✓ Run behavioral equivalence tests (same inputs, compare outputs)" -ForegroundColor Green
-    Write-Host "  ✓ Document MFC → Qt function mapping (GUI_FUNCTION_MAPPING.md)" -ForegroundColor Green
+    Write-Host "  ✓ Document MFC → Qt function mapping" -ForegroundColor Green
     Write-Host ""
 }
 

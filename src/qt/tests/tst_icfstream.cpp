@@ -1,5 +1,5 @@
 // tst_icfstream - the iocore::IcfStream port of MFC's ICF_ifstream primitives.
-// MFC behavior is canonical (ICF_PARSER_UNIFICATION_PLAN.md, Phase 1); the
+// MFC behavior is canonical (docs/dev/ICF_PARSER_UNIFICATION_PLAN.md, Phase 1); the
 // version-table expectations were verified empirically in Phase 0.
 #include <QtTest>
 #include <QTemporaryDir>
