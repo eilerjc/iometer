@@ -77,6 +77,8 @@
 #include "GalileoView.h"
 #include "ManagerList.h"
 #include "AccessSpecList.h"
+#include "core/IcfDocument.h"	// shared worker parse result types
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -2056,25 +2058,22 @@ BOOL Worker::HasIdleCurrentSpec()
 //              save_aspecs --> should each worker's access spec assignments be saved?
 //              save_targets --> should each worker's target assignments be saved?
 //
-BOOL Worker::SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targets)
+// Gather this worker's live config into a shared iocore::IcfWorkerConfig (the
+// byte format is emitted by iocore::IcfWriter). Faithful port of the old
+// stream-based SaveConfig's field reads + validations. The caller (Manager::
+// GatherConfig) has already skipped network-client workers.
+BOOL Worker::GatherConfig(iocore::IcfWorkerConfig & w, BOOL save_aspecs, BOOL save_targets)
 {
-	// Don't record network clients.  They are restored when the network
-	// server's targets are examined.
-	if (IsType(Type(), GenericClientType))
-		return TRUE;
-
-	outfile << "'Worker" << endl << "\t" << name << endl << "'Worker type" << endl;
+	w.name = name;
 
 	// Determine the worker type.
 	if (IsType(Type(), GenericDiskType)) {
-		outfile << "\tDISK" << endl;
+		w.kind = iocore::IcfWorkerKind::Disk;
 	} else if (IsType(Type(), GenericNetType)) {
-		outfile << "\tNETWORK";
-
 		if (IsType(Type(), GenericTCPType))
-			outfile << ",TCP" << endl;
+			w.kind = iocore::IcfWorkerKind::NetTCP;
 		else if (IsType(Type(), GenericVIType))
-			outfile << ",VI" << endl;
+			w.kind = iocore::IcfWorkerKind::NetVI;
 		else {
 			ErrorMessage("Error saving worker \"" + (CString) name + "\": "
 				     "Network worker is neither TCP nor VI.");
@@ -2086,64 +2085,50 @@ BOOL Worker::SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targets)
 		return FALSE;
 	}
 
-	outfile << "'Default target settings for worker" << endl;
-
-	outfile << "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value" << endl;
-	outfile << "\t" << GetQueueDepth(Type())
-		<< "," << (GetConnectionRate(Type())? "ENABLED" : "DISABLED")
-		<< "," << GetTransPerConn(Type()) 
-		<< "," << (GetUseFixedSeed(Type())? "ENABLED" : "DISABLED")
-		<< "," << GetFixedSeedValue(Type()) << endl;
+	// Default target settings.
+	w.queueDepth     = GetQueueDepth(Type());
+	w.testConnRate   = GetConnectionRate(Type()) ? true : false;
+	w.transPerConn   = GetTransPerConn(Type());
+	w.useFixedSeed   = GetUseFixedSeed(Type()) ? true : false;
+	w.fixedSeedValue = GetFixedSeedValue(Type());
 
 	if (IsType(spec.type, GenericDiskType)) {
-		outfile << "'Disk maximum size,starting sector,Data pattern" << endl;
-
-		outfile << "\t" << GetDiskSize(Type())
-		    << "," << GetDiskStart(Type()) << "," << GetDataPattern(Type()) << endl;
+		w.diskMaxSize    = GetDiskSize(Type());
+		w.startingSector = GetDiskStart(Type());
+		w.dataPattern    = GetDataPattern(Type());
 	}
-
 	if (IsType(spec.type, GenericNetType)) {
-		outfile << "'Local network interface" << endl << "\t" << GetLocalNetworkInterface() << endl;
+		w.localNetworkInterface = GetLocalNetworkInterface();
 	}
-
 	if (IsType(spec.type, GenericVIType)) {
-		outfile << "'VI outstanding IOs" << endl << "\t" << GetMaxSends(Type()) << endl;
+		w.viOutstandingIos = GetMaxSends(Type());
 	}
-
-	outfile << "'End default target settings for worker" << endl;
 
 	if (save_aspecs) {
 		int spec_count = AccessSpecCount();
-
-		outfile << "'Assigned access specs" << endl;
-
 		for (int counter = 0; counter < spec_count; counter++)
-			outfile << "\t" << access_spec_list[counter]->name << endl;
-
-		outfile << "'End assigned access specs" << endl;
+			w.assignedSpecNames.push_back(access_spec_list[counter]->name);
 	}
 
 	if (save_targets) {
 		Target_Spec tspec;
 		int target_count = TargetCount();
 
-		outfile << "'Target assignments" << endl;
-
 		for (int counter = 0; counter < target_count; counter++) {
 			tspec = GetTarget(counter)->spec;
+			iocore::IcfTargetConfig t;
 
-			outfile << "'Target" << endl;
-
-			// Determine the worker type.
+			// Determine the target type.
 			if (IsType(tspec.type, GenericDiskType)) {
-				outfile << "\t" << tspec.name << endl << "'Target type" << endl << "\tDISK" << endl;
+				t.kind = iocore::IcfWorkerKind::Disk;
+				t.name = tspec.name;
 			} else if (IsType(tspec.type, GenericNetType)) {
 				if (IsType(tspec.type, GenericTCPType)) {
-					outfile << "\t" << tspec.tcp_info.remote_address << endl
-					    << "'Target type" << endl << "\tNETWORK,TCP" << endl;
+					t.kind = iocore::IcfWorkerKind::NetTCP;
+					t.name = tspec.tcp_info.remote_address;
 				} else if (IsType(tspec.type, GenericVIType)) {
-					outfile << "\t" << tspec.vi_info.remote_nic_name << endl
-					    << "'Target type" << endl << "\tNETWORK,VI" << endl;
+					t.kind = iocore::IcfWorkerKind::NetVI;
+					t.name = tspec.vi_info.remote_nic_name;
 				} else {
 					ErrorMessage("Error saving target \"" + (CString) tspec.name + "\": "
 						     "Network target is neither TCP nor VI.");
@@ -2156,255 +2141,59 @@ BOOL Worker::SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targets)
 					return FALSE;
 				}
 
-				outfile << "'Target manager ID, manager name" << endl
-				    << "\t" << net_partner->manager->id << "," << net_partner->manager->name << endl;
+				t.targetManagerId   = net_partner->manager->id;
+				t.targetManagerName = net_partner->manager->name;
 			} else {
 				ErrorMessage("Error saving target \"" + (CString) tspec.name + "\": "
 					     "Target is neither a DISK nor a NETWORK target.");
 				return FALSE;
 			}
 
-			outfile << "'End target" << endl;
+			w.targets.push_back(t);
 		}
-
-		outfile << "'End target assignments" << endl;
 	}
-
-	outfile << "'End worker" << endl;
 
 	return TRUE;
 }
 
 //
-// Restore the worker configuration from the specified stream.
-//              load_aspecs --> should each worker's access spec assignments be loaded?
-//              load_targets --> should each worker's target assignments be loaded?
+// Apply a core-parsed worker config (iocore::IcfWorkerConfig) to the live
+// worker. The PARSE now lives in iocore::IcfDocument::loadManagerList; this is
+// the parse-then-apply replacement for the stream-based LoadConfig, reproducing
+// the default-settings, access-spec and target side-effects faithfully.
 //
-// Returns TRUE on success, FALSE if any of the requested information
-// couldn't be found in the file.
-//
-BOOL Worker::LoadConfig(ICF_ifstream & infile, BOOL load_aspecs, BOOL load_targets)
+BOOL Worker::LoadConfig(const iocore::IcfWorkerConfig & pw, BOOL load_aspecs, BOOL load_targets)
 {
-	CString comment;
-
-	while (1) {
-		// The value returned may or may not actually be a comment.
-		// It SHOULD be a comment.
-		comment = infile.GetNextLine();
-
-		if (comment.CompareNoCase("'End worker") == 0) {
-			break;
-		} else if (comment.CompareNoCase("'Default target settings for worker") == 0) {
-			if (!LoadConfigDefault(infile))
-				return FALSE;
-		} else if (comment.CompareNoCase("'Assigned access specs") == 0) {
-			if (load_aspecs) {
-				if (!LoadConfigAccess(infile))
-					return FALSE;
-			} else {
-				if (!infile.SkipTo("'End assigned access specs")) {
-					ErrorMessage("File is improperly formatted.  Couldn't "
-						     "find an \"End assigned access specs\" comment.");
-					return FALSE;
-				}
+	// --- Default target settings (LoadConfigDefault) -------------------------
+	// MFC writes a setting only when its key was present; apply selectively so
+	// absent keys keep the worker's existing (AddWorker-created) values.
+	if (pw.hasDefaultSettings) {
+		if (pw.ioSettingsPresent) {
+			SetQueueDepth(pw.queueDepth);
+			SetConnectionRate(pw.testConnRate ? TRUE : FALSE);
+			SetTransPerConn(pw.transPerConn);
+			if (pw.fixedSeedPresent) {
+				SetUseFixedSeed(pw.useFixedSeed ? TRUE : FALSE);
+				SetFixedSeedValue(pw.fixedSeedValue);
 			}
-		} else if (comment.CompareNoCase("'Target assignments") == 0) {
-			if (load_targets) {
-				if (!LoadConfigTargets(infile))
-					return FALSE;
-			} else {
-				if (!infile.SkipTo("'End target assignments")) {
-					ErrorMessage("File is improperly formatted.  Couldn't "
-						     "find an \"End target assignments\" comment.");
-					return FALSE;
-				}
-			}
-
-		} else {
-			ErrorMessage("File is improperly formatted.  WORKER section "
-				     "contained an unrecognized line: \"" + comment + "\".");
-			return FALSE;
 		}
+		if (pw.diskSizePresent) {
+			SetDiskSize(pw.diskMaxSize);
+			SetDiskStart(pw.startingSector);
+			if (pw.dataPatternPresent)
+				SetDataPattern(pw.dataPattern);
+		}
+		if (pw.localNetIfacePresent)
+			SetLocalNetworkInterface(CString(pw.localNetworkInterface.c_str()));
+		if (pw.viIosPresent)
+			SetMaxSends(pw.viOutstandingIos);
 	}
 
-	// Make sure TRUE is returned even if the header comment for the
-	// requested setup info can't be found.  This applies only to access
-	// spec and target assignments.
-
-	return TRUE;
-}
-
-BOOL Worker::LoadConfigDefault(ICF_ifstream & infile)
-{
-	CString key, value;
-	CString token;
-	int temp_number;
-	DWORDLONG temp_num64;
-
-	while (1) {
-		if (!infile.GetPair(key, value)) {
-			ErrorMessage("File is improperly formatted.  Expected more default target "
-				     "settings for worker or an \"End default target settings for worker\" comment.");
-			return FALSE;
-		}
-
-		if (key.CompareNoCase("'End default target settings for worker") == 0) {
-			return TRUE;	// This is the only normal exit.
-
-		//Check for two keys here, this will allow backwards compatabilty to icf files before the use fixed seed changes
-		//For backwards compatability with builds of Iomter that do not support the fixed seed value
-		//SaveConfig() Only print out the new ICF values if the worker is using fixed seeds.
-		//NOTE: If different workers have different UseFixedSeed values, the output line here could be different
-		} else if (key.CompareNoCase("'Number of outstanding IOs,test connection rate,transactions per connection") == 0
-				|| key.CompareNoCase("'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value") == 0) 
-			{
-			if (!ICF_ifstream::ExtractFirstInt(value, temp_number)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Number of outstanding IOs\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetQueueDepth(temp_number);
-
-			token = ICF_ifstream::ExtractFirstToken(value);
-
-			if (token.CompareNoCase("ENABLED") == 0)
-				SetConnectionRate(TRUE);
-			else if (token.CompareNoCase("DISABLED") == 0)
-				SetConnectionRate(FALSE);
-			else {
-				ErrorMessage("Error restoring worker " + (CString) name + ".  "
-					     "\"Test connection rate\" should be set to ENABLED or DISABLED.");
-				return FALSE;
-			}
-
-			if (!ICF_ifstream::ExtractFirstInt(value, temp_number)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Transactions per connection\" should "
-					     "be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetTransPerConn(temp_number);
-
-			//Load the Use Fixed Seed flag and value if this icf has those values
-			if(key.CompareNoCase("'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value") == 0) {
-				token = ICF_ifstream::ExtractFirstToken(value);
-				if (token.CompareNoCase("ENABLED") == 0)
-					SetUseFixedSeed(TRUE);
-				else if (token.CompareNoCase("DISABLED") == 0)
-					SetUseFixedSeed(FALSE);
-				else {
-					ErrorMessage("Error restoring worker " + (CString) name + ".  "
-							 "\"Use fixed seed\" should be set to ENABLED or DISABLED.");
-					return FALSE;
-				}
-
-				if (!ICF_ifstream::ExtractFirstUInt64(value, temp_num64)) {
-					ErrorMessage("Error while reading file.  "
-							 "\"Fixed seed value\" should "
-							 "be specified as an integer value.");
-					return FALSE;
-				}
-				SetFixedSeedValue(temp_num64);
-			}
-
-
-		}  else if (key.CompareNoCase("'Disk maximum size,starting sector") == 0) {
-			if (!IsType(Type(), GenericDiskType)) {
-				ErrorMessage("Error restoring worker " + (CString) name + ".  "
-					     "Cannot specify \"Disk maximum size,starting sector\" for a non-disk worker.");
-				return FALSE;
-			}
-
-			if (!ICF_ifstream::ExtractFirstUInt64(value, temp_num64)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Disk maximum size\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetDiskSize(temp_num64);
-
-			if (!ICF_ifstream::ExtractFirstUInt64(value, temp_num64)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Starting sector\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetDiskStart(temp_num64);
-		} else if (key.CompareNoCase("'Disk maximum size,starting sector,Data pattern") == 0) {
-			if (!IsType(Type(), GenericDiskType)) {
-				ErrorMessage("Error restoring worker " + (CString) name + ".  "
-					     "Cannot specify \"Disk maximum size,starting sector\" for a non-disk worker.");
-				return FALSE;
-			}
-
-			if (!ICF_ifstream::ExtractFirstUInt64(value, temp_num64)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Disk maximum size\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetDiskSize(temp_num64);
-
-			if (!ICF_ifstream::ExtractFirstUInt64(value, temp_num64)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Starting sector\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetDiskStart(temp_num64);
-
-			if (!ICF_ifstream::ExtractFirstInt(value, temp_number)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Data pattern\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetDataPattern(temp_number);
-		} else if (key.CompareNoCase("'Local network interface") == 0) {
-			if (!IsType(Type(), GenericNetType)) {
-				ErrorMessage("Error restoring worker " + (CString) name + ".  "
-					     "Cannot specify \"Local network interface\" for a non-TCP worker.");
-				return FALSE;
-			}
-
-			SetLocalNetworkInterface(value);
-		} else if (key.CompareNoCase("'VI outstanding IOs") == 0) {
-			if (!IsType(Type(), GenericVIType)) {
-				ErrorMessage("Error restoring worker " + (CString) name + ".  "
-					     "Cannot specify \"VI outstanding IOs\" for a non-VI worker.");
-				return FALSE;
-			}
-
-			if (!ICF_ifstream::ExtractFirstInt(value, temp_number)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"VI outstanding IOs\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			SetMaxSends(temp_number);
-		} else {
-			ErrorMessage("File is improperly formatted.  "
-				     "DEFAULT TARGET SETTINGS FOR WORKER "
-				     "section contained an unrecognized \"" + key + "\"" "comment.");
-			return FALSE;
-		}
-	}
-}
-
-BOOL Worker::LoadConfigAccess(ICF_ifstream & infile)
-{
-	CString value;
-	Test_Spec *aspec;
-
-	while (1) {
-		value = infile.GetNextLine();
-
-		if (value.CompareNoCase("'End assigned access specs") == 0) {
-			return TRUE;
-		} else {
-			aspec = theApp.access_spec_list.RefByName(value);
+	// --- Assigned access specs (LoadConfigAccess) ----------------------------
+	if (load_aspecs) {
+		for (size_t s = 0; s < pw.assignedSpecNames.size(); s++) {
+			CString value = pw.assignedSpecNames[s].c_str();
+			Test_Spec *aspec = theApp.access_spec_list.RefByName(value);
 
 			if (aspec != NULL) {
 				InsertAccessSpec(aspec);
@@ -2412,69 +2201,38 @@ BOOL Worker::LoadConfigAccess(ICF_ifstream & infile)
 				ErrorMessage("Error restoring access specification "
 					     "assignments for worker \"" + (CString) name + "\".  "
 					     "Access spec \"" + value + "\" doesn't exist.  " "Ignoring.");
-				continue;
 			}
 		}
 	}
+
+	// --- Target assignments (LoadConfigTargets) ------------------------------
+	if (load_targets) {
+		if (!LoadConfigTargets(pw))
+			return FALSE;
+	}
+
+	return TRUE;
 }
 
-BOOL Worker::LoadConfigTargets(ICF_ifstream & infile)
+//
+// Apply core-parsed target assignments to the live worker. Mirrors the matching
+// side-effects of the stream-based LoadConfigTargets (disk: match the worker's
+// manager interfaces; network: resolve the remote manager NIC + CreateNetClient).
+// The parse (target name/type + 'Target manager ID, manager name + 'End target)
+// was already done in core.
+//
+BOOL Worker::LoadConfigTargets(const iocore::IcfWorkerConfig & pw)
 {
-	CString tgt_comment, tgt_name;
-	CString tgt_typestring;
-	CString token;
-	CString mgr_info, mgr_name;
-	int mgr_id;
-	TargetType tgt_type;
+	for (size_t t = 0; t < pw.targets.size(); t++) {
+		const iocore::IcfTargetConfig & pt = pw.targets[t];
+		CString tgt_name = pt.name.c_str();
+		TargetType tgt_type;
 
-	while (1) {
-		// Expecting "Target" or "End target assignments"
-		if (!infile.GetPair(tgt_comment, tgt_name)) {
-			ErrorMessage("File is improperly formatted.  Expected a "
-				     "target or \"End target assignments\".");
-			return FALSE;
-		}
-
-		if (tgt_comment.CompareNoCase("'End target assignments") == 0) {
-			return TRUE;	// This is the only normal exit.
-		}
-
-		if (tgt_comment.CompareNoCase("'Target") != 0) {
-			ErrorMessage("File is improperly formatted.  Expected "
-				     "a \"Target\" comment inside TARGET ASSIGNMENTS " "section.");
-			return FALSE;
-		}
-		// Expecting "Target type"
-		if (!infile.GetPair(tgt_comment, tgt_typestring)) {
-			ErrorMessage("File is improperly formatted.  Expected " "\"Target type\".");
-			return FALSE;
-		}
-
-		if (tgt_comment.CompareNoCase("'Target type") != 0) {
-			ErrorMessage("File is improperly formatted.  Expected "
-				     "a \"Target type\" comment after target name.");
-			return FALSE;
-		}
-
-		token = ICF_ifstream::ExtractFirstToken(tgt_typestring);
-		if (token.CompareNoCase("DISK") == 0) {
-			tgt_type = GenericDiskType;
-		} else if (token.CompareNoCase("NETWORK") == 0) {
-			token = ICF_ifstream::ExtractFirstToken(tgt_typestring);
-
-			if (token.CompareNoCase("TCP") == 0) {
-				tgt_type = TCPClientType;
-			} else if (token.CompareNoCase("VI") == 0) {
-				tgt_type = VIClientType;
-			} else {
-				ErrorMessage("Error restoring target " + tgt_name + ".  "
-					     "Network target type is neither TCP nor VI.");
-				return FALSE;
-			}
-		} else {
-			ErrorMessage("Error restoring target " + tgt_name + ".  "
-				     "Target type is neither DISK nor NETWORK.");
-			return FALSE;
+		switch (pt.kind) {
+		case iocore::IcfWorkerKind::Disk:	tgt_type = GenericDiskType;	break;
+		case iocore::IcfWorkerKind::NetTCP:	tgt_type = TCPClientType;	break;
+		case iocore::IcfWorkerKind::NetVI:	tgt_type = VIClientType;	break;
+		default:				tgt_type = InvalidType;		break;
 		}
 
 		if (IsType(Type(), GenericDiskType)) {
@@ -2485,7 +2243,7 @@ BOOL Worker::LoadConfigTargets(ICF_ifstream & infile)
 
 			//Find matching disk spec (drive portion only, if formatted).
 			int interface_count = manager->InterfaceCount(tgt_type);
-			Target_Spec *tspec;
+			Target_Spec *tspec = NULL;
 			int counter;
 
 			for (counter = 0; counter < interface_count; counter++) {
@@ -2513,34 +2271,8 @@ BOOL Worker::LoadConfigTargets(ICF_ifstream & infile)
 			Manager *remote_manager;
 			int remote_nic_counter, remote_nic_total;
 			Target_Spec *remote_tspec, local_tspec;
-
-			// Load config information identifying the network worker's target.
-
-			// Expecting "Target manager ID, manager name"
-			if (!infile.GetPair(tgt_comment, mgr_info)) {
-				ErrorMessage("File is improperly formatted.  Expected "
-					     "network target manager ID and name.");
-				return FALSE;
-			}
-
-			if (tgt_comment.CompareNoCase("'Target manager ID, manager name") != 0) {
-				ErrorMessage("File is improperly formatted.  Expected "
-					     "a \"Target manager ID, manager name\" comment after \"Target type\".");
-				return FALSE;
-			}
-
-			if (!ICF_ifstream::ExtractFirstInt(mgr_info, mgr_id)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Target manager ID\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			if (mgr_info.GetLength() == 0) {
-				ErrorMessage("File is improperly formatted.  Expected " "a target \"manager name\".");
-				return FALSE;
-			}
-
-			mgr_name = mgr_info;
+			int mgr_id = pt.targetManagerId;
+			CString mgr_name = pt.targetManagerName.c_str();
 
 			// Make sure the worker and target are of compatible types.
 			if ((Type() & NETWORK_COMPATIBILITY_MASK)
@@ -2601,13 +2333,9 @@ BOOL Worker::LoadConfigTargets(ICF_ifstream & infile)
 			ErrorMessage("Error loading the ICF file.  Unknown target " "type encountered.");
 			return FALSE;
 		}
-
-		tgt_comment = infile.GetNextLine();
-		if (tgt_comment.CompareNoCase("'End target") != 0) {
-			ErrorMessage("File is improperly formatted.  Expected " "an \"End target\" comment.");
-			return FALSE;
-		}
 	}
+
+	return TRUE;
 }
 
 void Worker::SaveResultsInstantaneous(Results * device_results)

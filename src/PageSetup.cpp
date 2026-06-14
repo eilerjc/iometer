@@ -67,6 +67,8 @@
 #include "stdafx.h"
 #include "PageSetup.h"
 #include "GalileoView.h"
+#include "core/IcfDocument.h"
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -310,154 +312,53 @@ BOOL CPageSetup::SaveConfig(ostream & outfile)
 	// Update memory variables with data located on GUI.
 	UpdateData(TRUE);
 
-	// Save test setup information.
-	outfile << "'TEST SETUP ============================" "========================================" << endl;
-
-	outfile << "'Test Description" << endl << "\t" << (LPCTSTR) test_name << endl;
-
-	// Save run time information.
-
-	outfile << setiosflags(ios::left);
-
-	outfile << "'Run Time" << endl
-	    << "'\t" << setw(11) << "hours"
-	    << setw(11) << "minutes"
-	    << "seconds" << endl << "\t" << setw(11) << hours << setw(11) << minutes << seconds << endl;
-
-	// Save miscellaneous information.
-	outfile << "'Ramp Up Time (s)" << endl << "\t" << ramp_time << endl;
-
-	outfile << "'Default Disk Workers to Spawn" << endl << "\t";
-
-	if (disk_worker_count == -1)
-		outfile << "NUMBER_OF_CPUS" << endl;
-	else
-		outfile << disk_worker_count << endl;
-
-	outfile << "'Default Network Workers to Spawn" << endl << "\t";
-
-	if (net_worker_count == -1)
-		outfile << "NUMBER_OF_CPUS" << endl;
-	else
-		outfile << net_worker_count << endl;
-
-	outfile << "'Record Results" << endl << "\t";
-
-	switch (result_type) {
-	case RecordAll:
-		outfile << "ALL" << endl;
-		break;
-	case RecordNoTargets:
-		outfile << "NO_TARGETS" << endl;
-		break;
-	case RecordNoWorkers:
-		outfile << "NO_WORKERS" << endl;
-		break;
-	case RecordNoManagers:
-		outfile << "NO_MANAGERS" << endl;
-		break;
-	case RecordNone:
-		outfile << "NONE" << endl;
-		break;
-	default:
+	// The 'TEST SETUP byte format is the shared writer (iocore::IcfWriter); this
+	// adapter gathers the page members into the struct and keeps the validations
+	// (and their exact error dialogs) the old in-place writer performed.
+	if (result_type < RecordAll || result_type > RecordNone) {
 		ErrorMessage("Error while saving test setup information.  "
 			     "Record Results setting in Test Setup tab is invalid.  "
 			     "Please report this as an Iometer bug.");
 		return FALSE;
 	}
-
-	// Save worker cycling information.
-	outfile << "'Worker Cycling" << endl
-	    << "'\t" << setw(11) << "start"
-	    << setw(11) << "step"
-	    << "step type" << endl << "\t" << setw(11) << worker_cycling.start << setw(11) << worker_cycling.step;
-
-	switch (worker_cycling.step_type) {
-	case StepLinear:
-		outfile << "LINEAR" << endl;
-		break;
-	case StepExponential:
-		outfile << "EXPONENTIAL" << endl;
-		break;
-	default:
+	if (worker_cycling.step_type != StepLinear && worker_cycling.step_type != StepExponential) {
 		ErrorMessage("Error saving test setup data.  Worker cycling step type "
 			     "is neither StepLinear nor StepExponential.");
 		return FALSE;
 	}
-
-	// Save disk cycling information.
-	outfile << "'Disk Cycling" << endl
-	    << "'\t" << setw(11) << "start"
-	    << setw(11) << "step"
-	    << "step type" << endl << "\t" << setw(11) << target_cycling.start << setw(11) << target_cycling.step;
-
-	switch (target_cycling.step_type) {
-	case StepLinear:
-		outfile << "LINEAR" << endl;
-		break;
-	case StepExponential:
-		outfile << "EXPONENTIAL" << endl;
-		break;
-	default:
+	if (target_cycling.step_type != StepLinear && target_cycling.step_type != StepExponential) {
 		ErrorMessage("Error saving test setup data.  Disk cycling step type "
 			     "is neither StepLinear nor StepExponential.");
 		return FALSE;
 	}
-
-	// Save queue cycling information.
-	outfile << "'Queue Depth Cycling" << endl
-	    << "'\t" << setw(11) << "start"
-	    << setw(11) << "end"
-	    << setw(11) << "step"
-	    << "step type" << endl
-	    << "\t" << setw(11) << queue_cycling.start
-	    << setw(11) << queue_cycling.end << setw(11) << queue_cycling.step;
-
-	switch (queue_cycling.step_type) {
-	case StepLinear:
-		outfile << "LINEAR" << endl;
-		break;
-	case StepExponential:
-		outfile << "EXPONENTIAL" << endl;
-		break;
-	default:
+	if (queue_cycling.step_type != StepLinear && queue_cycling.step_type != StepExponential) {
 		ErrorMessage("Error saving test setup data.  Queue depth cycling step type "
 			     "is neither LINEAR nor EXPONENTIAL.");
 		return FALSE;
 	}
 
-	// Save test type.
-	outfile << "'Test Type" << endl << "\t";
+	iocore::IcfTestSetup ts;
+	ts.testName        = (LPCTSTR) test_name;
+	ts.hours           = hours;
+	ts.minutes         = minutes;
+	ts.seconds         = seconds;
+	ts.rampTime        = ramp_time;
+	ts.diskWorkerCount = disk_worker_count;
+	ts.netWorkerCount  = net_worker_count;
+	ts.resultType      = result_type;
+	ts.workerCycling.start = worker_cycling.start;
+	ts.workerCycling.step  = worker_cycling.step;
+	ts.workerCycling.stepType = worker_cycling.step_type;
+	ts.targetCycling.start = target_cycling.start;
+	ts.targetCycling.step  = target_cycling.step;
+	ts.targetCycling.stepType = target_cycling.step_type;
+	ts.queueCycling.start = queue_cycling.start;
+	ts.queueCycling.end   = queue_cycling.end;
+	ts.queueCycling.step  = queue_cycling.step;
+	ts.queueCycling.stepType = queue_cycling.step_type;
+	ts.testType        = test_type;
 
-	switch (test_type) {
-	case CyclingTargets:
-		outfile << "CYCLE_TARGETS" << endl;
-		break;
-	case CyclingWorkers:
-		outfile << "CYCLE_WORKERS" << endl;
-		break;
-	case CyclingIncTargetsParallel:
-		outfile << "INCREMENT_TARGETS_PARALLEL" << endl;
-		break;
-	case CyclingIncTargetsSerial:
-		outfile << "INCREMENT_TARGETS_SERIAL" << endl;
-		break;
-	case CyclingWorkersTargets:
-		outfile << "CYCLE_WORKERS_AND_TARGETS" << endl;
-		break;
-	case CyclingQueue:
-		outfile << "CYCLE_OUTSTANDING_IOS" << endl;
-		break;
-	case CyclingQueueTargets:
-		outfile << "CYCLE_OUTSTANDING_IOS_AND_TARGETS" << endl;
-		break;
-	default:
-		outfile << "NORMAL" << endl;
-		break;
-	}
-
-	// Mark end of test setup information.
-	outfile << "'END test setup" << endl;
+	iocore::IcfWriter::writeTestSetup(outfile, ts);
 
 	return TRUE;		// no errors (FALSE indicates an error)
 }
@@ -467,196 +368,66 @@ BOOL CPageSetup::SaveConfig(ostream & outfile)
 //
 BOOL CPageSetup::LoadConfig(const CString & infilename)
 {
-	DWORDLONG version;
-	CString key, value;
-	CString token;
-	ICF_ifstream infile(infilename);
+	// The 'TEST SETUP parsing is shared core logic (iocore::IcfDocument, a
+	// faithful port of the parser that used to live here). This adapter
+	// pre-fills the struct with the page's current values (the loader only
+	// overwrites keys present in the file, like the old member writes did),
+	// replays the recorded MFC error texts as dialogs, and copies back.
+	iocore::IcfDocument doc((LPCTSTR) infilename);
+	iocore::IcfTestSetup ts;
 
-	// Reading in the saved setup file.
-	version = infile.GetVersion();
-	if (version == -1)
+	ts.testName   = (LPCTSTR) test_name;
+	ts.hours      = hours;
+	ts.minutes    = minutes;
+	ts.seconds    = seconds;
+	ts.rampTime   = ramp_time;
+	ts.diskWorkerCount = disk_worker_count;
+	ts.netWorkerCount  = net_worker_count;
+	ts.resultType = result_type;
+	ts.testType   = test_type;
+	ts.workerCycling.start    = worker_cycling.start;
+	ts.workerCycling.end      = worker_cycling.end;
+	ts.workerCycling.step     = worker_cycling.step;
+	ts.workerCycling.stepType = worker_cycling.step_type;
+	ts.targetCycling.start    = target_cycling.start;
+	ts.targetCycling.end      = target_cycling.end;
+	ts.targetCycling.step     = target_cycling.step;
+	ts.targetCycling.stepType = target_cycling.step_type;
+	ts.queueCycling.start     = queue_cycling.start;
+	ts.queueCycling.end       = queue_cycling.end;
+	ts.queueCycling.step      = queue_cycling.step;
+	ts.queueCycling.stepType  = queue_cycling.step_type;
+
+	const bool ok = doc.loadTestSetup(ts);
+
+	// Show the error dialogs exactly as the old in-place parser did.
+	for (size_t i = 0; i < doc.errors().size(); i++)
+		ErrorMessage(CString(doc.errors()[i].c_str()));
+
+	if (!ok)
 		return FALSE;
-	if (!infile.SkipTo("'TEST SETUP"))
-		return TRUE;	// no test setup to restore (this is OK)
 
-	while (1) {
-		if (!infile.GetPair(key, value)) {
-			ErrorMessage("File is improperly formatted.  Expected "
-				     "test setup data or \"END test setup\".");
-			return FALSE;
-		}
-
-		if (key.CompareNoCase("'END test setup") == 0) {
-			break;
-		} else if (key.CompareNoCase("'Test Description") == 0) {
-			test_name = value;
-		} else if (key.CompareNoCase("'Run Time") == 0) {
-			if (!ICF_ifstream::ExtractFirstInt(value, hours)
-			    || !ICF_ifstream::ExtractFirstInt(value, minutes)
-			    || !ICF_ifstream::ExtractFirstInt(value, seconds)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Run time\" should be specified as three integer values "
-					     "(hours, minutes, seconds).");
-				return FALSE;
-			}
-		} else if (key.Left((int)(strlen("'Ramp Up Time"))).CompareNoCase("'Ramp Up Time") == 0) {
-			if (!ICF_ifstream::ExtractFirstInt(value, ramp_time)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Ramp up time\" should be specified as an integer value.");
-				return FALSE;
-			}
-		}
-		// For backward compatibility...
-		else if (key.CompareNoCase("'Default Workers to Spawn") == 0) {
-			if (!ICF_ifstream::ExtractFirstInt(value, disk_worker_count)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Default workers to spawn\" should be "
-					     "specified as an integer value.");
-				return FALSE;
-			}
-
-			if (disk_worker_count == 0)	// "# of CPUs" used to be rep.
-				disk_worker_count = -1;	// as 0 internally, now it is -1.
-		} else if (key.CompareNoCase("'Default Disk Workers to Spawn") == 0) {
-			token = ICF_ifstream::ExtractFirstToken(value);
-
-			if (token.CompareNoCase("NUMBER_OF_CPUS") == 0)
-				disk_worker_count = -1;
-			else	// all other values are stored as an integer
-				disk_worker_count = atoi((LPCTSTR) token);
-		} else if (key.CompareNoCase("'Default Network Workers to Spawn") == 0) {
-			token = ICF_ifstream::ExtractFirstToken(value);
-
-			if (token.CompareNoCase("NUMBER_OF_CPUS") == 0)
-				net_worker_count = -1;
-			else	// all other values are stored as an integer
-				net_worker_count = atoi((LPCTSTR) token);
-		} else if (key.CompareNoCase("'Record Results") == 0) {
-			value.TrimLeft();
-			value.TrimRight();
-
-			if (value.CompareNoCase("ALL") == 0)
-				result_type = RecordAll;
-			else if (value.CompareNoCase("NO_TARGETS") == 0)
-				result_type = RecordNoTargets;
-			else if (value.CompareNoCase("NO_WORKERS") == 0)
-				result_type = RecordNoWorkers;
-			else if (value.CompareNoCase("NO_MANAGERS") == 0)
-				result_type = RecordNoManagers;
-			else if (value.CompareNoCase("NONE") == 0)
-				result_type = RecordNone;
-			// This value used to be stored as an integer.
-			// If no string match occured, restore the value as an integer.
-			else if (!ICF_ifstream::ExtractFirstInt(value, result_type)) {
-				ErrorMessage("Error while reading file.  "
-					     "For \"Record results\", expected a legal identifier or an "
-					     "integer value.  See the documentation for details.");
-				return FALSE;
-			}
-		} else if (key.CompareNoCase("'Worker Cycling") == 0) {
-			if (!ICF_ifstream::ExtractFirstInt(value, worker_cycling.start)
-			    || !ICF_ifstream::ExtractFirstInt(value, worker_cycling.step)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Worker cycling\" start and step should be specified as "
-					     "integer values.");
-				return FALSE;
-			}
-
-			token = ICF_ifstream::ExtractFirstToken(value);
-
-			if (token.CompareNoCase("LINEAR") == 0) {
-				worker_cycling.step_type = StepLinear;
-			} else if (token.CompareNoCase("EXPONENTIAL") == 0) {
-				worker_cycling.step_type = StepExponential;
-			} else	// value used to be stored as an integer
-			{
-				worker_cycling.step_type = atoi((LPCTSTR) token);
-			}
-		} else if (key.CompareNoCase("'Disk Cycling") == 0) {
-			if (!ICF_ifstream::ExtractFirstInt(value, target_cycling.start)
-			    || !ICF_ifstream::ExtractFirstInt(value, target_cycling.step)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Disk cycling\" start and step should be specified as "
-					     "integer values.");
-				return FALSE;
-			}
-
-			token = ICF_ifstream::ExtractFirstToken(value);
-
-			if (token.CompareNoCase("LINEAR") == 0) {
-				target_cycling.step_type = StepLinear;
-			} else if (token.CompareNoCase("EXPONENTIAL") == 0) {
-				target_cycling.step_type = StepExponential;
-			} else	// value used to be stored as an integer
-			{
-				target_cycling.step_type = atoi((LPCTSTR) token);
-			}
-		} else if (key.CompareNoCase("'Queue Depth Cycling") == 0) {
-			if (!ICF_ifstream::ExtractFirstInt(value, queue_cycling.start)
-			    || !ICF_ifstream::ExtractFirstInt(value, queue_cycling.end)
-			    || !ICF_ifstream::ExtractFirstInt(value, queue_cycling.step)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Queue depth cycling\" start, end, and step should be "
-					     "specified as integer values.");
-				return FALSE;
-			}
-
-			token = ICF_ifstream::ExtractFirstToken(value);
-
-			if (token.CompareNoCase("LINEAR") == 0) {
-				queue_cycling.step_type = StepLinear;
-			} else if (token.CompareNoCase("EXPONENTIAL") == 0) {
-				queue_cycling.step_type = StepExponential;
-			} else	// value used to be stored as an integer
-			{
-				queue_cycling.step_type = atoi((LPCTSTR) token);
-			}
-		} else if (key.CompareNoCase("'Test Type") == 0) {
-			value.TrimLeft();
-			value.TrimRight();
-
-			if (value.CompareNoCase("NORMAL") == 0)
-				test_type = 0;
-			else if (value.CompareNoCase("CYCLE_TARGETS") == 0)
-				test_type = CyclingTargets;
-			else if (value.CompareNoCase("CYCLE_WORKERS") == 0)
-				test_type = CyclingWorkers;
-			else if (value.CompareNoCase("INCREMENT_TARGETS_PARALLEL") == 0)
-				test_type = CyclingIncTargetsParallel;
-			else if (value.CompareNoCase("INCREMENT_TARGETS_SERIAL") == 0)
-				test_type = CyclingIncTargetsSerial;
-			else if (value.CompareNoCase("CYCLE_WORKERS_AND_TARGETS") == 0)
-				test_type = CyclingWorkersTargets;
-			else if (value.CompareNoCase("CYCLE_OUTSTANDING_IOS") == 0)
-				test_type = CyclingQueue;
-			else if (value.CompareNoCase("CYCLE_OUTSTANDING_IOS_AND_TARGETS") == 0)
-				test_type = CyclingQueueTargets;
-			// This value used to be stored as an integer.
-			// If no string match occured, restore the value as an integer.
-			else if (!ICF_ifstream::ExtractFirstInt(value, test_type)) {
-				ErrorMessage("Error while reading file.  "
-					     "For \"Test type\", expected a legal identifier or an "
-					     "integer value.  See the documentation for details.");
-				return FALSE;
-			}
-		} else		// Unrecognized comment 
-		{
-			if (version >= 19990217) {
-				ErrorMessage("File is improperly formatted.  TEST SETUP "
-					     "section contained an unrecognized \"" + key + "\" comment.");
-				return FALSE;
-			}
-			// For backward compatibility reasons, we can't count on
-			// "'Test Setup" having a corresponding "'End test setup"
-			// because versions as recent as 1998.10.08 didn't follow
-			// this convention.  All other configuration text blocks
-			// should be able to follow the rule that all text blocks
-			// are terminated by an "'End..." statement.
-			break;
-		}
-	}
-
-	infile.close();
+	test_name = ts.testName.c_str();
+	hours     = ts.hours;
+	minutes   = ts.minutes;
+	seconds   = ts.seconds;
+	ramp_time = ts.rampTime;
+	disk_worker_count = ts.diskWorkerCount;
+	net_worker_count  = ts.netWorkerCount;
+	result_type = ts.resultType;
+	test_type   = ts.testType;
+	worker_cycling.start     = ts.workerCycling.start;
+	worker_cycling.end       = ts.workerCycling.end;
+	worker_cycling.step      = ts.workerCycling.step;
+	worker_cycling.step_type = ts.workerCycling.stepType;
+	target_cycling.start     = ts.targetCycling.start;
+	target_cycling.end       = ts.targetCycling.end;
+	target_cycling.step      = ts.targetCycling.step;
+	target_cycling.step_type = ts.targetCycling.stepType;
+	queue_cycling.start      = ts.queueCycling.start;
+	queue_cycling.end        = ts.queueCycling.end;
+	queue_cycling.step       = ts.queueCycling.step;
+	queue_cycling.step_type  = ts.queueCycling.stepType;
 
 	// Update the GUI with the values read in from the file.
 	UpdateData(FALSE);

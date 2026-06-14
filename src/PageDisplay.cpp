@@ -68,6 +68,8 @@
 #include "PageDisplay.h"
 #include "ManagerList.h"
 #include "GalileoView.h"
+#include "core/IcfDocument.h"
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -1080,49 +1082,47 @@ BOOL CPageDisplay::SaveConfig(ostream & outfile)
 	// Update memory variables with data located on GUI.
 	UpdateData(TRUE);
 
-	// Save settings for page as a whole.
-	outfile << "'RESULTS DISPLAY =======================" "========================================" << endl;
+	// The 'RESULTS DISPLAY byte format is the shared writer (iocore::IcfWriter);
+	// this adapter gathers the page/bar state into the struct. Each bar emits a
+	// statistic line, optionally followed by a manager line and a worker line
+	// (each its own entry, written in order - reproducing the grouped layout).
+	iocore::IcfDisplaySettings ds;
+	ds.recordLastUpdate = IsInstantaneousMode() ? true : false;
+	ds.updateFrequency  = GetUpdateDelay() / 1000;
+	ds.whichPerf        = (GetWhichPerf() == LAST_UPDATE_PERF) ? 1 : 0;
 
-	outfile << "'Record Last Update Results,Update Frequency,Update Type" << endl << "\t";
-
-	if(IsInstantaneousMode())
-		outfile << "ENABLED";
-	else
-		outfile << "DISABLED";
-
-	outfile << "," << GetUpdateDelay() / 1000;
-
-	if (GetWhichPerf() == LAST_UPDATE_PERF)
-		outfile << "," << "LAST_UPDATE" << endl;
-	else
-		outfile << "," << "WHOLE_TEST" << endl;
-
-	// Save bar chart settings.
 	for (i = 0; i < NUM_STATUS_BARS; i++) {
 		// Get the name of the result we are displaying.
 		GetDlgItem(BResultType1 + i)->GetWindowText(statistic);
 
-		// Output settings for this bar chart (each setting gets a line to itself
-		// because these names can contain spaces and commas)
-
-		// Record which statistic is being monitored.
-		outfile << "'Bar chart " << (i + 1) << " statistic" << endl << "\t" << (LPCTSTR) statistic << endl;
+		iocore::IcfDisplaySettings::Bar stat;
+		stat.index = i;
+		stat.kind  = iocore::IcfDisplaySettings::Bar::Statistic;
+		stat.name  = (LPCTSTR) statistic;
+		ds.bars.push_back(stat);
 
 		// Is a specific manager being monitored?
 		if (barcharts[i].manager) {
-			outfile << "'Bar chart " << (i + 1) << " manager ID, manager name" << endl
-			    << "\t" << barcharts[i].manager->id << "," << barcharts[i].manager->name << endl;
+			iocore::IcfDisplaySettings::Bar mgr;
+			mgr.index = i;
+			mgr.kind  = iocore::IcfDisplaySettings::Bar::Manager;
+			mgr.id    = barcharts[i].manager->id;
+			mgr.name  = barcharts[i].manager->name;
+			ds.bars.push_back(mgr);
 
 			// Is a specific worker on that manager being monitored?
 			if (barcharts[i].worker) {
-				outfile << "'Bar chart " << (i + 1) << " worker ID, worker name" << endl
-				    << "\t" << barcharts[i].worker->id << "," << barcharts[i].worker->name << endl;
+				iocore::IcfDisplaySettings::Bar wkr;
+				wkr.index = i;
+				wkr.kind  = iocore::IcfDisplaySettings::Bar::Worker;
+				wkr.id    = barcharts[i].worker->id;
+				wkr.name  = barcharts[i].worker->name;
+				ds.bars.push_back(wkr);
 			}
 		}
 	}
 
-	// Mark end of this page's information.
-	outfile << "'END results display" << endl;
+	iocore::IcfWriter::writeResultsDisplay(outfile, ds);
 
 	return TRUE;
 }
@@ -1132,129 +1132,47 @@ BOOL CPageDisplay::SaveConfig(ostream & outfile)
 //
 BOOL CPageDisplay::LoadConfig(const CString & infilename)
 {
-	DWORDLONG version;
-	CString key, value;
-	ICF_ifstream infile(infilename);
+	// The 'RESULTS DISPLAY parsing is shared core logic (iocore::IcfDocument,
+	// a faithful port of the parser that used to live here). This adapter
+	// replays the recorded MFC error texts as dialogs and applies the parsed
+	// settings through the same GUI calls as before. (One small divergence:
+	// the old code applied settings as it parsed, so a file failing PARTWAY
+	// could leave earlier settings applied; settings are now applied only
+	// when the section parses - a failed load aborts the restore anyway.)
+	iocore::IcfDocument doc((LPCTSTR) infilename);
+	iocore::IcfDisplaySettings ds;
 
-	version = infile.GetVersion();
-	if (version == -1)
+	const bool ok = doc.loadResultsDisplay(ds);
+
+	// Show the error dialogs exactly as the old in-place parser did
+	// (including the "Ignoring this bar setting" warnings on success).
+	for (size_t i = 0; i < doc.errors().size(); i++)
+		ErrorMessage(CString(doc.errors()[i].c_str()));
+
+	if (!ok)
 		return FALSE;
-	if (!infile.SkipTo("'RESULTS DISPLAY"))
-		return TRUE;	// no results display to restore (this is OK)
 
-	while (1) {
-		if (!infile.GetPair(key, value)) {
-			ErrorMessage("File is improperly formatted.  Expected results "
-				     "display data or \"END results display\".");
-			return FALSE;
-		}
-
-		if (key.CompareNoCase("'END results display") == 0) {
-			break;
-		} else if (key.CompareNoCase("'Record Last Update Results,Update Frequency,Update Type") == 0) {
-
-			CString record_last_update = ICF_ifstream::ExtractFirstToken(value);
-
-			if(record_last_update.CompareNoCase("ENABLED") == 0)
-				m_CRecordLastUpdate.SetCheck(TRUE);
-			else
-				m_CRecordLastUpdate.SetCheck(FALSE);
-
-			OnCRecordLastUpdate();
-
-			int update_frequency;
-			CString update_type;
-
-			if (!ICF_ifstream::ExtractFirstInt(value, update_frequency)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Update frequency\" should be specified as an integer value.");
-				return FALSE;
-			}
-
-			update_type = value;
-			update_type.TrimRight();
-
-			SetUpdateDelay(update_frequency);
-
-			if (update_type.CompareNoCase("LAST_UPDATE") == 0)
-				SetWhichPerf(LAST_UPDATE_PERF);
-			else if (update_type.CompareNoCase("WHOLE_TEST") == 0)
-				SetWhichPerf(WHOLE_TEST_PERF);
-			else {
-				ErrorMessage("File is improperly formatted.  In RESULTS "
-					     "DISPLAY section, Update Frequency was not followed by "
-					     "an appropriate Update Type string.");
-				return FALSE;
-			}
-		} else if (key.Left((int)(strlen("'Bar chart"))).CompareNoCase("'Bar chart") == 0) {
-			int bar_number;
-			CString bar_item;
-
-			if (!ICF_ifstream::ExtractFirstInt(key, bar_number)) {
-				ErrorMessage("Error while reading file.  "
-					     "\"Bar chart\" should be followed by an integer value.");
-				return FALSE;
-			}
-
-			bar_item = key;
-			bar_item.TrimLeft();
-			bar_item.TrimRight();
-
-			if (bar_number < 1 || bar_number > NUM_STATUS_BARS) {
-				ErrorMessage("Invalid bar chart number in RESULTS DISPLAY "
-					     "section.  Ignoring this bar setting.");
-				continue;
-			}
-
-			bar_number--;	// convert from one-based to zero-based index
-
-			if (bar_item.CompareNoCase("statistic") == 0) {
-				SelectStatisticByName(bar_number, value);
-			} else if (bar_item.CompareNoCase("manager ID, manager name") == 0) {
-				CString mgr_name;
-				int mgr_id;
-
-				if (!ICF_ifstream::ExtractFirstInt(value, mgr_id)) {
-					ErrorMessage("Error while reading file.  "
-						     "Expected a manager ID integer after \"manager ID, manager name\""
-						     "comment in RESULTS DISPLAY section.");
-					return FALSE;
-				}
-
-				mgr_name = value;
-
-				SelectManagerByName(bar_number, mgr_name, mgr_id);
-			} else if (bar_item.CompareNoCase("worker ID, worker name") == 0) {
-				CString wkr_name;
-				int wkr_id;
-
-				if (!ICF_ifstream::ExtractFirstInt(value, wkr_id)) {
-					ErrorMessage("Error while reading file.  "
-						     "Expected a worker ID integer after \"worker ID, worker name\""
-						     "comment in RESULTS DISPLAY section.");
-					return FALSE;
-				}
-
-				wkr_name = value;
-
-				SelectWorkerByName(bar_number, wkr_name, wkr_id);
-			} else {
-				CString str;
-
-				str.Format("%d", bar_number);
-				ErrorMessage("Invalid bar chart item name \""
-					     + bar_item + "\" for bar #" + str
-					     + " in RESULTS DISPLAY section.  Ignoring this bar " + "setting.");
-				continue;
-			}
-		} else {
-			ErrorMessage("File is improperly formatted.  RESULTS DISPLAY "
-				     "section contained an unrecognized \"" + key + "\" comment.");
-			return FALSE;
-		}
+	if (ds.updateLinePresent) {
+		m_CRecordLastUpdate.SetCheck(ds.recordLastUpdate ? TRUE : FALSE);
+		OnCRecordLastUpdate();
+		SetUpdateDelay(ds.updateFrequency);
+		SetWhichPerf(ds.whichPerf);   // core uses the same *_PERF values
 	}
 
-	infile.close();
+	for (size_t i = 0; i < ds.bars.size(); i++) {
+		const iocore::IcfDisplaySettings::Bar & bar = ds.bars[i];
+		switch (bar.kind) {
+		case iocore::IcfDisplaySettings::Bar::Statistic:
+			SelectStatisticByName(bar.index, CString(bar.name.c_str()));
+			break;
+		case iocore::IcfDisplaySettings::Bar::Manager:
+			SelectManagerByName(bar.index, CString(bar.name.c_str()), bar.id);
+			break;
+		case iocore::IcfDisplaySettings::Bar::Worker:
+			SelectWorkerByName(bar.index, CString(bar.name.c_str()), bar.id);
+			break;
+		}
+	}
 
 	// Update the GUI with the values read in from the file.
 	UpdateData(FALSE);

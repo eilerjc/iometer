@@ -73,6 +73,9 @@
 #include "AccessSpecList.h"
 #include "GalileoApp.h"
 #include "GalileoView.h"
+#include "core/AccessSpecCatalog.h"	// shared smart-name formatting (iocore)
+#include "core/IcfDocument.h"	// shared ICF access-spec loader (iocore)
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -892,57 +895,50 @@ BOOL AccessSpecList::SaveResults(ostream & outfile)
 BOOL AccessSpecList::SaveConfig(ostream & outfile)
 {
 	int i, line_index;
-	int access_count;
+	int access_count = Count();
 	Test_Spec *spec;
 
-	outfile << "'ACCESS SPECIFICATIONS =================" "========================================" << endl;
+	// The 'ACCESS SPECIFICATIONS byte format is the shared writer
+	// (iocore::IcfWriter); this adapter gathers the live specs (skipping the idle
+	// spec 0) into the structs, keeping the default-assignment validation.
+	std::vector<iocore::IcfAccessSpec> specs;
 
-	access_count = Count();
-
-	// Save all the active access specs except the idle spec (0).
 	for (i = 1; i < access_count; i++) {
 		spec = Get(i);
 
-		outfile << "'Access specification name,default assignment" << endl;
-		outfile << "\t" << spec->name << ",";
+		iocore::IcfAccessSpec s;
+		s.name = spec->name;
 
 		switch (spec->default_assignment) {
-		case AssignNone:
-			outfile << "NONE" << endl;
-			break;
-		case AssignAll:
-			outfile << "ALL" << endl;
-			break;
-		case AssignDisk:
-			outfile << "DISK" << endl;
-			break;
-		case AssignNet:
-			outfile << "NET" << endl;
-			break;
+		case AssignNone: s.defaultAssignment = 0; break;
+		case AssignAll:  s.defaultAssignment = 1; break;
+		case AssignDisk: s.defaultAssignment = 2; break;
+		case AssignNet:  s.defaultAssignment = 3; break;
 		default:
 			ErrorMessage("Error saving access specification list.  Access specification "
 				     + (CString) spec->name + " has an illegal default assignment.");
 			return FALSE;
 		}
 
-		// Write access specifications to a file, data comma separated.
-		outfile << "'size,% of size,% reads,% random,delay,burst,align,reply" << endl;
-
 		for (line_index = 0; line_index < MAX_ACCESS_SPECS; line_index++) {
 			if (spec->access[line_index].of_size == IOERROR)
 				break;
-			outfile << "\t"
-			    << spec->access[line_index].size << ","
-			    << spec->access[line_index].of_size << ","
-			    << spec->access[line_index].reads << ","
-			    << spec->access[line_index].random << ","
-			    << spec->access[line_index].delay << ","
-			    << spec->access[line_index].burst << ","
-			    << spec->access[line_index].align << "," << spec->access[line_index].reply << endl;
+			iocore::IcfAccessSpecLine l;
+			l.size   = spec->access[line_index].size;
+			l.ofSize = spec->access[line_index].of_size;
+			l.reads  = spec->access[line_index].reads;
+			l.random = spec->access[line_index].random;
+			l.delay  = spec->access[line_index].delay;
+			l.burst  = spec->access[line_index].burst;
+			l.align  = spec->access[line_index].align;
+			l.reply  = spec->access[line_index].reply;
+			s.lines.push_back(l);
 		}
+
+		specs.push_back(s);
 	}
 
-	outfile << "'END access specifications" << endl;
+	iocore::IcfWriter::writeAccessSpecs(outfile, specs);
 
 	return TRUE;
 }
@@ -956,267 +952,74 @@ BOOL AccessSpecList::SaveConfig(ostream & outfile)
 //
 BOOL AccessSpecList::LoadConfig(const CString & infilename, BOOL replace)
 {
-	ICF_ifstream infile(infilename);
-	DWORDLONG version;
-	BOOL retval;
-
 	if (replace) {
 		// Clear memory and display before loading accesses.
 		DeleteAll();
 		InsertIdleSpec();
 	}
 
-	version = infile.GetVersion();
-	if (version == -1)
+	// Parsing (both the modern format and the pre-1998.05.21 numeric format,
+	// version-dispatched) is shared core logic (iocore::IcfDocument). This
+	// adapter applies the parsed specs to the live list with the same
+	// replace-by-name semantics as the old in-place parser, and replays the
+	// recorded MFC error dialogs.
+	iocore::IcfDocument doc((LPCTSTR) infilename);
+
+	std::vector<std::string> existing;
+	for (int e = 0; e < Count(); e++)
+		existing.push_back(Get(e)->name);
+
+	std::vector<iocore::IcfAccessSpec> loaded;
+	const bool ok = doc.loadAccessSpecs(loaded, &existing);
+
+	for (size_t e = 0; e < doc.errors().size(); e++)
+		ErrorMessage(CString(doc.errors()[e].c_str()));
+
+	if (!ok)
 		return FALSE;
 
-	if (!infile.SkipTo("'ACCESS SPECIFICATIONS"))
-		return TRUE;	// no access spec list to restore (this is OK)
+	// Apply to the live list. A spec whose name matches an existing one
+	// replaces it in place (worker references stay valid), like before.
+	for (size_t s = 0; s < loaded.size(); s++) {
+		const iocore::IcfAccessSpec & ls = loaded[s];
 
-	// Check to see whether to load a per-worker access spec, or an old style access spec.
-	if (version >= 19980521) {
-		retval = LoadConfigNew(infile);
-
-		// There's no need to assign the default access specs here.
-		// They will be assigned automatically when workers are created
-		// (by the Worker constructor itself), and they will be removed
-		// by the Manager::LoadConfig code if they shouldn't be assigned.
-	} else {
-		retval = LoadConfigOld(infile);
-
-		// If replacing, assign default specs to workers.
-		if (replace)
-			theApp.manager_list.AssignDefaultAccessSpecs();
-	}
-
-	infile.close();
-
-	return retval;
-}
-
-//
-// Loads the global access spec list from a file.
-// Does not support old style saved configurations.
-//
-BOOL AccessSpecList::LoadConfigNew(ICF_ifstream & infile)
-{
-	CString key, value;
-	CString token;
-	int line_index;
-	int total_access;
-	Test_Spec *spec;
-	string str;
-
-	while (1) {
-		if (!infile.GetPair(key, value)) {
-			ErrorMessage("File is improperly formatted.  Expected an "
-				     "access specification or \"END access specifications\".");
-			return FALSE;
-		}
-
-		if (key.CompareNoCase("'END access specifications") == 0) {
-			break;
-		}
-		if (key.CompareNoCase("'Access specification name,default assignment") == 0) {
-			if (spec = RefByName((LPCTSTR) value.Left(value.Find(',')))) {
-#ifdef VERBOSE
-				ErrorMessage("An access specification named \"" + value.Left(value.Find(','))
-					     + "\" already exists.  It will be replaced by "
-					     "the new access specification.");
-#endif
-			} else {
-				// No previous access spec by this name.  Create a new one.
-				spec = New();
-
-				// Sanity check.
-				if (!spec) {
-					ErrorMessage("Error while loading file.  Out of memory.  "
-						     "Error occured in AccessSpecList::LoadConfig()");
-					return FALSE;
-				}
-			}
-
-			// Fill in the name.
-			token = ICF_ifstream::ExtractFirstToken(value, TRUE);
-			strcpy(spec->name, (LPCTSTR) token);
-
-			// Read the default assignment.
-			token = ICF_ifstream::ExtractFirstToken(value);
-			if (token.CompareNoCase("NONE") == 0)
-				spec->default_assignment = AssignNone;
-			else if (token.CompareNoCase("ALL") == 0)
-				spec->default_assignment = AssignAll;
-			else if (token.CompareNoCase("DISK") == 0)
-				spec->default_assignment = AssignDisk;
-			else if (token.CompareNoCase("NET") == 0)
-				spec->default_assignment = AssignNet;
-			else
-				spec->default_assignment = atoi((LPCTSTR) token);
-
-			key = infile.GetNextLine();
-			if (key.GetAt(0) != '\'') {
-				ErrorMessage("File is improperly formatted.  Expected a "
-					     "comment line to follow the access specification name.");
+		Test_Spec *spec = RefByName(ls.name.c_str());
+		if (!spec) {
+			spec = New();
+			if (!spec) {
+				ErrorMessage("Error while loading file.  Out of memory.  "
+					     "Error occured in AccessSpecList::LoadConfig()");
 				return FALSE;
 			}
-			// Get the details of the access spec.
-
-			line_index = 0;
-			total_access = 0;
-
-			// Read lines until total percentage reaches 100.
-			while (infile.peek() != '\'') {
-				getline(infile,str,',');
-				spec->access[line_index].size = atoi(str.c_str());
-
-				getline(infile,str,',');
-				spec->access[line_index].of_size = atoi(str.c_str());
-
-				getline(infile,str,',');
-				spec->access[line_index].reads = atoi(str.c_str());
-
-				getline(infile,str,',');
-				spec->access[line_index].random = atoi(str.c_str());
-
-				getline(infile,str,',');
-				spec->access[line_index].delay = atoi(str.c_str());
-
-				getline(infile,str,',');
-				spec->access[line_index].burst = atoi(str.c_str());
-
-				getline(infile,str,',');
-				spec->access[line_index].align = atoi(str.c_str());
-
-				getline(infile,str);
-				spec->access[line_index].reply = atoi(str.c_str());
-				
-				// Sanity check.
-				if (spec->access[line_index].of_size > 100 ||
-				    spec->access[line_index].reads > 100 ||
-				    spec->access[line_index].random > 100 ||
-				    spec->access[line_index].of_size < 0 ||
-				    spec->access[line_index].reads < 0 || spec->access[line_index].random < 0) {
-					Delete(spec);
-					ErrorMessage("Error loading global access specifications.  "
-						     "Invalid value encountered.");
-					return FALSE;
-				}
-
-				total_access += spec->access[line_index].of_size;
-				line_index++;
-			}
-
-			// Mark the end of the access spec.
-			if (line_index <= MAX_ACCESS_SPECS)
-				spec->access[line_index].of_size = IOERROR;
-
-			// Sanity check.
-			if (total_access != 100) {
-				ErrorMessage("Error loading global access specifications.  "
-					     "Percentages don't add to 100.");
-				Delete(spec);
-				return FALSE;
-			}
-
-		} else {
-			ErrorMessage("File is improperly formatted.  Global ACCESS "
-				     "SPECIFICATION section contained an unrecognized \"" + key + "\" comment.");
-			return FALSE;
 		}
+
+		_snprintf(spec->name, MAX_NAME, "%s", ls.name.c_str());
+		spec->default_assignment = ls.defaultAssignment;
+
+		int line_index = 0;
+		for (size_t li = 0; li < ls.lines.size() && line_index < MAX_ACCESS_SPECS; li++, line_index++) {
+			const iocore::IcfAccessSpecLine & l = ls.lines[li];
+			spec->access[line_index].size    = l.size;
+			spec->access[line_index].of_size = l.ofSize;
+			spec->access[line_index].reads   = l.reads;
+			spec->access[line_index].random  = l.random;
+			spec->access[line_index].delay   = l.delay;
+			spec->access[line_index].burst   = l.burst;
+			spec->access[line_index].align   = l.align;
+			spec->access[line_index].reply   = l.reply;
+		}
+		// Mark the end of the access spec.
+		if (line_index <= MAX_ACCESS_SPECS)
+			spec->access[line_index].of_size = IOERROR;
 	}
+
+	// Old-format files: if replacing, assign the default specs to workers.
+	// (New-format files don't need this - the Worker constructor assigns
+	// defaults and Manager::LoadConfig removes them when appropriate.)
+	if (doc.readVersion() < 19980521 && replace)
+		theApp.manager_list.AssignDefaultAccessSpecs();
 
 	return TRUE;
-}
-
-//
-// Loads an old style access spec.
-//
-BOOL AccessSpecList::LoadConfigOld(ICF_ifstream & infile)
-{
-	int total_access;
-	int line_index;
-	Test_Spec *spec;
-	char comment[100];
-
-	// Read and discard initial comment line.
-	infile.getline(comment, 100);
-
-	// Create new test spec.
-	spec = New();
-	line_index = 0;
-	total_access = 0;
-
-	// Get access specs from the file until an error occurs or all specs have been read in.
-	while (!infile.rdstate()) {
-		// Read in specifications until another comment is read in from the file.
-		// This signifies the end of the access spec portion.
-		if (infile.peek() == '\'' || infile.peek() == EOF) {
-			// Delete the last spec created.
-			if (spec)
-				Delete(spec);
-
-			return TRUE;
-		}
-		// Sanity check.
-		if (!spec) {
-			ErrorMessage("Error allocating memory for access specification.");
-			return FALSE;
-		}
-
-		InitAccessSpecLine(&(spec->access[line_index]));
-		infile >> spec->access[line_index].size;
-		infile >> spec->access[line_index].of_size;
-		infile >> spec->access[line_index].reads;
-		infile >> spec->access[line_index].random;
-		infile >> spec->access[line_index].delay;
-		infile >> spec->access[line_index].burst;
-		infile.ignore(1, '\n');
-
-		// Sanity check.
-		if (spec->access[line_index].of_size > 100 ||
-		    spec->access[line_index].reads > 100 ||
-		    spec->access[line_index].random > 100 ||
-		    spec->access[line_index].of_size < 0 ||
-		    spec->access[line_index].reads < 0 || spec->access[line_index].random < 0) {
-			break;
-		}
-		// Skip lines that make up "0%" of the access.
-		if (spec->access[line_index].of_size) {
-			total_access += spec->access[line_index].of_size;
-			line_index++;
-		} else {
-			ErrorMessage("Found an access specification line that makes up 0% of the test.  "
-				     "This line will be discarded.");
-		}
-
-		// Sanity check.
-		if (total_access > 100)
-			break;
-
-		// Mark the end of the access spec if needed.
-		if (total_access == 100) {
-			spec->default_assignment = AssignAll;
-			if (line_index <= MAX_ACCESS_SPECS)
-				spec->access[line_index].of_size = IOERROR;
-
-			// Try smart naming if possible.
-			SmartName(spec);
-
-			// Create new test spec.
-			spec = New();
-
-			// Prepare to load next spec from file.
-			line_index = 0;
-			total_access = 0;
-		}
-	}
-
-	// Delete the last spec created.
-	if (spec)
-		Delete(spec);
-
-	ErrorMessage("Error loading access specification.  Invalid access specification.");
-	return FALSE;
 }
 
 //
@@ -1272,41 +1075,9 @@ void AccessSpecList::SmartName(Test_Spec * spec)
 	if (spec->access[1].of_size != IOERROR)
 		return;		// use existing name
 
-	// Switch statement for size part of name
-	switch (spec->access[0].size) {
-	case 512:
-		name = "512 B";
-		break;
-	case MEGABYTE_BIN:
-		name = "1 MiB";
-		break;
-	default:
-		name.Format("%d KiB", (spec->access[0].size / KILOBYTE_BIN));
-	}
-
-	// Switch statement for random/sequential part of name
-	switch (spec->access[0].random) {
-	case 0:
-		name += " sequential";
-		break;
-	case 100:
-		name += " random";
-		break;
-	default:
-		name.Format("%s %d%% random", name.Left(name.GetLength()), spec->access[0].random);
-	}
-
-	// Switch statement for read/write part of name
-	switch (spec->access[0].reads) {
-	case 0:
-		name += " writes";
-		break;
-	case 100:
-		name += " reads";
-		break;
-	default:
-		name.Format("%s %d%% reads", name.Left(name.GetLength()), spec->access[0].reads);
-	}
+	// Formatting is shared core logic (also used by the Qt GUI's library).
+	name = iocore::smartNameText((int)spec->access[0].size,
+				     spec->access[0].random, spec->access[0].reads).c_str();
 
 	// Test to ensure no duplicate names
 	name_size = name.GetLength();

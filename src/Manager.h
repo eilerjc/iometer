@@ -70,6 +70,8 @@
 #include "IOPort.h"
 #include <afxtempl.h>
 
+namespace iocore { struct IcfManagerConfig; }	// shared MANAGER LIST parse result
+
 // Class information for a single Manager
 class Manager {
       public:
@@ -245,8 +247,13 @@ class Manager {
 	///////////////////////////////////////////////////////////////////////////
 	// Functions to deal with the saving and loading of config files.
 	//
-	BOOL SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targets);
-	BOOL LoadConfig(ICF_ifstream & infile, BOOL load_aspecs, BOOL load_targets);
+	// Gather this manager + its (non-client) workers' live config into the shared
+	// struct (the byte format is emitted by iocore::IcfWriter). Replaces the
+	// stream-based SaveConfig.
+	BOOL GatherConfig(iocore::IcfManagerConfig & m, BOOL save_aspecs, BOOL save_targets);
+	// Apply a core-parsed manager config to the live manager (matches/creates
+	// each worker, then applies its config). Parsing lives in iocore::IcfDocument.
+	BOOL LoadConfig(const iocore::IcfManagerConfig & pm, BOOL load_aspecs, BOOL load_targets);
 	//
 	///////////////////////////////////////////////////////////////////////////
 

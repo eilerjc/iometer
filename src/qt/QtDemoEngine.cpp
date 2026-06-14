@@ -1,0 +1,229 @@
+// QtDemoEngine.cpp
+#include "QtDemoEngine.h"
+#include "QtIometerEngine.h"
+#include "../core/IcfFile.h"
+#include "../core/ResultsAggregator.h"
+#include <cmath>
+#include <QRandomGenerator>
+
+static constexpr double PI = 3.14159265358979323846;
+
+QtDemoEngine::QtDemoEngine(QObject *parent) : QtIometerEngine(parent)
+{
+    connect(&m_timer, &QTimer::timeout, this, &QtDemoEngine::tick);
+    m_timer.setInterval(500);   // update twice per second
+    buildDefaultConfig();
+}
+
+void QtDemoEngine::buildDefaultConfig()
+{
+    // ---- Local manager with 4 disk workers ----------------------------------
+    ManagerInfo local;
+    local.name           = "Local System";
+    local.address        = "127.0.0.1";
+    local.connected      = true;
+    local.processorCount = 4;   // simulated quad-core
+
+    // Available targets visible to the demo system (matches the Disk Targets tab)
+    // C: has a filesystem but no iobw.tst → unprepared (red slash)
+    // W: has a filesystem and iobw.tst   → prepared (normal icon)
+    // PhysicalDriveN are raw devices     → always testable (normal icon)
+    local.availableTargets = {
+        TargetInfo{"C: \"Windows\"",         TargetKind::LogicalDisk,  false},
+        TargetInfo{"W: \"nvme\"",            TargetKind::LogicalDisk,  true},
+        TargetInfo{"\\\\.\\PhysicalDrive0",  TargetKind::PhysicalDisk, true},
+        TargetInfo{"\\\\.\\PhysicalDrive1",  TargetKind::PhysicalDisk, true}
+    };
+
+    // Network interfaces available on this system
+    local.availableNetInterfaces = {
+        "192.168.1.100",
+        "10.0.0.1"
+    };
+
+    const QStringList diskNames = {"W:", "X:", "Y:", "Z:"};
+    for (int i = 0; i < 4; ++i) {
+        WorkerInfo w;
+        w.id          = QString("local-w%1").arg(i).toStdString();
+        w.name        = QString("Worker %1").arg(i + 1).toStdString();
+        w.type        = "Disk";
+        w.managerName = local.name;
+        w.targets     = { diskNames[i].toStdString() };
+        w.queueDepth  = (i == 0) ? 32 : (i == 1) ? 16 : 8;
+        local.workers.push_back(w);
+    }
+    m_managers.append(local);
+
+    // ---- Access specs: use shared built-in library -------
+    m_specs = QtIometerEngine::builtinAccessSpecs();
+}
+
+// ---- Test control -----------------------------------------------------------
+
+void QtDemoEngine::startTest()
+{
+    if (m_running) return;
+    m_running = true;
+    m_t       = 0.0;
+    m_timer.start();
+    emit testStarted();
+    emit statusMessage("Test running...");
+}
+
+void QtDemoEngine::stopTest()
+{
+    if (!m_running) return;
+    m_running = false;
+    m_timer.stop();
+
+    if (!m_current.isEmpty())
+        m_saved.append(m_current.last());
+
+    emit testStopped();
+    emit statusMessage("Test stopped.");
+}
+
+void QtDemoEngine::stopAll()
+{
+    stopTest();
+}
+
+// ---- Simulation tick --------------------------------------------------------
+
+WorkerResult QtDemoEngine::makeResult(const WorkerInfo &w, const std::string &mgrName, double t) const
+{
+    int idx = 0;
+    for (int i = 0; i < m_managers.first().workers.size(); ++i)
+        if (m_managers.first().workers[i].id == w.id) { idx = i; break; }
+    const double phase = idx * 0.7;
+
+    const double baseMbps = 500.0 + 100.0 * idx;
+    const double waveMbps = 80.0  * std::sin(t * 0.4 + phase);
+    const double spike    = (std::fmod(t + phase, 15.0) < 0.6) ? 250.0 : 0.0;
+    const double mbps     = std::max(10.0, baseMbps + waveMbps + spike);
+
+    const double iops       = (mbps * 1e6) / (64.0 * 1024.0);
+    const double latBase    = 1000.0 / iops * w.queueDepth;
+    const double latJitter  = latBase * 0.15 * std::sin(t * 1.3 + phase);
+
+    WorkerResult r;
+    r.managerName  = mgrName;          // std::string
+    r.workerName   = w.name;           // std::string
+    r.mbpsDec      = mbps;
+    r.readMbpsDec  = mbps;
+    r.mbpsBin      = mbps / 1.048576;
+    r.iops         = iops;
+    r.readIops     = iops;
+    r.avgLatencyMs = std::max(0.01, latBase + latJitter);
+    r.maxLatencyMs = r.avgLatencyMs * (1.5 + 0.5 * std::sin(t * 0.8 + phase));
+    r.cpuUtil      = 5.0 + 3.0 * idx + 2.0 * std::sin(t * 0.6 + phase);
+    r.cpuUser      = r.cpuUtil * 0.4;
+    r.cpuKernel    = r.cpuUtil * 0.6;
+    r.errors       = 0;
+    return r;
+}
+
+void QtDemoEngine::tick()
+{
+    m_t += 0.5;
+    m_current.clear();
+
+    for (const auto &mgr : std::as_const(m_managers)) {
+        if (!mgr.connected) continue;
+        for (const auto &w : mgr.workers)
+            m_current.append(makeResult(w, mgr.name, m_t));   // mgr.name is std::string
+    }
+
+    // Prepend the ALL aggregate (shared core logic - same math everywhere).
+    if (!m_current.isEmpty()) {
+        const std::vector<WorkerResult> v(m_current.begin(), m_current.end());
+        m_current.prepend(iocore::aggregateResults(v).all);
+    }
+
+    emit resultsUpdated(m_current);
+}
+
+// ---- Config -----------------------------------------------------------------
+
+void QtDemoEngine::newConfig()
+{
+    m_managers.clear();
+    m_specs.clear();
+    m_current.clear();
+    buildDefaultConfig();
+    emit configChanged();
+}
+
+bool QtDemoEngine::loadConfig(const QString &filepath)
+{
+    // The demo engine doubles as a "test dynamo": it parses a real ICF through
+    // the shared core parser so configs can be exercised end-to-end without a
+    // live Dynamo. Worker layout stays as the synthetic default; only the test
+    // config and access-spec library come from the file.
+    TestConfig cfg;
+    std::vector<AccessSpec> specs;
+    std::vector<IcfFile::BatchWorker> batchWorkers;
+    if (!IcfFile::load(filepath.toStdString(), cfg, specs, batchWorkers)) {
+        emit errorOccurred(QString("Failed to load ICF: %1").arg(filepath));
+        return false;
+    }
+
+    m_testConfig = cfg;
+    if (!specs.empty())
+        m_specs = QList<AccessSpec>(specs.begin(), specs.end());
+    emit configChanged();
+    return true;
+}
+
+bool QtDemoEngine::saveConfig(const QString &)
+{
+    emit statusMessage("Config save not yet implemented in demo mode.");
+    return false;
+}
+
+// ---- Manager / worker management --------------------------------------------
+
+void QtDemoEngine::connectManager(const QString &address, const QString &name)
+{
+    for (auto &m : m_managers) {
+        if (m.address == address.toStdString()) { m.connected = true; emit managerConnected(m); return; }
+    }
+    ManagerInfo m;
+    m.name      = (name.isEmpty() ? address : name).toStdString();
+    m.address   = address.toStdString();
+    m.connected = true;
+    m_managers.append(m);
+    emit managerConnected(m);
+}
+
+void QtDemoEngine::disconnectManager(const QString &mgrName)
+{
+    for (int i = 0; i < m_managers.size(); ++i) {
+        if (m_managers[i].name == mgrName.toStdString()) {
+            m_managers[i].connected = false;
+            emit managerDisconnected(mgrName);
+            return;
+        }
+    }
+}
+
+void QtDemoEngine::addWorker(const QString &mgrName, const WorkerInfo &w)
+{
+    for (auto &m : m_managers)
+        if (m.name == mgrName.toStdString()) { m.workers.push_back(w); emit configChanged(); return; }
+}
+
+void QtDemoEngine::removeWorker(const QString &mgrName, const QString &workerId)
+{
+    for (auto &m : m_managers)
+        if (m.name == mgrName.toStdString())
+            for (size_t i = 0; i < m.workers.size(); ++i)
+                if (m.workers[i].id == workerId.toStdString()) { m.workers.erase(m.workers.begin() + i); emit configChanged(); return; }
+}
+
+void QtDemoEngine::updateWorker(const WorkerInfo &w)
+{
+    for (auto &m : m_managers)
+        for (auto &worker : m.workers)
+            if (worker.id == w.id) { worker = w; emit configChanged(); return; }
+}

@@ -1215,6 +1215,20 @@ void CGalileoView::TestDone(ReturnVal test_successful)
 
 	// If Iometer is in batch mode and the test finishes, close Iometer.
 	if (theApp.IsBatchMode()) {
+		// /s <file>: re-save the (loaded, unchanged-by-the-run) config so the
+		// ICF save-golden harness can capture/compare the canonical save output.
+		CString saveCfg = theApp.cmdline.GetSaveConfigFile();
+		if (!saveCfg.IsEmpty()) {
+			BOOL flags[NumICFFlags];
+			flags[ICFTestSetupFlag] = TRUE;
+			flags[ICFResultsDisplayFlag] = TRUE;
+			flags[ICFGlobalAspecFlag] = TRUE;
+			flags[ICFManagerWorkerFlag] = TRUE;
+			flags[ICFAssignedAspecFlag] = TRUE;
+			flags[ICFAssignedTargetFlag] = TRUE;
+			(void)SaveConfigFile(saveCfg, flags);
+		}
+
 		ASSERT(AfxGetApp()->m_pMainWnd != NULL);
       AfxGetApp()->m_pMainWnd->SendMessage(WM_CLOSE);
    }

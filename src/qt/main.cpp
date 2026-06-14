@@ -1,8 +1,8 @@
-// main.cpp — Iometer Qt entry point
+// main.cpp - Iometer Qt entry point
 //
 // GUI mode (default):
-//   IometerQt.exe            → DynamoEngine, full GUI
-//   IometerQt.exe --demo     → DemoEngine, simulated data, no Dynamo
+//   IometerQt.exe            → QtDynamoEngine, full GUI
+//   IometerQt.exe --demo     → QtDemoEngine, simulated data, no Dynamo
 //
 // Batch mode (backwards compatible with original IOmeter.exe /c /r /t flags):
 //   IometerQt.exe /c config.icf /r results.csv /t 60
@@ -12,14 +12,15 @@
 //   runs the test for the duration specified in the ICF, writes results.csv
 //   in the original format, then exits 0 on success or 1 on failure.
 //
-#include "MainWindow.h"
-#include "DemoEngine.h"
-#include "DynamoEngine.h"
+#include "QtMainWindow.h"
+#include "QtDemoEngine.h"
+#include "QtDynamoEngine.h"
 #include <QApplication>
 #include <QCoreApplication>
 #include <QFont>
 #include <QCommandLineParser>
 #include <QTimer>
+#include <QFileInfo>
 #include <QDebug>
 
 // ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ static void translateOriginalFlags(int argc, char *argv[],
 }
 
 // ---------------------------------------------------------------------------
-// Batch mode — no window, QCoreApplication only.
+// Batch mode - no window, QCoreApplication only.
 // Mirrors the original IOmeter.exe /c /r /t behaviour exactly.
 // ---------------------------------------------------------------------------
 static int batchMain(const QString &icfFile,
@@ -49,7 +50,7 @@ static int batchMain(const QString &icfFile,
                      int loginTimeoutSec)
 {
     // QCoreApplication is already set up by the caller.
-    DynamoEngine engine;
+    QtDynamoEngine engine;
 
     if (!engine.loadConfig(icfFile)) {
         qCritical("Batch: cannot open ICF file: %s", qPrintable(icfFile));
@@ -59,7 +60,7 @@ static int batchMain(const QString &icfFile,
     const TestConfig cfg = engine.testConfig();
     const int runMs = ((cfg.runHours * 60 + cfg.runMinutes) * 60 + cfg.runSeconds) * 1000;
     if (runMs <= 0) {
-        qCritical("Batch: ICF run time is 0 seconds — nothing to do.");
+        qCritical("Batch: ICF run time is 0 seconds - nothing to do.");
         return 1;
     }
 
@@ -72,13 +73,13 @@ static int batchMain(const QString &icfFile,
     bool success = false;
 
     QObject::connect(
-        &engine, &IometerEngine::managerConnected,
+        &engine, &QtIometerEngine::managerConnected,
         [&](ManagerInfo) {
             qInfo("Batch: Dynamo connected. Configuring test...");
 
             // Configure workers to match the ICF exactly:
             //   - Workers 0..N-1  get per-worker targets+spec from ICF
-            //   - Workers N..end  get empty targets (no I/O — matches original)
+            //   - Workers N..end  get empty targets (no I/O - matches original)
             const auto batchWorkers = engine.batchWorkers();
             qInfo("Batch: ICF defines %d worker(s); Dynamo reported %d.",
                   batchWorkers.size(),
@@ -88,10 +89,12 @@ static int batchMain(const QString &icfFile,
             for (const auto &mgr : engine.managers()) {
                 for (auto w : mgr.workers) {
                     if (wi < batchWorkers.size()) {
-                        w.targets = batchWorkers[wi].targets;
+                        w.targets.clear();
+                        for (const auto &t : batchWorkers[wi].targets)
+                            w.targets.push_back(t.toStdString());
                         qInfo("Batch:   Worker %d ('%s'): targets=[%s] spec='%s'",
-                              wi, qPrintable(w.name),
-                              qPrintable(w.targets.join(", ")),
+                              wi, w.name.c_str(),
+                              qPrintable(batchWorkers[wi].targets.join(", ")),
                               qPrintable(batchWorkers[wi].assignedSpecs.value(0)));
                     } else {
                         w.targets.clear();   // no targets → Dynamo skips this worker
@@ -105,9 +108,9 @@ static int batchMain(const QString &icfFile,
             const QString specName = engine.batchAssignedSpec();
             if (!specName.isEmpty()) {
                 for (const auto &s : engine.accessSpecs()) {
-                    if (s.name == specName) {
+                    if (s.name == specName.toStdString()) {
                         engine.setCurrentTestSpec(s);
-                        qInfo("Batch: Using spec '%s'", qPrintable(s.name));
+                        qInfo("Batch: Using spec '%s'", s.name.c_str());
                         break;
                     }
                 }
@@ -115,11 +118,11 @@ static int batchMain(const QString &icfFile,
 
             qInfo("Batch: Starting test (%d ms)...", runMs);
             engine.startTest();
-            QTimer::singleShot(runMs, &engine, &IometerEngine::stopTest);
+            QTimer::singleShot(runMs, &engine, &QtIometerEngine::stopTest);
         });
 
     QObject::connect(
-        &engine, &IometerEngine::testStopped,
+        &engine, &QtIometerEngine::testStopped,
         [&]() {
             qInfo("Batch: Test complete. Writing results to %s", qPrintable(resultsFile));
             success = engine.saveBatchResults(resultsFile);
@@ -155,23 +158,23 @@ static int guiMain(int argc, char *argv[])
     app.setFont(defaultFont);
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("Iometer Qt GUI — I/O benchmark controller");
+    parser.setApplicationDescription("Iometer Qt GUI - I/O benchmark controller");
     parser.addHelpOption();
     parser.addVersionOption();
 
     QCommandLineOption demoOpt("demo",
-        "Use simulated DemoEngine instead of connecting to Dynamo.exe");
+        "Use simulated QtDemoEngine instead of connecting to Dynamo.exe");
     parser.addOption(demoOpt);
     parser.process(app);
 
-    IometerEngine *engine = nullptr;
+    QtIometerEngine *engine = nullptr;
     if (parser.isSet(demoOpt)) {
-        engine = new DemoEngine;
+        engine = new QtDemoEngine;
     } else {
-        engine = new DynamoEngine;
+        engine = new QtDynamoEngine;
     }
 
-    MainWindow win(engine);
+    QtMainWindow win(engine);
     win.show();
 
     const int ret = app.exec();
@@ -180,10 +183,57 @@ static int guiMain(int argc, char *argv[])
 }
 
 // ---------------------------------------------------------------------------
+// ICF validation mode (--validate-icf <file>)
+//
+// Loads an ICF through the QtDemoEngine (the synthetic "test" engine — no real
+// Dynamo, no elevation, deterministic) and checks the parsed configuration is
+// sane: a positive run time and at least one access spec. Used by the smoke
+// test to exercise the full set of fixture ICFs end-to-end through the shipped
+// executable without needing real disk I/O. Exits 0 on success, 1 on failure.
+// ---------------------------------------------------------------------------
+static int validateIcfMain(const QString &icfFile)
+{
+    QtDemoEngine engine;   // test-data engine: parses ICF, no socket / no elevation
+    if (!engine.loadConfig(icfFile)) {
+        qCritical("validate-icf: FAILED to load '%s'", qPrintable(icfFile));
+        return 1;
+    }
+
+    const TestConfig cfg = engine.testConfig();
+    const int runSecs = (cfg.runHours * 60 + cfg.runMinutes) * 60 + cfg.runSeconds;
+    const int specCount = engine.accessSpecs().size();
+
+    if (runSecs <= 0) {
+        qCritical("validate-icf: '%s' has zero run time", qPrintable(icfFile));
+        return 1;
+    }
+    if (specCount <= 0) {
+        qCritical("validate-icf: '%s' has no access specs", qPrintable(icfFile));
+        return 1;
+    }
+
+    qInfo("validate-icf: OK  %-28s  runtime=%ds  specs=%d  ramp=%ds",
+          qPrintable(QFileInfo(icfFile).fileName()),
+          runSecs, specCount, cfg.rampSeconds);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
+    // --validate-icf <file>: parse-and-check a config via the test engine.
+    for (int i = 1; i < argc; ++i) {
+        const QString a = QString::fromLocal8Bit(argv[i]);
+        if ((a == "--validate-icf" || a == "/validate") && i + 1 < argc) {
+            QCoreApplication app(argc, argv);
+            app.setApplicationName("Iometer");
+            app.setApplicationVersion("1.1.0");
+            return validateIcfMain(QString::fromLocal8Bit(argv[i + 1]));
+        }
+    }
+
     QString icf, results;
     int timeout = 60;
     translateOriginalFlags(argc, argv, icf, results, timeout);

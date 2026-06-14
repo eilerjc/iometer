@@ -169,6 +169,33 @@ static int getSectorSizeOfPhysDisk(const char *devName);
 static unsigned long long getSizeOfPhysDisk(const char *devName);
 #endif
 
+// IOMTR_TEST_MODE is defined only by the separate "dynamotest" build. In that
+// build the disk layer is fully synthetic (no device access, no elevation); the
+// production "dynamo" build contains none of this code.
+#if defined(IOMTR_TEST_MODE)
+// Synthetic capacity used for a test target (2 GiB); never touches hardware.
+#define IOMTR_TEST_DISK_BYTES ((DWORDLONG)2 * 1024 * 1024 * 1024)
+
+// Per-I/O delays (microseconds) from the command line (--rdelay / --wdelay).
+// They turn instant synthetic completions into targetable latency/IOPS.
+extern struct dynamo_param param;
+
+// Busy-wait the requested number of microseconds using the high-resolution
+// counter (accurate to well under the typical 10-1000 us range used here).
+static void Test_IO_Delay(int microseconds)
+{
+	if (microseconds <= 0)
+		return;
+	LARGE_INTEGER freq, start, now;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&start);
+	double ticks = (double) microseconds * (double) freq.QuadPart / 1.0e6;
+	do {
+		QueryPerformanceCounter(&now);
+	} while ((double) (now.QuadPart - start.QuadPart) < ticks);
+}
+#endif
+
 //
 // Constructor.
 //
@@ -220,6 +247,18 @@ BOOL TargetDisk::Initialize(Target_Spec * target_info, CQ * cq)
 	file_handle.iocq = (IOCQ *) io_cq->completion_queue;
 #endif
 	memcpy(&spec, target_info, sizeof(Target_Spec));
+
+#if defined(IOMTR_TEST_MODE)
+	// Assign synthetic geometry and touch no hardware. The real
+	// Init_Logical/Init_Physical + Set_Size paths query the device (and the
+	// physical path needs elevation), so they are bypassed entirely here.
+	if (spec.disk_info.sector_size <= 0)
+		spec.disk_info.sector_size = 512;
+	sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);
+	size = IOMTR_TEST_DISK_BYTES;
+	Set_Starting_Sector(spec.disk_info.starting_sector);
+	return TRUE;
+#endif
 
 	// Initializing logical disks.
 #if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
@@ -902,6 +941,17 @@ int TargetDisk::Set_Sizes(BOOL open_disk)
 #elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
 BOOL TargetDisk::Set_Sizes(BOOL open_disk)
 {
+#if defined(IOMTR_TEST_MODE)
+	// Synthetic geometry only - GetDiskFreeSpace/IOCTL would fail (and need a
+	// real device). Wherever Set_Sizes is reached in test mode, answer locally.
+	if (spec.disk_info.sector_size <= 0)
+		spec.disk_info.sector_size = 512;
+	sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);
+	size = IOMTR_TEST_DISK_BYTES;
+	spec.disk_info.ready = TRUE;
+	return TRUE;
+#endif
+
 	DWORD i;
 	DWORD low_size, high_size;
 	DWORD sectors_per_cluster, free_clusters, total_clusters;
@@ -1216,6 +1266,12 @@ void TargetDisk::Set_Sector_Info()
 //
 BOOL TargetDisk::Prepare(DWORDLONG * prepare_offset, volatile TestState * test_state, int sector_size, unsigned char* _random_data_buffer, long long _random_datat_buffer_size)
 {
+#if defined(IOMTR_TEST_MODE)
+	// Nothing to prepare - the synthetic target is "ready" immediately.
+	*prepare_offset = size;
+	return TRUE;
+#endif
+
 	BOOL write_ok;
 	int num_outstanding;
 	DWORD bytes_written;
@@ -1561,7 +1617,14 @@ BOOL TargetDisk::Prepare(DWORDLONG * prepare_offset, volatile TestState * test_s
 //
 BOOL TargetDisk::Open(volatile TestState * test_state, int open_flag)
 {
-	// open_flag is a 
+#if defined(IOMTR_TEST_MODE)
+	// No real device handle. Use a non-NULL sentinel so callers that check for
+	// INVALID_HANDLE_VALUE/NULL succeed; Read/Write/Close never touch it.
+	disk_file = (HANDLE) 1;
+	return TRUE;
+#endif
+
+	// open_flag is a
 	if (IsType(spec.type, LogicalDiskType)) {
 #if defined(IOMTR_OS_LINUX)
 // It is preferred to open the target with O_DIRECT in order to minimize the
@@ -1665,6 +1728,12 @@ BOOL TargetDisk::Open(volatile TestState * test_state, int open_flag)
 BOOL TargetDisk::Close(volatile TestState * test_state)
 {
 	// Note that test_state is not used.  It IS used by network targets.
+
+#if defined(IOMTR_TEST_MODE)
+	// The handle is a sentinel, not a real device - just drop it.
+	disk_file = INVALID_HANDLE_VALUE;
+	return TRUE;
+#endif
 
 	// If testing connection rate, the disk may already be closed.
 #if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
@@ -1849,6 +1918,16 @@ ReturnVal TargetDisk::Read(LPVOID buffer, Transaction * trans)
 {
 	DWORD error_no;
 
+#if defined(IOMTR_TEST_MODE)
+	// Complete the read synchronously and synthetically. The optional --rdelay
+	// makes each read take a fixed time, so IOPS/latency are targetable.
+	// Returning ReturnSuccess makes Grunt::Do_IOs record it immediately via the
+	// normal Record_IO path - real result accounting, no device, no completion queue.
+	Test_IO_Delay(param.test_read_delay_us);
+	bytes_transferred = trans->size;
+	return ReturnSuccess;
+#endif
+
 #ifdef _DEBUG
 	// Checking for the access to be a multiple of the sector size.
 	// Avoiding this check during actual testing for performance reasons.
@@ -1918,6 +1997,14 @@ ReturnVal TargetDisk::Read(LPVOID buffer, Transaction * trans)
 ReturnVal TargetDisk::Write(LPVOID buffer, Transaction * trans)
 {
 	DWORD error_no;
+
+#if defined(IOMTR_TEST_MODE)
+	// Complete the write synchronously and synthetically (see Read); --wdelay
+	// sets the per-write time.
+	Test_IO_Delay(param.test_write_delay_us);
+	bytes_transferred = trans->size;
+	return ReturnSuccess;
+#endif
 
 #ifdef _DEBUG
 	// Verifying that the amount to be written is a multiple of the sector size.

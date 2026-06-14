@@ -1,0 +1,56 @@
+Version 1.1.0
+'TEST SETUP ====================================================================
+'Test Description
+
+'Run Time
+'	hours      minutes    seconds
+	0          0          2
+'Ramp Up Time (s)
+	0
+'Default Disk Workers to Spawn
+	1
+'Default Network Workers to Spawn
+	0
+'Record Results
+	ALL
+'Worker Cycling
+'	start      step       step type
+	1          1          LINEAR
+'Disk Cycling
+'	start      step       step type
+	1          1          LINEAR
+'Queue Depth Cycling
+'	start      end        step       step type
+	1          1          1          LINEAR
+'Test Type
+	NORMAL
+'END test setup
+'RESULTS DISPLAY ===============================================================
+'Record Last Update Results,Update Frequency,Update Type
+	DISABLED,1,LAST_UPDATE
+'Bar chart 1 statistic
+	Total I/Os per Second
+'Bar chart 2 statistic
+	Total MBs per Second (Decimal)
+'Bar chart 3 statistic
+	Average I/O Response Time (ms)
+'Bar chart 4 statistic
+	Maximum I/O Response Time (ms)
+'Bar chart 5 statistic
+	% CPU Utilization (total)
+'Bar chart 6 statistic
+	Total Error Count
+'END results display
+'ACCESS SPECIFICATIONS =========================================================
+'Access specification name,default assignment
+	Default,NONE
+'size,% of size,% reads,% random,delay,burst,align,reply
+	65536,100,100,0,0,1,0,0
+'Access specification name,default assignment
+	64 KiB; 100% Read; 0% random,NONE
+'size,% of size,% reads,% random,delay,burst,align,reply
+	65536,100,100,0,0,1,0,0
+'END access specifications
+'MANAGER LIST ==================================================================
+'END manager list
+Version 1.1.0

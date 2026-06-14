@@ -69,17 +69,14 @@
 
 #include "Manager.h"
 #include "WaitingForManagers.h"
-
-struct ManagerMapEntry {
-	CString name;
-	int id;
-	CString address;
-	Manager *mgr;
-};
+#include "core/ManagerMap.h"
 
 class ManagerMap {
       private:
-	CArray < ManagerMapEntry, int >map;
+	// The match/spawn/wait decision logic now lives in the shared, platform-
+	// neutral iocore::ManagerMap; this MFC class is a thin wrapper that adds the
+	// waiting-list dialog and translates CString<->std::string, Manager*<->handle.
+	iocore::ManagerMap m_core;
 	CWaitingForManagers waiting_dialog;
 
       public:

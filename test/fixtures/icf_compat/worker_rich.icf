@@ -1,0 +1,72 @@
+Version 1.1.0
+'TEST SETUP ====================================================================
+'Test Description
+	icf compat: rich worker settings (queue depth, conn rate, fixed seed, disk geometry)
+'Run Time
+'	hours      minutes    seconds
+	0          0          3
+'Ramp Up Time (s)
+	0
+'Default Disk Workers to Spawn
+	0
+'Default Network Workers to Spawn
+	0
+'Record Results
+	ALL
+'Worker Cycling
+'	start      step       step type
+	1          1          LINEAR
+'Disk Cycling
+'	start      step       step type
+	1          1          LINEAR
+'Queue Depth Cycling
+'	start      end        step       step type
+	1          1          1          LINEAR
+'Test Type
+	NORMAL
+'END test setup
+'RESULTS DISPLAY ===============================================================
+'Record Last Update Results,Update Frequency,Update Type
+	DISABLED,1,LAST_UPDATE
+'Bar chart 1 statistic
+	Total I/Os per Second
+'END results display
+'ACCESS SPECIFICATIONS =========================================================
+'Access specification name,default assignment
+	64 KiB; 100% Read; 0% random,NONE
+'size,% of size,% reads,% random,delay,burst,align,reply
+	65536,100,100,0,0,1,0,0
+'Access specification name,default assignment
+	4 KiB; 50% Read; 100% random,NONE
+'size,% of size,% reads,% random,delay,burst,align,reply
+	4096,100,50,100,0,1,4096,0
+'END access specifications
+'MANAGER LIST ==================================================================
+'Manager ID, manager name
+	1,TESTMGR
+'Manager network address
+	localhost
+'Worker
+	Rich Worker
+'Worker type
+	DISK
+'Default target settings for worker
+'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value
+	8,ENABLED,5,ENABLED,12345
+'Disk maximum size,starting sector,Data pattern
+	1024,64,1
+'End default target settings for worker
+'Assigned access specs
+	64 KiB; 100% Read; 0% random
+'End assigned access specs
+'Target assignments
+'Target
+	TEST: Synthetic Disk
+'Target type
+	DISK
+'End target
+'End target assignments
+'End worker
+'End manager
+'END manager list
+Version 1.1.0 

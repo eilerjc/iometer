@@ -1,3 +1,6 @@
 build/
 *.user
 .vs/
+build_cov/
+*.log
+build_cov_occ/
