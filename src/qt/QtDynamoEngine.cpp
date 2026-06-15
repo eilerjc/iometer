@@ -3,6 +3,7 @@
 #include "QtIometerEngine.h"
 #include "../core/ResultsWriter.h"
 #include "../core/ResultsAggregator.h"
+#include "../core/ResultDecode.h"
 #include "../core/IcfFile.h"
 #include "../core/NetworkSetup.h"
 #include <QTcpServer>
@@ -43,29 +44,6 @@ static std::vector<std::string> toStdStrings(const QStringList &l) {
     std::vector<std::string> v;
     for (const auto &s : l) v.push_back(s.toStdString());
     return v;
-}
-
-// Compute IOps / MBps from a single target's Raw_Result delta + elapsed seconds.
-static void accumulateRaw(const DyRawResult &r, double elapsed,
-                           WorkerResult &out)
-{
-    if (elapsed <= 0.0) return;
-    out.iops       += (r.read_count + r.write_count) / elapsed;
-    out.readIops   += r.read_count  / elapsed;
-    out.writeIops  += r.write_count / elapsed;
-    out.mbpsDec    += (r.bytes_read + r.bytes_written) / elapsed / 1.0e6;
-    out.readMbpsDec  += r.bytes_read    / elapsed / 1.0e6;
-    out.writeMbpsDec += r.bytes_written / elapsed / 1.0e6;
-    out.mbpsBin    += (r.bytes_read + r.bytes_written) / elapsed / (1024.0*1024.0);
-    out.errors     += static_cast<int>(r.read_errors + r.write_errors);
-
-    // Latency in milliseconds
-    const uint64_t totalIos = r.read_count + r.write_count;
-    if (totalIos > 0) {
-        // latency_sum is in ticks; caller should pass elapsed already in secs
-        // so ticks = sum / timer_resolution is done outside
-        // Here we just keep a running sum, finalised after accumulation
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -709,53 +687,37 @@ WorkerResult QtDySession::decodeWorkerResults(const DyWorkerResults &wr,
                            ? static_cast<double>(t1 - t0) / m_timerResolution
                            : 1.0;
 
-    // Sum across all targets
+    // Sum all targets into one counter set (counters add, max-latencies take the
+    // max), then decode via the shared iocore formula - same math both GUIs use.
     const int tcount = std::max(0, std::min(wr.target_results.count, DY_MAX_TARGETS));
-    uint64_t totalBytes  = 0, readBytes = 0, writeBytes = 0;
-    uint64_t readIos = 0, writeIos = 0;
-    uint64_t readLatSum = 0, writeLatSum = 0;
-    uint64_t maxReadLat = 0, maxWriteLat = 0;
-    uint32_t errs = 0;
-
+    DyRawResult summed{};
     for (int i = 0; i < tcount; ++i) {
         const DyRawResult &raw = wr.target_results.result[i];
-        totalBytes   += raw.bytes_read + raw.bytes_written;
-        readBytes    += raw.bytes_read;
-        writeBytes   += raw.bytes_written;
-        readIos      += raw.read_count;
-        writeIos     += raw.write_count;
-        readLatSum   += raw.read_latency_sum;
-        writeLatSum  += raw.write_latency_sum;
-        maxReadLat    = std::max(maxReadLat,  raw.max_raw_read_latency);
-        maxWriteLat   = std::max(maxWriteLat, raw.max_raw_write_latency);
-        errs         += raw.read_errors + raw.write_errors;
+        summed.bytes_read        += raw.bytes_read;
+        summed.bytes_written     += raw.bytes_written;
+        summed.read_count        += raw.read_count;
+        summed.write_count       += raw.write_count;
+        summed.transaction_count += raw.transaction_count;
+        summed.connection_count  += raw.connection_count;
+        summed.read_errors       += raw.read_errors;
+        summed.write_errors      += raw.write_errors;
+        summed.read_latency_sum  += raw.read_latency_sum;
+        summed.write_latency_sum += raw.write_latency_sum;
+        summed.max_raw_read_latency  = std::max(summed.max_raw_read_latency,  raw.max_raw_read_latency);
+        summed.max_raw_write_latency = std::max(summed.max_raw_write_latency, raw.max_raw_write_latency);
     }
 
-    const uint64_t totalIos = readIos + writeIos;
-
-    r.iops         = elapsed > 0 ? totalIos / elapsed : 0.0;
-    r.readIops     = elapsed > 0 ? readIos  / elapsed : 0.0;
-    r.writeIops    = elapsed > 0 ? writeIos / elapsed : 0.0;
-    r.mbpsDec      = elapsed > 0 ? totalBytes / elapsed / 1.0e6  : 0.0;
-    r.readMbpsDec  = elapsed > 0 ? readBytes  / elapsed / 1.0e6  : 0.0;
-    r.writeMbpsDec = elapsed > 0 ? writeBytes / elapsed / 1.0e6  : 0.0;
-    r.mbpsBin      = elapsed > 0 ? totalBytes / elapsed / (1024.0*1024.0) : 0.0;
-    r.errors       = static_cast<int>(errs);
-
-    // Average latency in milliseconds
-    if (totalIos > 0 && m_timerResolution > 0.0) {
-        const double avgTicksPerIo = static_cast<double>(readLatSum + writeLatSum)
-                                     / static_cast<double>(totalIos);
-        r.avgLatencyMs = avgTicksPerIo / m_timerResolution * 1000.0;
-    } else {
-        r.avgLatencyMs = 0.0;
-    }
-
-    // Max latency in milliseconds
-    const uint64_t maxLatTicks = std::max(maxReadLat, maxWriteLat);
-    r.maxLatencyMs = m_timerResolution > 0.0
-                     ? static_cast<double>(maxLatTicks) / m_timerResolution * 1000.0
-                     : 0.0;
+    const iocore::ResultRates d = iocore::decodeRawResult(summed, elapsed, m_timerResolution);
+    r.iops         = d.iops;
+    r.readIops     = d.readIops;
+    r.writeIops    = d.writeIops;
+    r.mbpsDec      = d.mbpsDec;
+    r.readMbpsDec  = d.readMbpsDec;
+    r.writeMbpsDec = d.writeMbpsDec;
+    r.mbpsBin      = d.mbpsBin;
+    r.errors       = static_cast<int>(d.totalErrors);
+    r.avgLatencyMs = d.aveLatency;
+    r.maxLatencyMs = d.maxLatency;
 
     // CPU from manager results (average across CPUs)
     r.cpuUtil   = 0.0;

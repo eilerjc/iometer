@@ -79,6 +79,8 @@
 #include "AccessSpecList.h"
 #include "core/IcfDocument.h"	// shared worker parse result types
 #include "core/IcfWriter.h"	// shared ICF section writers (iocore)
+#include "core/ResultDecode.h"	// shared raw-counter -> rates/latency decode (iocore)
+#include "core/ResultsCsv.h"	// canonical results-CSV row writer (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -681,77 +683,31 @@ void Worker::SaveResults(ostream * file, int access_index, int result_type)
 	if (!ActiveInCurrentTest())
 		return;
 
-	// Writing results for worker.
-	(*file) << "WORKER" << "," << name << "," << GetAccessSpec(access_index)->name << ",,";	// space for managers running and workers running.
-
-	if (IsType(Type(), GenericClientType))
-		(*file) << "," << 1;	// currently only 1 target (server) per client
-	else
-		(*file) << "," << TargetCount(ActiveType);
-
-	(*file) << "," << results[WHOLE_TEST_PERF].IOps
-	    << "," << results[WHOLE_TEST_PERF].read_IOps
-	    << "," << results[WHOLE_TEST_PERF].write_IOps
-	    << "," << results[WHOLE_TEST_PERF].MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].transactions_per_second
-	    << "," << results[WHOLE_TEST_PERF].connections_per_second
-	    << "," << results[WHOLE_TEST_PERF].ave_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_read_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_write_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].max_latency
-	    << "," << results[WHOLE_TEST_PERF].max_read_latency
-	    << "," << results[WHOLE_TEST_PERF].max_write_latency
-	    << "," << results[WHOLE_TEST_PERF].max_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].max_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].total_errors
-	    << "," << results[WHOLE_TEST_PERF].raw.read_errors << "," << results[WHOLE_TEST_PERF].raw.write_errors
-	    // Writing raw result information for completed I/Os.
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_read
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_written
-	    << "," << results[WHOLE_TEST_PERF].raw.read_count
-	    << "," << results[WHOLE_TEST_PERF].raw.write_count
-	    << "," << results[WHOLE_TEST_PERF].raw.connection_count << ",";
-
-	if (GetConnectionRate(ActiveType) == ENABLED_VALUE)
-		(*file) << GetTransPerConn(ActiveType);
-	else
-		(*file) << AMBIGUOUS_VALUE;
-
-	(*file) << "," << results[WHOLE_TEST_PERF].raw.read_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.write_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.transaction_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.connection_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_read_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_write_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.counter_time;
-
-	(*file) << "," << GetDiskStart((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetDiskSize((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetQueueDepth(ActiveType);
-
-	for (stat = 0; stat < CPU_UTILIZATION_RESULTS; stat++)
-		(*file) << ",";	// Space for CPU utilization
-
-	(*file) << "," <<  manager->timer_resolution << ",,"; // Space for IRQ/sec, CPU_effectiveness
-
-	for (stat = 0; stat < NI_COMBINE_RESULTS + TCP_RESULTS; stat++) {
-		(*file) << ",";	// Space for network results
+	// Writing results for worker (one canonical row via iocore::writeResultRow).
+	// The worker level fills the raw block but blanks the #Managers/#Workers
+	// columns and the whole CPU/network block; processor speed is the timer res.
+	{
+		iocore::ResultRow row;
+		iocore::fillResultRow(row, results[WHOLE_TEST_PERF]);
+		row.targetType = "WORKER";
+		row.targetName = name;
+		row.accessSpec = GetAccessSpec(access_index)->name;
+		row.managers   = "";		// space for managers running
+		row.workers    = "";		// space for workers running
+		row.disks      = IsType(Type(), GenericClientType)
+		                   ? "1"		// currently only 1 target (server) per client
+		                   : std::to_string(TargetCount(ActiveType));
+		row.transPerConn = (GetConnectionRate(ActiveType) == ENABLED_VALUE)
+		                   ? GetTransPerConn(ActiveType) : AMBIGUOUS_VALUE;
+		row.rawBlock = true;
+		row.startingSector = std::to_string(GetDiskStart((TargetType) (GenericDiskType | ActiveType)));
+		row.maxSize        = std::to_string(GetDiskSize((TargetType) (GenericDiskType | ActiveType)));
+		row.queueDepth     = std::to_string(GetQueueDepth(ActiveType));
+		row.cpuNetBlock = false;	// workers don't carry CPU/network stats
+		row.procSpeedPresent = true;
+		row.procSpeed = manager->timer_resolution;
+		iocore::writeResultRow(*file, row);
 	}
-
-	for (stat = 0; stat < LATENCY_BIN_SIZE; stat++) {
-		(*file) << "," << results[WHOLE_TEST_PERF].raw.latency_bin[stat];
-	}
-
-	(*file) << endl;
 
 	// If requested, save target results.
 	if (result_type != RecordAll)
@@ -803,86 +759,53 @@ void Worker::SaveResults(ostream * file, int access_index, int result_type)
 		while ((TheOffendingChar = strpbrk(TheOffendingChar, "\n\r,")) != NULL)
 			*TheOffendingChar = ' ';
 
-		// Retrieving results for a single target in order to save it to a file.
+		// Build the target row label. Network targets show "local >> remote".
+		iocore::ResultRow row;
 		if (IsType(target->spec.type, GenericDiskType)) {
-			(*file) << "DISK" << "," << PrintName;
+			row.targetType = "DISK";
+			row.targetName = PrintName;
 		} else if (IsType(target->spec.type, TCPClientType)) {
-			// Show name as local address >> remote address.
-			(*file) << "NETWORK" << "," << manager->name << ":"
-			    << PrintName << " >> "
-			    << net_partner->manager->name << ":" << target->spec.tcp_info.remote_address;
+			row.targetType = "NETWORK";
+			row.targetName = std::string(manager->name) + ":" + PrintName + " >> "
+			    + net_partner->manager->name + ":" + target->spec.tcp_info.remote_address;
 		} else if (IsType(target->spec.type, VIClientType)) {
-			// Show name as local address >> remote address.
-			(*file) << "NETWORK" << "," << manager->name << ":"
-			    << PrintName << " >> "
-			    << net_partner->manager->name << ":" << target->spec.vi_info.remote_nic_name;
+			row.targetType = "NETWORK";
+			row.targetName = std::string(manager->name) + ":" + PrintName + " >> "
+			    + net_partner->manager->name + ":" + target->spec.vi_info.remote_nic_name;
 		} else {
-			(*file) << "UNKNOWN" << "," << PrintName;
+			row.targetType = "UNKNOWN";
+			row.targetName = PrintName;
 		}
 
-		(*file) << ",,,,"	// space for access spec name, workers, managers and targets running.
-		    << "," << target->results[WHOLE_TEST_PERF].IOps
-		    << "," << target->results[WHOLE_TEST_PERF].read_IOps
-		    << "," << target->results[WHOLE_TEST_PERF].write_IOps
-		    << "," << target->results[WHOLE_TEST_PERF].MBps_Bin
-		    << "," << target->results[WHOLE_TEST_PERF].read_MBps_Bin
-		    << "," << target->results[WHOLE_TEST_PERF].write_MBps_Bin
-		    << "," << target->results[WHOLE_TEST_PERF].MBps_Dec
-		    << "," << target->results[WHOLE_TEST_PERF].read_MBps_Dec
-		    << "," << target->results[WHOLE_TEST_PERF].write_MBps_Dec
-		    << "," << target->results[WHOLE_TEST_PERF].transactions_per_second
-		    << "," << target->results[WHOLE_TEST_PERF].connections_per_second
-		    << "," << target->results[WHOLE_TEST_PERF].ave_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_read_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_write_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_transaction_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_connection_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_read_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_write_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_transaction_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_connection_latency
-		    << "," << target->results[WHOLE_TEST_PERF].total_errors
-		    << "," << target->results[WHOLE_TEST_PERF].raw.read_errors
-		    << "," << target->results[WHOLE_TEST_PERF].raw.write_errors
-		    << "," << target->results[WHOLE_TEST_PERF].raw.bytes_read
-		    << "," << target->results[WHOLE_TEST_PERF].raw.bytes_written
-		    << "," << target->results[WHOLE_TEST_PERF].raw.read_count
-		    << "," << target->results[WHOLE_TEST_PERF].raw.write_count
-		    << "," << target->results[WHOLE_TEST_PERF].raw.connection_count << ",";
+		// Per-target metrics [6-34] come from the target's own results.
+		iocore::fillResultRow(row, target->results[WHOLE_TEST_PERF]);
+		// MFC quirk (preserved): a target row's raw response block [36-44] and
+		// latency bins [59-79] are taken from the WORKER's results, not the
+		// target's. fillResultRow filled them from the target, so override here.
+		const Results &wres = results[WHOLE_TEST_PERF];
+		row.rawReadLatSum  = wres.raw.read_latency_sum;
+		row.rawWriteLatSum = wres.raw.write_latency_sum;
+		row.rawTransLatSum = wres.raw.transaction_latency_sum;
+		row.rawConnLatSum  = wres.raw.connection_latency_sum;
+		row.rawMaxRead     = wres.raw.max_raw_read_latency;
+		row.rawMaxWrite    = wres.raw.max_raw_write_latency;
+		row.rawMaxTrans    = wres.raw.max_raw_transaction_latency;
+		row.rawMaxConn     = wres.raw.max_raw_connection_latency;
+		row.rawCounterTime = wres.raw.counter_time;
+		for (stat = 0; stat < LATENCY_BIN_SIZE; stat++)
+			row.latencyBin[stat] = wres.raw.latency_bin[stat];
 
-		if (GetConnectionRate(ActiveType) == ENABLED_VALUE)
-			(*file) << GetTransPerConn(ActiveType);
-		else
-			(*file) << AMBIGUOUS_VALUE;
-
-		(*file) << "," << results[WHOLE_TEST_PERF].raw.read_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.write_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.transaction_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.connection_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_read_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_write_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_transaction_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_connection_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.counter_time;
-
-		(*file) << "," << GetDiskStart((TargetType) (GenericDiskType | ActiveType))
-		    << "," << GetDiskSize((TargetType) (GenericDiskType | ActiveType))
-		    << "," << GetQueueDepth(ActiveType);
-
-		for (stat = 0; stat < CPU_UTILIZATION_RESULTS; stat++)
-			(*file) << ",";	// Space for CPU utilization
-
-		(*file) << "," << manager->timer_resolution << ",,"; // Space for IRQ/sec and CPU_effectiveness.		
-
-		for (stat = 0; stat < NI_COMBINE_RESULTS + TCP_RESULTS; stat++)
-			(*file) << ",";	// Space for network results
-
-		for (stat = 0; stat < LATENCY_BIN_SIZE; stat++) {
-			(*file) << "," << results[WHOLE_TEST_PERF].raw.latency_bin[stat];
-		}
-
-		(*file) << endl;
+		// access spec / managers / workers / disks stay blank for target rows.
+		row.transPerConn = (GetConnectionRate(ActiveType) == ENABLED_VALUE)
+		                   ? GetTransPerConn(ActiveType) : AMBIGUOUS_VALUE;
+		row.rawBlock = true;
+		row.startingSector = std::to_string(GetDiskStart((TargetType) (GenericDiskType | ActiveType)));
+		row.maxSize        = std::to_string(GetDiskSize((TargetType) (GenericDiskType | ActiveType)));
+		row.queueDepth     = std::to_string(GetQueueDepth(ActiveType));
+		row.cpuNetBlock = false;
+		row.procSpeedPresent = true;
+		row.procSpeed = manager->timer_resolution;
+		iocore::writeResultRow(*file, row);
 	}
 	if (IsType(Type(), GenericClientType))
 		delete target;
@@ -936,11 +859,17 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 		// Copy reported raw results to results stored for the device.
 		memcpy((void *)&(device_results->raw), raw_device_results, sizeof(Raw_Result));
 
+		// Decode this target's raw counters via the shared iocore formula (the
+		// canonical rates/latency math). The per-worker AGGREGATION below stays
+		// MFC-side; only the per-target arithmetic moves to core.
+		const iocore::ResultRates _d =
+		    iocore::decodeRawResult(*raw_device_results, run_time, timer_resolution);
+
 		//
 		// Updating error results.
 		//
 		// Recording errors which have occurred to the device.
-		device_results->total_errors = raw_device_results->read_errors + raw_device_results->write_errors;
+		device_results->total_errors = _d.totalErrors;
 
 		// Updating recorded results for worker.
 		raw->read_errors += raw_device_results->read_errors;
@@ -951,23 +880,11 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 		// Updating maximum latency information.
 		//
 		// Determining maximum latencies of device.
-		device_results->max_read_latency = ((double)(_int64)
-						    raw_device_results->max_raw_read_latency) * (double)1000 / timer_resolution;
-
-		device_results->max_write_latency = ((double)(_int64)
-						     raw_device_results->max_raw_write_latency) * (double)1000 / timer_resolution;
-
-		device_results->max_transaction_latency = ((double)(_int64)
-							   raw_device_results->max_raw_transaction_latency) * (double)1000 / timer_resolution;
-
-		device_results->max_connection_latency = ((double)(_int64)
-							  raw_device_results->max_raw_connection_latency) * (double)1000 / timer_resolution;
-
-		if (device_results->max_read_latency > device_results->max_write_latency) {
-			device_results->max_latency = device_results->max_read_latency;
-		} else {
-			device_results->max_latency = device_results->max_write_latency;
-		}
+		device_results->max_read_latency = _d.maxReadLatency;
+		device_results->max_write_latency = _d.maxWriteLatency;
+		device_results->max_transaction_latency = _d.maxTransactionLatency;
+		device_results->max_connection_latency = _d.maxConnectionLatency;
+		device_results->max_latency = _d.maxLatency;
 
 		// Determining maximum latencies of worker.
 		if (device_results->max_read_latency > results[which_perf].max_read_latency) {
@@ -991,29 +908,20 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 		//
 		// Updating throughput data.
 		//
-		// Calculating MB/s and IO/s data rates.
-		if (run_time) {
-			// Calculating results on a per drive basis.
-			device_results->read_MBps_Bin = ((double)(_int64)
-						     raw_device_results->bytes_read / (double)MEGABYTE_BIN) / run_time;
-			device_results->write_MBps_Bin = ((double)(_int64)
-						      raw_device_results->bytes_written / (double)MEGABYTE_BIN) / run_time;
-			device_results->MBps_Bin = device_results->read_MBps_Bin + device_results->write_MBps_Bin;
-			device_results->read_MBps_Dec = ((double)(_int64)
-						     raw_device_results->bytes_read / (double)MEGABYTE_DEC) / run_time;
-			device_results->write_MBps_Dec = ((double)(_int64)
-						      raw_device_results->bytes_written / (double)MEGABYTE_DEC) / run_time;
-			device_results->MBps_Dec = device_results->read_MBps_Dec + device_results->write_MBps_Dec;
-			device_results->read_IOps = ((double)(_int64)
-						     raw_device_results->read_count) / run_time;
-			device_results->write_IOps = ((double)(_int64)
-						      raw_device_results->write_count) / run_time;
-			device_results->IOps = device_results->read_IOps + device_results->write_IOps;
-			device_results->transactions_per_second = ((double)(_int64)
-								   raw_device_results->transaction_count) / run_time;
-			device_results->connections_per_second = ((double)(_int64)
-								  raw_device_results->connection_count) / run_time;
+		// Calculating MB/s and IO/s data rates (decoded above; zero when run_time==0).
+		device_results->read_MBps_Bin = _d.readMbpsBin;
+		device_results->write_MBps_Bin = _d.writeMbpsBin;
+		device_results->MBps_Bin = _d.mbpsBin;
+		device_results->read_MBps_Dec = _d.readMbpsDec;
+		device_results->write_MBps_Dec = _d.writeMbpsDec;
+		device_results->MBps_Dec = _d.mbpsDec;
+		device_results->read_IOps = _d.readIops;
+		device_results->write_IOps = _d.writeIops;
+		device_results->IOps = _d.iops;
+		device_results->transactions_per_second = _d.transactionsPerSecond;
+		device_results->connections_per_second = _d.connectionsPerSecond;
 
+		if (run_time) {
 			// Updating results for the worker based on the results reported for individual drives.
 
 			// Raw results.
@@ -1039,49 +947,28 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 			results[which_perf].write_IOps += device_results->write_IOps;
 			results[which_perf].transactions_per_second += device_results->transactions_per_second;
 			results[which_perf].connections_per_second += device_results->connections_per_second;
-		} else {
-			device_results->MBps_Bin = (double)0;
-			device_results->read_MBps_Bin = (double)0;
-			device_results->write_MBps_Bin = (double)0;
-			device_results->MBps_Dec = (double)0;
-			device_results->read_MBps_Dec = (double)0;
-			device_results->write_MBps_Dec = (double)0;
-			device_results->IOps = (double)0;
-			device_results->read_IOps = (double)0;
-			device_results->write_IOps = (double)0;
-			device_results->transactions_per_second = (double)0;
-			device_results->connections_per_second = (double)0;
 		}
 
 		// Determining average latencies of transfers to a single drive.
 		if (raw_device_results->read_count || raw_device_results->write_count) {
-			device_results->ave_latency = ((double)(_int64)
-				(raw_device_results->read_latency_sum +
-				raw_device_results->write_latency_sum)) * (double)1000 / timer_resolution 
-				/ (double)(_int64)(raw_device_results->read_count + raw_device_results->write_count);
+			device_results->ave_latency = _d.aveLatency;
 
 			if (raw_device_results->read_count) {
-				device_results->ave_read_latency = ((double)(_int64)
-					raw_device_results->read_latency_sum) * (double)1000 / timer_resolution
-					/ (double)(_int64)raw_device_results->read_count;
+				device_results->ave_read_latency = _d.aveReadLatency;
 				raw->read_latency_sum += raw_device_results->read_latency_sum;
 			} else {
 				device_results->ave_read_latency = (double)0;
 			}
 
 			if (raw_device_results->write_count) {
-				device_results->ave_write_latency = ((double)(_int64)
-					raw_device_results->write_latency_sum) * (double)1000 / timer_resolution
-					/ (double)(_int64)raw_device_results->write_count;
+				device_results->ave_write_latency = _d.aveWriteLatency;
 				raw->write_latency_sum += raw_device_results->write_latency_sum;
 			} else {
 				device_results->ave_write_latency = (double)0;
 			}
 
 			if (raw_device_results->transaction_count) {
-				device_results->ave_transaction_latency = ((double)(_int64)
-					raw_device_results->transaction_latency_sum) * (double) 1000 / 
-					timer_resolution / (double)(_int64)(raw_device_results->transaction_count);
+				device_results->ave_transaction_latency = _d.aveTransactionLatency;
 				raw->transaction_latency_sum += raw_device_results->transaction_latency_sum;
 			} else {
 				device_results->ave_transaction_latency = (double)0;
@@ -1095,10 +982,7 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 
 		// Determining the average connection time for each drive.
 		if (raw_device_results->connection_count) {
-			// Calculate the average connection time.
-			device_results->ave_connection_latency = ((double)(_int64)
-				(raw_device_results->connection_latency_sum)) * (double)1000 / 
-				timer_resolution / (double)(_int64)(raw_device_results->connection_count);
+			device_results->ave_connection_latency = _d.aveConnectionLatency;
 			raw->connection_latency_sum += raw_device_results->connection_latency_sum;
 		} else {
 			device_results->ave_connection_latency = (double)0;

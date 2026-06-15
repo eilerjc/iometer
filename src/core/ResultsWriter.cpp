@@ -1,9 +1,8 @@
 #include "ResultsWriter.h"
 #include "ResultsAggregator.h"
+#include "ResultsCsv.h"      // canonical results-CSV schema + row writer (shared with MFC)
 #include <fstream>
-#include <iomanip>
-#include <sstream>
-#include <cmath>
+#include <string>
 #include <ctime>
 
 // Format a timestamp matching the original Iometer output ("yyyy/MM/dd hh:mm:ss")
@@ -21,6 +20,31 @@ static std::string currentTimestamp()
     return std::string(buf);
 }
 
+// Replace commas / CR / LF with spaces so a name can't break the CSV column
+// layout. The canonical writer emits names raw (matching the MFC GUI, which
+// sanitizes rather than quotes), so do the same sanitization here.
+static std::string sanitizeName(const std::string &s)
+{
+    std::string out = s;
+    for (char &c : out)
+        if (c == ',' || c == '\n' || c == '\r') c = ' ';
+    return out;
+}
+
+// Copy the measured columns Qt actually computes into a canonical row. Columns
+// Qt does not track (read/write binary MBps split, transactions/connections,
+// the read/write/transaction/connection latency variants, raw counters, network)
+// stay at their zero defaults.
+static void fillFromWorker(iocore::ResultRow &row, const WorkerResult &wr)
+{
+    row.iops = wr.iops; row.readIops = wr.readIops; row.writeIops = wr.writeIops;
+    row.mbpsBin = wr.mbpsBin;
+    row.mbpsDec = wr.mbpsDec; row.readMbpsDec = wr.readMbpsDec; row.writeMbpsDec = wr.writeMbpsDec;
+    row.aveLatency = wr.avgLatencyMs;
+    row.maxLatency = wr.maxLatencyMs;
+    row.totalErrors = static_cast<unsigned long>(wr.errors < 0 ? 0 : wr.errors);
+}
+
 bool ResultsWriter::writeBatchResultsCsv(const std::string &filepath,
                                          const std::vector<WorkerResult> &results,
                                          const TestConfig &cfg)
@@ -28,10 +52,7 @@ bool ResultsWriter::writeBatchResultsCsv(const std::string &filepath,
     std::ofstream out(filepath);
     if (!out) return false;
 
-    // Six-decimal fixed format matches the original Iometer output precision.
-    auto fmt = [](double v) { return formatDouble(v, 6); };
-
-    // -- File header (matches original ManagerList output) -----------------
+    // -- File preamble -----------------------------------------------------
     out << "'Iometer Output File\n";
     out << "Version 1.1.0 \n";
     out << "'Test Description\n\t" << cfg.description << "\n";
@@ -42,98 +63,46 @@ bool ResultsWriter::writeBatchResultsCsv(const std::string &filepath,
         << "          " << cfg.runSeconds << "\n";
     out << "'Ramp Up Time (s)\n\t" << cfg.rampSeconds << "\n";
 
-    // -- Column headers (exact original order, 37 columns) -----------------
-    // Smoke test relies on: field[0]=="ALL", [3]=workers, [6]=IOps,
-    //                       [12]=MBps(Dec), [27]=Errors
-    out << "'Results\n";
-    out << "'Target Type,Target Name,Manager,Workers,Managers,Targets,"
-           "IOps,Read IOps,Write IOps,"
-           "MBps (Binary),Read MBps (Binary),Write MBps (Binary),"
-           "MBps (Decimal),Read MBps (Decimal),Write MBps (Decimal),"
-           "Transactions per Second,Connections per Second,"
-           "Average I/O Response Time (ms),Average Read Response Time (ms),"
-           "Average Write Response Time (ms),Average Transaction Time (ms),"
-           "Average Connection Time (ms),"
-           "Maximum I/O Response Time (ms),Maximum Read Response Time (ms),"
-           "Maximum Write Response Time (ms),Maximum Transaction Time (ms),"
-           "Maximum Connection Time (ms),"
-           "Errors,Read Errors,Write Errors,"
-           "CPU % Utilization (total),CPU % User,CPU % Privileged,"
-           "CPU % DPC,CPU % Interrupt,CPU Interrupts/sec,CPU Effectiveness\n";
+    // -- Canonical results section (the same 80-column schema + row writer the
+    //    MFC GUI uses). Qt fills the columns it computes; the rest stay 0/blank.
+    iocore::writeResultsHeader(out);
 
-    // Build the ALL aggregate from non-aggregate worker rows (existing ALL rows
-    // are skipped) - shared core logic, same as the GUIs' live displays.
+    // ALL aggregate row, built from the non-aggregate worker rows (shared core).
     const iocore::AggregateResult aggRes = iocore::aggregateResults(results);
-    const WorkerResult &agg   = aggRes.all;
-    const int workerCount     = aggRes.workerCount;
-    const int mgCount         = aggRes.managerCount;
+    const WorkerResult &agg = aggRes.all;
+    const int workerCount   = aggRes.workerCount;
+    const int mgCount       = aggRes.managerCount;
+    {
+        iocore::ResultRow row;
+        fillFromWorker(row, agg);
+        row.targetType = "ALL";
+        row.targetName = "All";
+        row.managers = std::to_string(mgCount);
+        row.workers  = std::to_string(workerCount);
+        row.disks    = std::to_string(workerCount);   // Qt: one disk target per worker
+        row.rawBlock = false;                         // ALL row blanks the raw block (like MFC)
+        row.cpuNetBlock = true;                       // ALL row carries the aggregate CPU
+        row.cpuUtil[0] = agg.cpuUtil;                 // % CPU Utilization (total)
+        row.cpuUtil[1] = agg.cpuUser;                 // % User Time
+        row.cpuUtil[2] = agg.cpuKernel;               // % Privileged Time
+        row.procSpeedPresent = false;
+        iocore::writeResultRow(out, row);
+    }
 
-    // Write the ALL aggregate row - column positions must match the header above.
-    // [0]ALL [1]All [2]manager [3]workers [4]managers [5]targets
-    // [6]IOps [7]ReadIOps [8]WriteIOps
-    // [9]MBpsBin [10]ReadMBpsBin [11]WriteMBpsBin
-    // [12]MBpsDec [13]ReadMBpsDec [14]WriteMBpsDec
-    // [15]Trans/s [16]Conn/s
-    // [17]AvgIO [18]AvgRead [19]AvgWrite [20]AvgTrans [21]AvgConn
-    // [22]MaxIO [23]MaxRead [24]MaxWrite [25]MaxTrans [26]MaxConn
-    // [27]Errors [28]ReadErrors [29]WriteErrors
-    // [30-36] CPU fields
-    out << "ALL,All,," << workerCount << "," << mgCount << "," << workerCount << ","
-        << fmt(agg.iops) << "," << fmt(agg.readIops) << "," << fmt(agg.writeIops) << ","
-        << fmt(agg.mbpsBin) << "," << fmt(agg.mbpsBin) << ",0.000000,"
-        << fmt(agg.mbpsDec) << "," << fmt(agg.readMbpsDec) << "," << fmt(agg.writeMbpsDec) << ","
-        << fmt(agg.iops) << ",0.000000,"
-        << fmt(agg.avgLatencyMs) << "," << fmt(agg.avgLatencyMs) << ",0.000000,0.000000,0.000000,"
-        << fmt(agg.maxLatencyMs) << "," << fmt(agg.maxLatencyMs) << ",0.000000,0.000000,0.000000,"
-        << agg.errors << ",0,0,"
-        << fmt(agg.cpuUtil) << "," << fmt(agg.cpuUser) << "," << fmt(agg.cpuKernel)
-        << ",0.000000,0.000000,0.000000,0.000000\n";
-
-    // Write per-worker rows
-    for (const auto &r : results) {
-        if (r.isAggregate) continue;
-        out << "DISK," << escapeCsvField(r.workerName) << "," << escapeCsvField(r.managerName) << ",1,1,1,"
-            << fmt(r.iops) << "," << fmt(r.readIops) << "," << fmt(r.writeIops) << ","
-            << fmt(r.mbpsBin) << "," << fmt(r.mbpsBin) << ",0.000000,"
-            << fmt(r.mbpsDec) << "," << fmt(r.readMbpsDec) << "," << fmt(r.writeMbpsDec) << ","
-            << fmt(r.iops) << ",0.000000,"
-            << fmt(r.avgLatencyMs) << "," << fmt(r.avgLatencyMs) << ",0.000000,0.000000,0.000000,"
-            << fmt(r.maxLatencyMs) << "," << fmt(r.maxLatencyMs) << ",0.000000,0.000000,0.000000,"
-            << r.errors << ",0,0,"
-            << fmt(r.cpuUtil) << "," << fmt(r.cpuUser) << "," << fmt(r.cpuKernel)
-            << ",0.000000,0.000000,0.000000,0.000000\n";
+    // Per-worker rows (canonical WORKER rows; CPU/network blank, like the MFC GUI).
+    for (const auto &wr : results) {
+        if (wr.isAggregate) continue;
+        iocore::ResultRow row;
+        fillFromWorker(row, wr);
+        row.targetType = "WORKER";
+        row.targetName = sanitizeName(wr.workerName);
+        row.disks = "1";                              // one disk target per Qt worker
+        row.rawBlock = true;                          // worker rows fill the raw block (0; Qt has no raw counters)
+        row.cpuNetBlock = false;
+        row.procSpeedPresent = false;
+        iocore::writeResultRow(out, row);
     }
 
     out.close();
     return true;
-}
-
-std::string ResultsWriter::formatDouble(double value, int precision)
-{
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(precision) << value;
-    return oss.str();
-}
-
-std::string ResultsWriter::escapeCsvField(const std::string &field)
-{
-    // Quote only when needed (comma, quote, or newline present)
-    bool needsQuotes = field.find(',')  != std::string::npos ||
-                       field.find('"')  != std::string::npos ||
-                       field.find('\n') != std::string::npos;
-
-    if (!needsQuotes) {
-        return field;
-    }
-
-    std::string escaped = "\"";
-    for (char c : field) {
-        if (c == '"') {
-            escaped += "\"\"";  // double embedded quotes
-        } else {
-            escaped += c;
-        }
-    }
-    escaped += "\"";
-    return escaped;
 }

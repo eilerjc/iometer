@@ -1,0 +1,8 @@
+# Keep the ICF golden-harness test data as LF regardless of a contributor's
+# core.autocrlf setting. The byte-exact golden compares and (historically) the
+# old-format ICF loader are line-ending sensitive, so CRLF checkouts could make
+# the harness non-deterministic. The loader itself is now CRLF-robust, but the
+# fixtures stay canonical LF.
+test/fixtures/**/*.icf      text eol=lf
+test/fixtures/**/*.workers  text eol=lf
+test/fixtures/**/*.txt      text eol=lf
