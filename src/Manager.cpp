@@ -74,6 +74,7 @@
 #include "GalileoView.h"
 #include "core/IcfDocument.h"	// shared MANAGER LIST parse result types
 #include "core/IcfWriter.h"	// shared ICF section writers (iocore)
+#include "core/ResultDecode.h"	// shared raw-counter -> latency decode (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -885,50 +886,17 @@ void Manager::UpdateResults(int which_perf, bool instantaneousDump)
 	else
 		results[which_perf].CPU_effectiveness = (double)0;
 
-	// Calculating average latencies.
-	if (results[which_perf].raw.read_count || results[which_perf].raw.write_count) {
-		results[which_perf].ave_latency =
-		    (double)(_int64) (results[which_perf].raw.read_latency_sum +
-			results[which_perf].raw.write_latency_sum)
-		    * (double)1000 / timer_resolution /
-			(double)(_int64) (results[which_perf].raw.read_count +
-			results[which_perf].raw.write_count);
-
-		if (results[which_perf].raw.read_count)
-			results[which_perf].ave_read_latency =
-			    (double)(_int64) results[which_perf].raw.read_latency_sum * (double)1000 / 
-				timer_resolution / (double)(_int64) results[which_perf].raw.read_count;
-		else
-			results[which_perf].ave_read_latency = (double)0;
-
-		if (results[which_perf].raw.write_count)
-			results[which_perf].ave_write_latency =
-			    (double)(_int64) results[which_perf].raw.write_latency_sum * (double)1000 /
-				timer_resolution / (double)(_int64) results[which_perf].raw.write_count;
-		else
-			results[which_perf].ave_write_latency = (double)0;
-
-		if (results[which_perf].raw.transaction_count) {
-			results[which_perf].ave_transaction_latency =
-			    (double)(_int64) results[which_perf].raw.transaction_latency_sum * (double)1000 /
-				timer_resolution / (double)(_int64) (results[which_perf].raw.transaction_count);
-		} else {
-			results[which_perf].ave_transaction_latency = (double)0;
-		}
-	} else {
-		results[which_perf].ave_latency = (double)0;
-		results[which_perf].ave_read_latency = (double)0;
-		results[which_perf].ave_write_latency = (double)0;
-		results[which_perf].ave_transaction_latency = (double)0;
-	}
-
-	// Calculating average connection time.
-	if (results[which_perf].raw.connection_count) {
-		results[which_perf].ave_connection_latency =
-		    (double)(_int64) (results[which_perf].raw.connection_latency_sum) * (double)1000 / 
-			timer_resolution / (double)(_int64) results[which_perf].raw.connection_count;
-	} else {
-		results[which_perf].ave_connection_latency = (double)0;
+	// Calculating average latencies from the aggregated raw counters via the
+	// shared iocore formula. (The rates were summed from the workers separately;
+	// only the latency fields are taken here. runTime is irrelevant to latency.)
+	{
+		const iocore::ResultRates _m =
+		    iocore::decodeRawResult(results[which_perf].raw, 0.0, timer_resolution);
+		results[which_perf].ave_latency = _m.aveLatency;
+		results[which_perf].ave_read_latency = _m.aveReadLatency;
+		results[which_perf].ave_write_latency = _m.aveWriteLatency;
+		results[which_perf].ave_transaction_latency = _m.aveTransactionLatency;
+		results[which_perf].ave_connection_latency = _m.aveConnectionLatency;
 	}
 
 	delete data_msg;

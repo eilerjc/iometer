@@ -326,6 +326,7 @@
     <ClInclude Include="..\core\IcfStream.h" />
     <ClInclude Include="..\core\IcfDocument.h" />
     <ClInclude Include="..\core\IcfWriter.h" />
+    <ClInclude Include="..\core\ResultDecode.h" />
     <ClInclude Include="..\MeterCtrl.h" />
     <ClInclude Include="..\ostream64.h" />
     <ClInclude Include="..\pack.h" />

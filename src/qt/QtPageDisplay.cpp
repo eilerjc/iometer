@@ -2,6 +2,7 @@
 #include "QtPageDisplay.h"
 #include "QtBigMeterWidget.h"
 #include "QtIometerEngine.h"
+#include "../core/ResultStatCatalog.h"   // canonical statistic display names
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -90,21 +91,18 @@ void QtPageDisplay::setupUi()
     dispLay->setSpacing(3);
     dispLay->setContentsMargins(4, 8, 4, 4);
 
-    const struct { int type; const char *label; } ROWS[] = {
-        { RESULT_IOPS,          "Total I/Os per Second"          },
-        { RESULT_MBPS_DEC,      "Total MBs per Second (Decimal)" },
-        { RESULT_AVG_LATENCY_MS,"Average I/O Response Time (ms)" },
-        { RESULT_MAX_LATENCY_MS,"Maximum I/O Response Time (ms)" },
-        { RESULT_CPU_UTIL,      "% CPU Utilization (total)"      },
-        { RESULT_ERRORS,        "Total Error Count"              },
+    // Default statistic per row; display names come from the shared catalog.
+    static const int ROWS[] = {
+        RESULT_IOPS, RESULT_MBPS_DEC, RESULT_AVG_LATENCY_MS,
+        RESULT_MAX_LATENCY_MS, RESULT_CPU_UTIL, RESULT_ERRORS,
     };
 
     for (int r = 0; r < NUM_ROWS; ++r) {
         DisplayRow &row = m_rows[r];
-        row.resultType = ROWS[r].type;
+        row.resultType = ROWS[r];
 
         // -- Metric button (left, spans the full 2-line height) ------------
-        row.metricBtn = new QPushButton(ROWS[r].label);
+        row.metricBtn = new QPushButton(iocore::resultStatName(ROWS[r]));
         row.metricBtn->setFlat(false);
         row.metricBtn->setFixedWidth(230);
         row.metricBtn->setToolTip("Click to change the metric displayed in this row");
@@ -327,8 +325,9 @@ void QtPageDisplay::onMetricButtonClicked(int row)
 
     QMenu menu(this);
 
-    auto add = [&](QMenu *m, const QString &label, int type) {
-        QAction *act = m->addAction(label);
+    // Label comes from the shared catalog (single source of truth for names).
+    auto add = [&](QMenu *m, int type) {
+        QAction *act = m->addAction(QString::fromLatin1(iocore::resultStatName(type)));
         act->setData(type);
         act->setCheckable(true);
         act->setChecked(cur == type);
@@ -336,64 +335,64 @@ void QtPageDisplay::onMetricButtonClicked(int row)
 
     // -- Operations per Second ----------------------------------------------
     QMenu *ops = menu.addMenu("Operations per Second");
-    add(ops, "Total I/Os per Second",       RESULT_IOPS);
-    add(ops, "Read I/Os per Second",         RESULT_READ_IOPS);
-    add(ops, "Write I/Os per Second",        RESULT_WRITE_IOPS);
+    add(ops, RESULT_IOPS);
+    add(ops, RESULT_READ_IOPS);
+    add(ops, RESULT_WRITE_IOPS);
     ops->addSeparator();
-    add(ops, "Transactions per Second",      RESULT_TRANS_PS);
-    add(ops, "Connections per Second",       RESULT_CONN_PS);
+    add(ops, RESULT_TRANS_PS);
+    add(ops, RESULT_CONN_PS);
 
     // -- Megabytes per Second -----------------------------------------------
     QMenu *mbs = menu.addMenu("Megabytes per Second");
-    add(mbs, "Total MBs per Second (Decimal)",  RESULT_MBPS_DEC);
-    add(mbs, "Read MBs per Second (Decimal)",   RESULT_READ_MBPS_DEC);
-    add(mbs, "Write MBs per Second (Decimal)",  RESULT_WRITE_MBPS_DEC);
+    add(mbs, RESULT_MBPS_DEC);
+    add(mbs, RESULT_READ_MBPS_DEC);
+    add(mbs, RESULT_WRITE_MBPS_DEC);
     mbs->addSeparator();
-    add(mbs, "Total MBs per Second (Binary)",   RESULT_MBPS_BIN);
-    add(mbs, "Read MBs per Second (Binary)",    RESULT_READ_MBPS_BIN);
-    add(mbs, "Write MBs per Second (Binary)",   RESULT_WRITE_MBPS_BIN);
+    add(mbs, RESULT_MBPS_BIN);
+    add(mbs, RESULT_READ_MBPS_BIN);
+    add(mbs, RESULT_WRITE_MBPS_BIN);
 
     // -- Average Latency ----------------------------------------------------
     QMenu *avg = menu.addMenu("Average Latency");
-    add(avg, "Average I/O Response Time (ms)",  RESULT_AVG_LATENCY_MS);
-    add(avg, "Avg. Read Response Time (ms)",    RESULT_AVG_READ_LATENCY_MS);
-    add(avg, "Avg. Write Response Time (ms)",   RESULT_AVG_WRITE_LATENCY_MS);
+    add(avg, RESULT_AVG_LATENCY_MS);
+    add(avg, RESULT_AVG_READ_LATENCY_MS);
+    add(avg, RESULT_AVG_WRITE_LATENCY_MS);
     avg->addSeparator();
-    add(avg, "Avg. Transaction Time (ms)",      RESULT_AVG_TRANS_LATENCY_MS);
-    add(avg, "Avg. Connection Time (ms)",       RESULT_AVG_CONN_LATENCY_MS);
+    add(avg, RESULT_AVG_TRANS_LATENCY_MS);
+    add(avg, RESULT_AVG_CONN_LATENCY_MS);
 
     // -- Maximum Latency ----------------------------------------------------
     QMenu *mx = menu.addMenu("Maximum Latency");
-    add(mx, "Maximum I/O Response Time (ms)",   RESULT_MAX_LATENCY_MS);
-    add(mx, "Max. Read Response Time (ms)",     RESULT_MAX_READ_LATENCY_MS);
-    add(mx, "Max. Write Response Time (ms)",    RESULT_MAX_WRITE_LATENCY_MS);
+    add(mx, RESULT_MAX_LATENCY_MS);
+    add(mx, RESULT_MAX_READ_LATENCY_MS);
+    add(mx, RESULT_MAX_WRITE_LATENCY_MS);
     mx->addSeparator();
-    add(mx, "Max. Transaction Time (ms)",       RESULT_MAX_TRANS_LATENCY_MS);
-    add(mx, "Max. Connection Time (ms)",        RESULT_MAX_CONN_LATENCY_MS);
+    add(mx, RESULT_MAX_TRANS_LATENCY_MS);
+    add(mx, RESULT_MAX_CONN_LATENCY_MS);
 
     // -- CPU ----------------------------------------------------------------
     QMenu *cpu = menu.addMenu("CPU");
-    add(cpu, "% CPU Utilization (total)",   RESULT_CPU_UTIL);
-    add(cpu, "% User Time",                 RESULT_CPU_USER);
-    add(cpu, "% Privileged Time",           RESULT_CPU_KERNEL);
-    add(cpu, "% DPC Time",                  RESULT_CPU_DPC);
-    add(cpu, "% Interrupt Time",            RESULT_CPU_INT_TIME);
+    add(cpu, RESULT_CPU_UTIL);
+    add(cpu, RESULT_CPU_USER);
+    add(cpu, RESULT_CPU_KERNEL);
+    add(cpu, RESULT_CPU_DPC);
+    add(cpu, RESULT_CPU_INT_TIME);
     cpu->addSeparator();
-    add(cpu, "Interrupts per Second",       RESULT_CPU_INTERRUPTS_PS);
-    add(cpu, "CPU Effectiveness",           RESULT_CPU_EFFECTIVENESS);
+    add(cpu, RESULT_CPU_INTERRUPTS_PS);
+    add(cpu, RESULT_CPU_EFFECTIVENESS);
 
     // -- Network ------------------------------------------------------------
     QMenu *net = menu.addMenu("Network");
-    add(net, "Network Packets per Second",      RESULT_NET_PACKETS_PS);
+    add(net, RESULT_NET_PACKETS_PS);
     net->addSeparator();
-    add(net, "Packet Errors",                   RESULT_NET_PACKET_ERRORS);
-    add(net, "TCP Segments Retrans. per Sec.",  RESULT_NET_RETRANS_PS);
+    add(net, RESULT_NET_PACKET_ERRORS);
+    add(net, RESULT_NET_RETRANS_PS);
 
     // -- Errors -------------------------------------------------------------
     QMenu *err = menu.addMenu("Errors");
-    add(err, "Total Error Count",   RESULT_ERRORS);
-    add(err, "Read Error Count",    RESULT_READ_ERRORS);
-    add(err, "Write Error Count",   RESULT_WRITE_ERRORS);
+    add(err, RESULT_ERRORS);
+    add(err, RESULT_READ_ERRORS);
+    add(err, RESULT_WRITE_ERRORS);
 
     QAction *chosen = menu.exec(QCursor::pos());
     if (!chosen || !chosen->data().isValid()) return;

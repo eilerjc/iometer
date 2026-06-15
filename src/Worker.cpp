@@ -79,6 +79,7 @@
 #include "AccessSpecList.h"
 #include "core/IcfDocument.h"	// shared worker parse result types
 #include "core/IcfWriter.h"	// shared ICF section writers (iocore)
+#include "core/ResultDecode.h"	// shared raw-counter -> rates/latency decode (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -936,11 +937,17 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 		// Copy reported raw results to results stored for the device.
 		memcpy((void *)&(device_results->raw), raw_device_results, sizeof(Raw_Result));
 
+		// Decode this target's raw counters via the shared iocore formula (the
+		// canonical rates/latency math). The per-worker AGGREGATION below stays
+		// MFC-side; only the per-target arithmetic moves to core.
+		const iocore::ResultRates _d =
+		    iocore::decodeRawResult(*raw_device_results, run_time, timer_resolution);
+
 		//
 		// Updating error results.
 		//
 		// Recording errors which have occurred to the device.
-		device_results->total_errors = raw_device_results->read_errors + raw_device_results->write_errors;
+		device_results->total_errors = _d.totalErrors;
 
 		// Updating recorded results for worker.
 		raw->read_errors += raw_device_results->read_errors;
@@ -951,23 +958,11 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 		// Updating maximum latency information.
 		//
 		// Determining maximum latencies of device.
-		device_results->max_read_latency = ((double)(_int64)
-						    raw_device_results->max_raw_read_latency) * (double)1000 / timer_resolution;
-
-		device_results->max_write_latency = ((double)(_int64)
-						     raw_device_results->max_raw_write_latency) * (double)1000 / timer_resolution;
-
-		device_results->max_transaction_latency = ((double)(_int64)
-							   raw_device_results->max_raw_transaction_latency) * (double)1000 / timer_resolution;
-
-		device_results->max_connection_latency = ((double)(_int64)
-							  raw_device_results->max_raw_connection_latency) * (double)1000 / timer_resolution;
-
-		if (device_results->max_read_latency > device_results->max_write_latency) {
-			device_results->max_latency = device_results->max_read_latency;
-		} else {
-			device_results->max_latency = device_results->max_write_latency;
-		}
+		device_results->max_read_latency = _d.maxReadLatency;
+		device_results->max_write_latency = _d.maxWriteLatency;
+		device_results->max_transaction_latency = _d.maxTransactionLatency;
+		device_results->max_connection_latency = _d.maxConnectionLatency;
+		device_results->max_latency = _d.maxLatency;
 
 		// Determining maximum latencies of worker.
 		if (device_results->max_read_latency > results[which_perf].max_read_latency) {
@@ -991,29 +986,20 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 		//
 		// Updating throughput data.
 		//
-		// Calculating MB/s and IO/s data rates.
-		if (run_time) {
-			// Calculating results on a per drive basis.
-			device_results->read_MBps_Bin = ((double)(_int64)
-						     raw_device_results->bytes_read / (double)MEGABYTE_BIN) / run_time;
-			device_results->write_MBps_Bin = ((double)(_int64)
-						      raw_device_results->bytes_written / (double)MEGABYTE_BIN) / run_time;
-			device_results->MBps_Bin = device_results->read_MBps_Bin + device_results->write_MBps_Bin;
-			device_results->read_MBps_Dec = ((double)(_int64)
-						     raw_device_results->bytes_read / (double)MEGABYTE_DEC) / run_time;
-			device_results->write_MBps_Dec = ((double)(_int64)
-						      raw_device_results->bytes_written / (double)MEGABYTE_DEC) / run_time;
-			device_results->MBps_Dec = device_results->read_MBps_Dec + device_results->write_MBps_Dec;
-			device_results->read_IOps = ((double)(_int64)
-						     raw_device_results->read_count) / run_time;
-			device_results->write_IOps = ((double)(_int64)
-						      raw_device_results->write_count) / run_time;
-			device_results->IOps = device_results->read_IOps + device_results->write_IOps;
-			device_results->transactions_per_second = ((double)(_int64)
-								   raw_device_results->transaction_count) / run_time;
-			device_results->connections_per_second = ((double)(_int64)
-								  raw_device_results->connection_count) / run_time;
+		// Calculating MB/s and IO/s data rates (decoded above; zero when run_time==0).
+		device_results->read_MBps_Bin = _d.readMbpsBin;
+		device_results->write_MBps_Bin = _d.writeMbpsBin;
+		device_results->MBps_Bin = _d.mbpsBin;
+		device_results->read_MBps_Dec = _d.readMbpsDec;
+		device_results->write_MBps_Dec = _d.writeMbpsDec;
+		device_results->MBps_Dec = _d.mbpsDec;
+		device_results->read_IOps = _d.readIops;
+		device_results->write_IOps = _d.writeIops;
+		device_results->IOps = _d.iops;
+		device_results->transactions_per_second = _d.transactionsPerSecond;
+		device_results->connections_per_second = _d.connectionsPerSecond;
 
+		if (run_time) {
 			// Updating results for the worker based on the results reported for individual drives.
 
 			// Raw results.
@@ -1039,49 +1025,28 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 			results[which_perf].write_IOps += device_results->write_IOps;
 			results[which_perf].transactions_per_second += device_results->transactions_per_second;
 			results[which_perf].connections_per_second += device_results->connections_per_second;
-		} else {
-			device_results->MBps_Bin = (double)0;
-			device_results->read_MBps_Bin = (double)0;
-			device_results->write_MBps_Bin = (double)0;
-			device_results->MBps_Dec = (double)0;
-			device_results->read_MBps_Dec = (double)0;
-			device_results->write_MBps_Dec = (double)0;
-			device_results->IOps = (double)0;
-			device_results->read_IOps = (double)0;
-			device_results->write_IOps = (double)0;
-			device_results->transactions_per_second = (double)0;
-			device_results->connections_per_second = (double)0;
 		}
 
 		// Determining average latencies of transfers to a single drive.
 		if (raw_device_results->read_count || raw_device_results->write_count) {
-			device_results->ave_latency = ((double)(_int64)
-				(raw_device_results->read_latency_sum +
-				raw_device_results->write_latency_sum)) * (double)1000 / timer_resolution 
-				/ (double)(_int64)(raw_device_results->read_count + raw_device_results->write_count);
+			device_results->ave_latency = _d.aveLatency;
 
 			if (raw_device_results->read_count) {
-				device_results->ave_read_latency = ((double)(_int64)
-					raw_device_results->read_latency_sum) * (double)1000 / timer_resolution
-					/ (double)(_int64)raw_device_results->read_count;
+				device_results->ave_read_latency = _d.aveReadLatency;
 				raw->read_latency_sum += raw_device_results->read_latency_sum;
 			} else {
 				device_results->ave_read_latency = (double)0;
 			}
 
 			if (raw_device_results->write_count) {
-				device_results->ave_write_latency = ((double)(_int64)
-					raw_device_results->write_latency_sum) * (double)1000 / timer_resolution
-					/ (double)(_int64)raw_device_results->write_count;
+				device_results->ave_write_latency = _d.aveWriteLatency;
 				raw->write_latency_sum += raw_device_results->write_latency_sum;
 			} else {
 				device_results->ave_write_latency = (double)0;
 			}
 
 			if (raw_device_results->transaction_count) {
-				device_results->ave_transaction_latency = ((double)(_int64)
-					raw_device_results->transaction_latency_sum) * (double) 1000 / 
-					timer_resolution / (double)(_int64)(raw_device_results->transaction_count);
+				device_results->ave_transaction_latency = _d.aveTransactionLatency;
 				raw->transaction_latency_sum += raw_device_results->transaction_latency_sum;
 			} else {
 				device_results->ave_transaction_latency = (double)0;
@@ -1095,10 +1060,7 @@ void Worker::UpdateResults(int which_perf, bool instantaneousDump)
 
 		// Determining the average connection time for each drive.
 		if (raw_device_results->connection_count) {
-			// Calculate the average connection time.
-			device_results->ave_connection_latency = ((double)(_int64)
-				(raw_device_results->connection_latency_sum)) * (double)1000 / 
-				timer_resolution / (double)(_int64)(raw_device_results->connection_count);
+			device_results->ave_connection_latency = _d.aveConnectionLatency;
 			raw->connection_latency_sum += raw_device_results->connection_latency_sum;
 		} else {
 			device_results->ave_connection_latency = (double)0;

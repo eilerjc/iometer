@@ -95,6 +95,8 @@ set(IOMETER_CORE_HEADERS
     ../core/IcfStream.h
     ../core/IcfDocument.h
     ../core/IcfWriter.h
+    ../core/ResultDecode.h
+    ../core/ResultStatCatalog.h
 )
 add_library(IometerCore STATIC ${IOMETER_CORE_SOURCES} ${IOMETER_CORE_HEADERS})
 # ../core for the manager core; .. (src root) for the project-wide protocol
@@ -193,6 +195,8 @@ iometer_test(tst_managerrestore)
 iometer_test(tst_accessspeccatalog)
 iometer_test(tst_accessspeclibrary)
 iometer_test(tst_resultsaggregator)
+iometer_test(tst_resultdecode)
+iometer_test(tst_resultstatcatalog)
 iometer_test(tst_icfstream)
 iometer_test(tst_icfdocument)
 iometer_test(tst_icfwriter)
