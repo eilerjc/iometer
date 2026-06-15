@@ -174,8 +174,8 @@ private slots:
         QVERIFY(tmp.open()); tmp.close();
         QtDynamoEngine::writeBatchResultsCsv(tmp.fileName(), r, TestConfig{});
         const QStringList f = parseAllRow(tmp.fileName());
-        QVERIFY(f.size() > 3);
-        QCOMPARE(f[3].trimmed().toInt(), 3); // workers field
+        QVERIFY(f.size() > 4);
+        QCOMPARE(f[4].trimmed().toInt(), 3); // #Workers is column [4] in the canonical layout
     }
 
     void aggregate_skipsExistingAggregateRows() {

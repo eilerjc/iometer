@@ -1,9 +1,10 @@
 // tst_resultswriter.cpp — Direct unit tests for the pure-C++ core ResultsWriter.
 //
 // Calls ResultsWriter::writeBatchResultsCsv with std:: types and parses the
-// output with std::ifstream — no QtDynamoEngine, no Qt I/O. Verifies the original
-// Iometer CSV layout (field[0]=ALL, [3]=workers, [6]=IOps, [12]=MBps(Dec),
-// [27]=Errors) and aggregate correctness.
+// output with std::ifstream — no QtDynamoEngine, no Qt I/O. The writer now emits
+// the canonical 80-column Iometer layout (shared with the MFC GUI via
+// core/ResultsCsv.h): field[0]=ALL, [3]=#Managers, [4]=#Workers, [6]=IOps,
+// [12]=MBps(Dec), [22]=Max Response Time, [27]=Errors.
 #include <QObject>
 #include <QTest>
 #include "../core/ResultsWriter.h"
@@ -157,7 +158,7 @@ private slots:
         std::vector<WorkerResult> r{ makeResult("mgr","w1",1000,100,95,0.04,15,0) };
         ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{});
         auto f = parseAllRow(p);
-        // 37-column original layout
+        // 80-column canonical layout (TOTAL_COLUMNS), matching the MFC GUI.
         QCOMPARE(f.size(), size_t(ResultsWriter::TOTAL_COLUMNS));
         std::filesystem::remove(p);
     }
@@ -175,7 +176,7 @@ private slots:
         QCOMPARE(std::stod(trim(f[6])), 25000.0);
         std::filesystem::remove(p);
     }
-    void aggregate_workerCountField3() {
+    void aggregate_workerCountField4() {   // canonical #Workers column is [4]
         const std::string p = tempCsv("wc.csv");
         std::vector<WorkerResult> r{
             makeResult("mgr","w1",1000,100,95,0.04,10,0),
@@ -184,11 +185,11 @@ private slots:
         };
         ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{});
         auto f = parseAllRow(p);
-        QVERIFY(f.size() > 3);
-        QCOMPARE(std::stoi(trim(f[3])), 3);
+        QVERIFY(f.size() > 4);
+        QCOMPARE(std::stoi(trim(f[4])), 3);
         std::filesystem::remove(p);
     }
-    void aggregate_managerCountField4() {
+    void aggregate_managerCountField3() {  // canonical #Managers column is [3]
         const std::string p = tempCsv("mc.csv");
         std::vector<WorkerResult> r{
             makeResult("mgrA","w1",1000,100,95,0.04,10,0),
@@ -196,8 +197,8 @@ private slots:
         };
         ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{});
         auto f = parseAllRow(p);
-        QVERIFY(f.size() > 4);
-        QCOMPARE(std::stoi(trim(f[4])), 2);   // two distinct managers
+        QVERIFY(f.size() > 3);
+        QCOMPARE(std::stoi(trim(f[3])), 2);   // two distinct managers
         std::filesystem::remove(p);
     }
     void aggregate_skipsExistingAggregateRows() {
@@ -238,49 +239,47 @@ private slots:
     }
 
     // ── Per-worker rows ──────────────────────────────────────────────────────
-    void perWorker_diskRowsWritten() {
-        const std::string p = tempCsv("disk.csv");
+    void perWorker_workerRowsWritten() {
+        const std::string p = tempCsv("worker.csv");
         std::vector<WorkerResult> r{
             makeResult("mgr","w1",1000,100,95,0.04,10,0),
             makeResult("mgr","w2",2000,200,190,0.04,10,0)
         };
         ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{});
-        QCOMPARE(countLinesStartingWith(p, "DISK"), 2);
+        QCOMPARE(countLinesStartingWith(p, "WORKER"), 2);
         std::filesystem::remove(p);
     }
 
-    void perWorker_nameWithCommaIsQuoted() {
-        // A worker name containing a comma must be CSV-quoted so the column
-        // layout stays intact (exercises escapeCsvField's quoting branch).
+    // The canonical writer emits names raw (like the MFC GUI) and sanitizes
+    // CSV-breaking characters to spaces rather than quoting.
+    void perWorker_nameCommaSanitizedToSpace() {
         const std::string p = tempCsv("comma.csv");
         std::vector<WorkerResult> r{
             makeResult("mgr", "Worker 1, busy", 1000, 100, 95, 0.04, 10, 0)
         };
         QVERIFY(ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{}));
         const std::string content = readAll(p);
-        QVERIFY(content.find("\"Worker 1, busy\"") != std::string::npos);
+        QVERIFY(content.find("Worker 1  busy") != std::string::npos);   // comma -> space
+        QVERIFY(content.find("\"") == std::string::npos);               // not quoted
         std::filesystem::remove(p);
     }
-    void perWorker_nameWithQuoteIsEscaped() {
+    void perWorker_nameQuoteLeftRaw() {
         const std::string p = tempCsv("quote.csv");
         std::vector<WorkerResult> r{
             makeResult("mgr", "drive \"C\"", 1000, 100, 95, 0.04, 10, 0)
         };
         QVERIFY(ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{}));
-        // Embedded quotes are doubled per CSV rules
-        QVERIFY(readAll(p).find("\"drive \"\"C\"\"\"") != std::string::npos);
+        // Quotes don't break column parsing, so they're written through verbatim.
+        QVERIFY(readAll(p).find("drive \"C\"") != std::string::npos);
         std::filesystem::remove(p);
     }
-    void perWorker_nameWithNewlineIsQuoted() {
-        // A worker name containing a newline must be CSV-quoted so the embedded
-        // line break stays inside one field (exercises escapeCsvField's '\n'
-        // branch, which the comma/quote tests don't reach).
+    void perWorker_nameNewlineSanitizedToSpace() {
         const std::string p = tempCsv("newline.csv");
         std::vector<WorkerResult> r{
             makeResult("mgr", "line1\nline2", 1000, 100, 95, 0.04, 10, 0)
         };
         QVERIFY(ResultsWriter::writeBatchResultsCsv(p, r, TestConfig{}));
-        QVERIFY(readAll(p).find("\"line1\nline2\"") != std::string::npos);
+        QVERIFY(readAll(p).find("line1 line2") != std::string::npos);   // newline -> space
         std::filesystem::remove(p);
     }
 
@@ -292,7 +291,7 @@ private slots:
         QVERIFY(!f.empty());
         QCOMPARE(std::stod(trim(f[6])), 0.0);
         QCOMPARE(std::stoi(trim(f[27])), 0);
-        QCOMPARE(std::stoi(trim(f[3])), 0);   // zero workers
+        QCOMPARE(std::stoi(trim(f[4])), 0);   // zero workers ([4] = #Workers)
         std::filesystem::remove(p);
     }
 

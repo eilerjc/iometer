@@ -53,14 +53,10 @@ public:
     static constexpr int COL_CPU_INTERRUPTS_SEC = 35;   // CPU Interrupts/sec
     static constexpr int COL_CPU_EFFECTIVENESS = 36;    // CPU Effectiveness
 
-    // Total expected columns in output
-    static constexpr int TOTAL_COLUMNS = 37;
+    // Total columns in the canonical results row (see core/ResultsCsv.h, which is
+    // now the single source of truth for the column layout / row writer).
+    static constexpr int TOTAL_COLUMNS = 80;
 
     // CSV format version (shared)
     static constexpr const char *VERSION = "1.1.0";
-
-private:
-    // Formatting helpers
-    static std::string formatDouble(double value, int precision = 2);
-    static std::string escapeCsvField(const std::string &field);
 };
