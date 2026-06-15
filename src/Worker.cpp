@@ -759,86 +759,53 @@ void Worker::SaveResults(ostream * file, int access_index, int result_type)
 		while ((TheOffendingChar = strpbrk(TheOffendingChar, "\n\r,")) != NULL)
 			*TheOffendingChar = ' ';
 
-		// Retrieving results for a single target in order to save it to a file.
+		// Build the target row label. Network targets show "local >> remote".
+		iocore::ResultRow row;
 		if (IsType(target->spec.type, GenericDiskType)) {
-			(*file) << "DISK" << "," << PrintName;
+			row.targetType = "DISK";
+			row.targetName = PrintName;
 		} else if (IsType(target->spec.type, TCPClientType)) {
-			// Show name as local address >> remote address.
-			(*file) << "NETWORK" << "," << manager->name << ":"
-			    << PrintName << " >> "
-			    << net_partner->manager->name << ":" << target->spec.tcp_info.remote_address;
+			row.targetType = "NETWORK";
+			row.targetName = std::string(manager->name) + ":" + PrintName + " >> "
+			    + net_partner->manager->name + ":" + target->spec.tcp_info.remote_address;
 		} else if (IsType(target->spec.type, VIClientType)) {
-			// Show name as local address >> remote address.
-			(*file) << "NETWORK" << "," << manager->name << ":"
-			    << PrintName << " >> "
-			    << net_partner->manager->name << ":" << target->spec.vi_info.remote_nic_name;
+			row.targetType = "NETWORK";
+			row.targetName = std::string(manager->name) + ":" + PrintName + " >> "
+			    + net_partner->manager->name + ":" + target->spec.vi_info.remote_nic_name;
 		} else {
-			(*file) << "UNKNOWN" << "," << PrintName;
+			row.targetType = "UNKNOWN";
+			row.targetName = PrintName;
 		}
 
-		(*file) << ",,,,"	// space for access spec name, workers, managers and targets running.
-		    << "," << target->results[WHOLE_TEST_PERF].IOps
-		    << "," << target->results[WHOLE_TEST_PERF].read_IOps
-		    << "," << target->results[WHOLE_TEST_PERF].write_IOps
-		    << "," << target->results[WHOLE_TEST_PERF].MBps_Bin
-		    << "," << target->results[WHOLE_TEST_PERF].read_MBps_Bin
-		    << "," << target->results[WHOLE_TEST_PERF].write_MBps_Bin
-		    << "," << target->results[WHOLE_TEST_PERF].MBps_Dec
-		    << "," << target->results[WHOLE_TEST_PERF].read_MBps_Dec
-		    << "," << target->results[WHOLE_TEST_PERF].write_MBps_Dec
-		    << "," << target->results[WHOLE_TEST_PERF].transactions_per_second
-		    << "," << target->results[WHOLE_TEST_PERF].connections_per_second
-		    << "," << target->results[WHOLE_TEST_PERF].ave_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_read_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_write_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_transaction_latency
-		    << "," << target->results[WHOLE_TEST_PERF].ave_connection_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_read_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_write_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_transaction_latency
-		    << "," << target->results[WHOLE_TEST_PERF].max_connection_latency
-		    << "," << target->results[WHOLE_TEST_PERF].total_errors
-		    << "," << target->results[WHOLE_TEST_PERF].raw.read_errors
-		    << "," << target->results[WHOLE_TEST_PERF].raw.write_errors
-		    << "," << target->results[WHOLE_TEST_PERF].raw.bytes_read
-		    << "," << target->results[WHOLE_TEST_PERF].raw.bytes_written
-		    << "," << target->results[WHOLE_TEST_PERF].raw.read_count
-		    << "," << target->results[WHOLE_TEST_PERF].raw.write_count
-		    << "," << target->results[WHOLE_TEST_PERF].raw.connection_count << ",";
+		// Per-target metrics [6-34] come from the target's own results.
+		iocore::fillResultRow(row, target->results[WHOLE_TEST_PERF]);
+		// MFC quirk (preserved): a target row's raw response block [36-44] and
+		// latency bins [59-79] are taken from the WORKER's results, not the
+		// target's. fillResultRow filled them from the target, so override here.
+		const Results &wres = results[WHOLE_TEST_PERF];
+		row.rawReadLatSum  = wres.raw.read_latency_sum;
+		row.rawWriteLatSum = wres.raw.write_latency_sum;
+		row.rawTransLatSum = wres.raw.transaction_latency_sum;
+		row.rawConnLatSum  = wres.raw.connection_latency_sum;
+		row.rawMaxRead     = wres.raw.max_raw_read_latency;
+		row.rawMaxWrite    = wres.raw.max_raw_write_latency;
+		row.rawMaxTrans    = wres.raw.max_raw_transaction_latency;
+		row.rawMaxConn     = wres.raw.max_raw_connection_latency;
+		row.rawCounterTime = wres.raw.counter_time;
+		for (stat = 0; stat < LATENCY_BIN_SIZE; stat++)
+			row.latencyBin[stat] = wres.raw.latency_bin[stat];
 
-		if (GetConnectionRate(ActiveType) == ENABLED_VALUE)
-			(*file) << GetTransPerConn(ActiveType);
-		else
-			(*file) << AMBIGUOUS_VALUE;
-
-		(*file) << "," << results[WHOLE_TEST_PERF].raw.read_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.write_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.transaction_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.connection_latency_sum
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_read_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_write_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_transaction_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.max_raw_connection_latency
-		    << "," << results[WHOLE_TEST_PERF].raw.counter_time;
-
-		(*file) << "," << GetDiskStart((TargetType) (GenericDiskType | ActiveType))
-		    << "," << GetDiskSize((TargetType) (GenericDiskType | ActiveType))
-		    << "," << GetQueueDepth(ActiveType);
-
-		for (stat = 0; stat < CPU_UTILIZATION_RESULTS; stat++)
-			(*file) << ",";	// Space for CPU utilization
-
-		(*file) << "," << manager->timer_resolution << ",,"; // Space for IRQ/sec and CPU_effectiveness.		
-
-		for (stat = 0; stat < NI_COMBINE_RESULTS + TCP_RESULTS; stat++)
-			(*file) << ",";	// Space for network results
-
-		for (stat = 0; stat < LATENCY_BIN_SIZE; stat++) {
-			(*file) << "," << results[WHOLE_TEST_PERF].raw.latency_bin[stat];
-		}
-
-		(*file) << endl;
+		// access spec / managers / workers / disks stay blank for target rows.
+		row.transPerConn = (GetConnectionRate(ActiveType) == ENABLED_VALUE)
+		                   ? GetTransPerConn(ActiveType) : AMBIGUOUS_VALUE;
+		row.rawBlock = true;
+		row.startingSector = std::to_string(GetDiskStart((TargetType) (GenericDiskType | ActiveType)));
+		row.maxSize        = std::to_string(GetDiskSize((TargetType) (GenericDiskType | ActiveType)));
+		row.queueDepth     = std::to_string(GetQueueDepth(ActiveType));
+		row.cpuNetBlock = false;
+		row.procSpeedPresent = true;
+		row.procSpeed = manager->timer_resolution;
+		iocore::writeResultRow(*file, row);
 	}
 	if (IsType(Type(), GenericClientType))
 		delete target;
