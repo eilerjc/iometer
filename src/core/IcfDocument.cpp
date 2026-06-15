@@ -3,6 +3,7 @@
 #include "AccessSpecCatalog.h"   // smartNameText (shared with the live SmartName)
 #include <cctype>
 #include <cstdlib>
+#include <limits>
 
 namespace iocore {
 
@@ -829,7 +830,11 @@ bool IcfDocument::loadAccessSpecs(std::vector<IcfAccessSpec> &out,
         l.delay = 0;   l.burst = 1;    l.align = 2048; l.reply = 0;
 
         f >> l.size >> l.ofSize >> l.reads >> l.random >> l.delay >> l.burst;
-        f.ignore(1, '\n');
+        // Skip the rest of the line up to and INCLUDING the newline. The old
+        // ignore(1,'\n') consumed only one char, so a CRLF ('\r\n') left the '\n'
+        // behind and corrupted the next read (MFC's text-mode stream never saw
+        // the '\r'; IcfStream is binary). Robust for LF and CRLF alike.
+        f.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         if (l.ofSize > 100 || l.reads > 100 || l.random > 100
             || l.ofSize < 0 || l.reads < 0 || l.random < 0)
