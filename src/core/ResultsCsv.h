@@ -145,4 +145,43 @@ inline void writeResultRow(std::ostream &out, const ResultRow &r)
     out << "\n";
 }
 
+// Copy the measured / raw / CPU / network / latency-bin fields from a canonical
+// MFC Results struct into a ResultRow (the [6-44], [48-58], [59-79] columns).
+// Templated so core stays free of the MFC Results type (the decodeRawResult
+// pattern); only MFC instantiates it. The caller sets the metadata columns
+// ([0-5]), transPerConn, sector/size/queue, and the rawBlock / cpuNetBlock /
+// procSpeed variant fields. Array indices match IOCommon.h
+// (CPU_UTILIZATION_RESULTS=5, CPU_IRQ=5, NI_PACKETS=0, NI_ERRORS=1,
+// TCP_SEGMENTS_RESENT=0, LATENCY_BIN_SIZE=21).
+template <class ResultsT>
+void fillResultRow(ResultRow &row, const ResultsT &res)
+{
+    row.iops = res.IOps; row.readIops = res.read_IOps; row.writeIops = res.write_IOps;
+    row.mbpsBin = res.MBps_Bin; row.readMbpsBin = res.read_MBps_Bin; row.writeMbpsBin = res.write_MBps_Bin;
+    row.mbpsDec = res.MBps_Dec; row.readMbpsDec = res.read_MBps_Dec; row.writeMbpsDec = res.write_MBps_Dec;
+    row.transPerSec = res.transactions_per_second; row.connPerSec = res.connections_per_second;
+    row.aveLatency = res.ave_latency; row.aveRead = res.ave_read_latency; row.aveWrite = res.ave_write_latency;
+    row.aveTrans = res.ave_transaction_latency; row.aveConn = res.ave_connection_latency;
+    row.maxLatency = res.max_latency; row.maxRead = res.max_read_latency; row.maxWrite = res.max_write_latency;
+    row.maxTrans = res.max_transaction_latency; row.maxConn = res.max_connection_latency;
+
+    row.totalErrors = res.total_errors; row.readErrors = res.raw.read_errors; row.writeErrors = res.raw.write_errors;
+    row.bytesRead = res.raw.bytes_read; row.bytesWritten = res.raw.bytes_written;
+    row.readCount = res.raw.read_count; row.writeCount = res.raw.write_count;
+    row.connectionCount = res.raw.connection_count;
+
+    row.rawReadLatSum = res.raw.read_latency_sum; row.rawWriteLatSum = res.raw.write_latency_sum;
+    row.rawTransLatSum = res.raw.transaction_latency_sum; row.rawConnLatSum = res.raw.connection_latency_sum;
+    row.rawMaxRead = res.raw.max_raw_read_latency; row.rawMaxWrite = res.raw.max_raw_write_latency;
+    row.rawMaxTrans = res.raw.max_raw_transaction_latency; row.rawMaxConn = res.raw.max_raw_connection_latency;
+    row.rawCounterTime = res.raw.counter_time;
+
+    for (int i = 0; i < 5; ++i) row.cpuUtil[i] = res.CPU_utilization[i];
+    row.interrupts = res.CPU_utilization[5];          // CPU_IRQ
+    row.effectiveness = res.CPU_effectiveness;
+    row.niPackets = res.ni_statistics[0]; row.niErrors = res.ni_statistics[1];
+    row.tcpRetrans = res.tcp_statistics[0];
+    for (int i = 0; i < 21; ++i) row.latencyBin[i] = res.raw.latency_bin[i];
+}
+
 } // namespace iocore

@@ -75,6 +75,7 @@
 #include "core/IcfDocument.h"	// shared MANAGER LIST parse result types
 #include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 #include "core/ResultDecode.h"	// shared raw-counter -> latency decode (iocore)
+#include "core/ResultsCsv.h"	// canonical results-CSV row writer (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -610,79 +611,30 @@ void Manager::SaveResults(ostream * file, int access_index, int result_type)
 	if (!ActiveInCurrentTest())
 		return;
 
-	// Save manager's results.
-	(*file) << "MANAGER" << "," << name << "," << GetCommonAccessSpec(access_index, specname)
-	    << ","		// Space for managers running.
-	    << "," << WorkerCount(ActiveType)
-	    << "," << TargetCount(ActiveType) + WorkerCount((TargetType) (GenericClientType | ActiveType))
-	    << "," << results[WHOLE_TEST_PERF].IOps
-	    << "," << results[WHOLE_TEST_PERF].read_IOps
-	    << "," << results[WHOLE_TEST_PERF].write_IOps
-	    << "," << results[WHOLE_TEST_PERF].MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].transactions_per_second
-	    << "," << results[WHOLE_TEST_PERF].connections_per_second
-	    << "," << results[WHOLE_TEST_PERF].ave_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_read_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_write_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].max_latency
-	    << "," << results[WHOLE_TEST_PERF].max_read_latency
-	    << "," << results[WHOLE_TEST_PERF].max_write_latency
-	    << "," << results[WHOLE_TEST_PERF].max_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].max_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].total_errors
-	    << "," << results[WHOLE_TEST_PERF].raw.read_errors << "," << results[WHOLE_TEST_PERF].raw.write_errors
-	    // Save raw result information as well.
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_read
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_written
-	    << "," << results[WHOLE_TEST_PERF].raw.read_count
-	    << "," << results[WHOLE_TEST_PERF].raw.write_count
-	    << "," << results[WHOLE_TEST_PERF].raw.connection_count << ",";
-
-	if (GetConnectionRate(ActiveType) == ENABLED_VALUE)
-		(*file) << GetTransPerConn(ActiveType);
-	else
-		(*file) << AMBIGUOUS_VALUE;
-
-	(*file) << "," << results[WHOLE_TEST_PERF].raw.read_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.write_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.transaction_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.connection_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_read_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_write_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.counter_time;
-
-	(*file) << "," << GetDiskStart((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetDiskSize((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetQueueDepth(ActiveType);
-
-	for (stat = 0; stat < CPU_UTILIZATION_RESULTS; stat++)
-		(*file) << "," << results[WHOLE_TEST_PERF].CPU_utilization[stat];
-
-		(*file) << "," << timer_resolution
-		
-		<< "," << results[WHOLE_TEST_PERF].CPU_utilization[CPU_IRQ]
-	    << "," << results[WHOLE_TEST_PERF].CPU_effectiveness;
-
-	for (stat = 0; stat < NI_COMBINE_RESULTS; stat++)
-		(*file) << "," << results[WHOLE_TEST_PERF].ni_statistics[stat];
-
-	for (stat = 0; stat < TCP_RESULTS; stat++)
-		(*file) << "," << results[WHOLE_TEST_PERF].tcp_statistics[stat];
-
-	for (int x = 0; x < LATENCY_BIN_SIZE; x++) {
-		(*file) << "," << results[WHOLE_TEST_PERF].raw.latency_bin[x];
+	// Save manager's results (one canonical row via iocore::writeResultRow). The
+	// manager level fills the raw block and CPU/network blocks, blanks the
+	// #Managers column, and reports timer_resolution as the processor-speed column.
+	{
+		iocore::ResultRow row;
+		iocore::fillResultRow(row, results[WHOLE_TEST_PERF]);
+		row.targetType = "MANAGER";
+		row.targetName = name;
+		row.accessSpec = GetCommonAccessSpec(access_index, specname);
+		row.managers   = "";		// space for managers running
+		row.workers    = std::to_string(WorkerCount(ActiveType));
+		row.disks      = std::to_string(TargetCount(ActiveType)
+		                   + WorkerCount((TargetType) (GenericClientType | ActiveType)));
+		row.transPerConn = (GetConnectionRate(ActiveType) == ENABLED_VALUE)
+		                   ? GetTransPerConn(ActiveType) : AMBIGUOUS_VALUE;
+		row.rawBlock = true;
+		row.startingSector = std::to_string(GetDiskStart((TargetType) (GenericDiskType | ActiveType)));
+		row.maxSize        = std::to_string(GetDiskSize((TargetType) (GenericDiskType | ActiveType)));
+		row.queueDepth     = std::to_string(GetQueueDepth(ActiveType));
+		row.cpuNetBlock = true;
+		row.procSpeedPresent = true;
+		row.procSpeed = timer_resolution;
+		iocore::writeResultRow(*file, row);
 	}
-
-	(*file) << endl;
 
 	// Save individual CPU results.
 	for (int cpu = 0; cpu < processors; cpu++) {

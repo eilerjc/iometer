@@ -80,6 +80,7 @@
 #include "core/IcfDocument.h"	// shared worker parse result types
 #include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 #include "core/ResultDecode.h"	// shared raw-counter -> rates/latency decode (iocore)
+#include "core/ResultsCsv.h"	// canonical results-CSV row writer (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -682,77 +683,31 @@ void Worker::SaveResults(ostream * file, int access_index, int result_type)
 	if (!ActiveInCurrentTest())
 		return;
 
-	// Writing results for worker.
-	(*file) << "WORKER" << "," << name << "," << GetAccessSpec(access_index)->name << ",,";	// space for managers running and workers running.
-
-	if (IsType(Type(), GenericClientType))
-		(*file) << "," << 1;	// currently only 1 target (server) per client
-	else
-		(*file) << "," << TargetCount(ActiveType);
-
-	(*file) << "," << results[WHOLE_TEST_PERF].IOps
-	    << "," << results[WHOLE_TEST_PERF].read_IOps
-	    << "," << results[WHOLE_TEST_PERF].write_IOps
-	    << "," << results[WHOLE_TEST_PERF].MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].transactions_per_second
-	    << "," << results[WHOLE_TEST_PERF].connections_per_second
-	    << "," << results[WHOLE_TEST_PERF].ave_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_read_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_write_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].max_latency
-	    << "," << results[WHOLE_TEST_PERF].max_read_latency
-	    << "," << results[WHOLE_TEST_PERF].max_write_latency
-	    << "," << results[WHOLE_TEST_PERF].max_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].max_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].total_errors
-	    << "," << results[WHOLE_TEST_PERF].raw.read_errors << "," << results[WHOLE_TEST_PERF].raw.write_errors
-	    // Writing raw result information for completed I/Os.
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_read
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_written
-	    << "," << results[WHOLE_TEST_PERF].raw.read_count
-	    << "," << results[WHOLE_TEST_PERF].raw.write_count
-	    << "," << results[WHOLE_TEST_PERF].raw.connection_count << ",";
-
-	if (GetConnectionRate(ActiveType) == ENABLED_VALUE)
-		(*file) << GetTransPerConn(ActiveType);
-	else
-		(*file) << AMBIGUOUS_VALUE;
-
-	(*file) << "," << results[WHOLE_TEST_PERF].raw.read_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.write_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.transaction_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.connection_latency_sum
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_read_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_write_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.max_raw_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].raw.counter_time;
-
-	(*file) << "," << GetDiskStart((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetDiskSize((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetQueueDepth(ActiveType);
-
-	for (stat = 0; stat < CPU_UTILIZATION_RESULTS; stat++)
-		(*file) << ",";	// Space for CPU utilization
-
-	(*file) << "," <<  manager->timer_resolution << ",,"; // Space for IRQ/sec, CPU_effectiveness
-
-	for (stat = 0; stat < NI_COMBINE_RESULTS + TCP_RESULTS; stat++) {
-		(*file) << ",";	// Space for network results
+	// Writing results for worker (one canonical row via iocore::writeResultRow).
+	// The worker level fills the raw block but blanks the #Managers/#Workers
+	// columns and the whole CPU/network block; processor speed is the timer res.
+	{
+		iocore::ResultRow row;
+		iocore::fillResultRow(row, results[WHOLE_TEST_PERF]);
+		row.targetType = "WORKER";
+		row.targetName = name;
+		row.accessSpec = GetAccessSpec(access_index)->name;
+		row.managers   = "";		// space for managers running
+		row.workers    = "";		// space for workers running
+		row.disks      = IsType(Type(), GenericClientType)
+		                   ? "1"		// currently only 1 target (server) per client
+		                   : std::to_string(TargetCount(ActiveType));
+		row.transPerConn = (GetConnectionRate(ActiveType) == ENABLED_VALUE)
+		                   ? GetTransPerConn(ActiveType) : AMBIGUOUS_VALUE;
+		row.rawBlock = true;
+		row.startingSector = std::to_string(GetDiskStart((TargetType) (GenericDiskType | ActiveType)));
+		row.maxSize        = std::to_string(GetDiskSize((TargetType) (GenericDiskType | ActiveType)));
+		row.queueDepth     = std::to_string(GetQueueDepth(ActiveType));
+		row.cpuNetBlock = false;	// workers don't carry CPU/network stats
+		row.procSpeedPresent = true;
+		row.procSpeed = manager->timer_resolution;
+		iocore::writeResultRow(*file, row);
 	}
-
-	for (stat = 0; stat < LATENCY_BIN_SIZE; stat++) {
-		(*file) << "," << results[WHOLE_TEST_PERF].raw.latency_bin[stat];
-	}
-
-	(*file) << endl;
 
 	// If requested, save target results.
 	if (result_type != RecordAll)

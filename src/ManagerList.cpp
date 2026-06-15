@@ -416,72 +416,31 @@ void ManagerList::SaveResults(ostream * file, int access_index, int result_type)
 	// both GUIs share one definition).
 	iocore::writeResultsHeader(*file);
 
-	// Writing manager list results
-
-	(*file) << "ALL" << "," << "All" << "," << GetCommonAccessSpec(access_index, specname)
-	    << "," << ManagerCount(ActiveType)
-	    << "," << WorkerCount(ActiveType)
-	    << "," << TargetCount(ActiveType) + WorkerCount((TargetType) (GenericClientType | ActiveType))
-	    << "," << results[WHOLE_TEST_PERF].IOps
-	    << "," << results[WHOLE_TEST_PERF].read_IOps
-	    << "," << results[WHOLE_TEST_PERF].write_IOps
-	    << "," << results[WHOLE_TEST_PERF].MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Bin
-	    << "," << results[WHOLE_TEST_PERF].MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].read_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].write_MBps_Dec
-	    << "," << results[WHOLE_TEST_PERF].transactions_per_second
-	    << "," << results[WHOLE_TEST_PERF].connections_per_second
-	    << "," << results[WHOLE_TEST_PERF].ave_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_read_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_write_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].ave_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].max_latency
-	    << "," << results[WHOLE_TEST_PERF].max_read_latency
-	    << "," << results[WHOLE_TEST_PERF].max_write_latency
-	    << "," << results[WHOLE_TEST_PERF].max_transaction_latency
-	    << "," << results[WHOLE_TEST_PERF].max_connection_latency
-	    << "," << results[WHOLE_TEST_PERF].total_errors
-	    << "," << results[WHOLE_TEST_PERF].raw.read_errors
-	    << "," << results[WHOLE_TEST_PERF].raw.write_errors
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_read
-	    << "," << results[WHOLE_TEST_PERF].raw.bytes_written
-	    << "," << results[WHOLE_TEST_PERF].raw.read_count
-	    << "," << results[WHOLE_TEST_PERF].raw.write_count
-	    << "," << results[WHOLE_TEST_PERF].raw.connection_count << ",";
-
-	if (GetConnectionRate(ActiveType) == ENABLED_VALUE)
-		(*file) << GetTransPerConn(ActiveType);
-	else
-		(*file) << AMBIGUOUS_VALUE;
-
-	(*file) << ",,,,,,,,,";	// unused raw results for manager list
-
-	(*file) << "," << GetDiskStart((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetDiskSize((TargetType) (GenericDiskType | ActiveType))
-	    << "," << GetQueueDepth(ActiveType);
-
-	for (stat = 0; stat < CPU_UTILIZATION_RESULTS; stat++)
-		(*file) << "," << results[WHOLE_TEST_PERF].CPU_utilization[stat];
-
-	(*file) << ","		// processor speed
-	    << "," << results[WHOLE_TEST_PERF].CPU_utilization[CPU_IRQ];
-
-	(*file) << "," << results[WHOLE_TEST_PERF].CPU_effectiveness;
-
-	for (stat = 0; stat < NI_COMBINE_RESULTS; stat++)
-		(*file) << "," << results[WHOLE_TEST_PERF].ni_statistics[stat];
-
-	for (stat = 0; stat < TCP_RESULTS; stat++)
-		(*file) << "," << results[WHOLE_TEST_PERF].tcp_statistics[stat];
-
-	for (stat = 0; stat < LATENCY_BIN_SIZE; stat++) {
-		(*file) << "," << results[WHOLE_TEST_PERF].raw.latency_bin[stat];
+	// Writing manager list results (the ALL aggregate row). The canonical
+	// 80-column layout is emitted by iocore::writeResultRow; this builds the row
+	// from the manager-list results + live counts. The manager-list level leaves
+	// the per-target raw block blank (rawBlock=false) and the processor-speed
+	// column blank (procSpeedPresent=false).
+	{
+		iocore::ResultRow row;
+		iocore::fillResultRow(row, results[WHOLE_TEST_PERF]);
+		row.targetType = "ALL";
+		row.targetName = "All";
+		row.accessSpec = GetCommonAccessSpec(access_index, specname);
+		row.managers   = std::to_string(ManagerCount(ActiveType));
+		row.workers    = std::to_string(WorkerCount(ActiveType));
+		row.disks      = std::to_string(TargetCount(ActiveType)
+		                   + WorkerCount((TargetType) (GenericClientType | ActiveType)));
+		row.transPerConn = (GetConnectionRate(ActiveType) == ENABLED_VALUE)
+		                   ? GetTransPerConn(ActiveType) : AMBIGUOUS_VALUE;
+		row.rawBlock = false;
+		row.startingSector = std::to_string(GetDiskStart((TargetType) (GenericDiskType | ActiveType)));
+		row.maxSize        = std::to_string(GetDiskSize((TargetType) (GenericDiskType | ActiveType)));
+		row.queueDepth     = std::to_string(GetQueueDepth(ActiveType));
+		row.cpuNetBlock = true;
+		row.procSpeedPresent = false;
+		iocore::writeResultRow(*file, row);
 	}
-
-	(*file) << endl;
 
 	// If requested, save manager results.
 	if (result_type == RecordAll || result_type == RecordNoTargets || result_type == RecordNoWorkers) {
