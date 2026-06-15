@@ -97,6 +97,7 @@ set(IOMETER_CORE_HEADERS
     ../core/IcfWriter.h
     ../core/ResultDecode.h
     ../core/ResultStatCatalog.h
+    ../core/ResultsCsv.h
 )
 add_library(IometerCore STATIC ${IOMETER_CORE_SOURCES} ${IOMETER_CORE_HEADERS})
 # ../core for the manager core; .. (src root) for the project-wide protocol
