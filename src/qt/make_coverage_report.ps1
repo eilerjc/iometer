@@ -42,6 +42,7 @@ $ErrorActionPreference = "Continue"
 $here = $PSScriptRoot
 $repo = (Resolve-Path (Join-Path $here "..\..")).Path
 $out  = Join-Path $repo "coverage"
+$script:guiTestsFailed = $false       # set if -IncludeGuiTests has a failing test
 
 $llvmHtml = Join-Path $here "build_cov\coverage\html"
 $llvmSum  = Join-Path $here "build_cov\coverage\summary.txt"
@@ -63,6 +64,7 @@ if (-not $NoCollect) {
     if ($IncludeGuiTests) {
         Sect "[prep] Foreground GUI-interaction coverage (do not touch mouse/keyboard)..."
         & (Join-Path $repo "gui_tests\collect_gui_coverage.ps1")
+        $script:guiTestsFailed = ($LASTEXITCODE -ne 0)   # surfaced in the final summary
     }
 
     Sect "[1/3] llvm-cov: line + branch (core + Qt)..."
@@ -166,14 +168,21 @@ if ($Publish) {
     & git checkout -q -b $Branch
     & git add -A
     & git -c user.name="coverage-bot" -c user.email="noreply@eiler.net" commit -q -m "Coverage report (generated $ts)"
+    $localSha = (& git rev-parse HEAD).Trim()
     & git push -q --force $originUrl "$($Branch):$Branch"
     $pushOk = $LASTEXITCODE -eq 0
+    # Verify the remote branch actually advanced to the commit we just pushed,
+    # not just that git returned 0 (a stale/cached success would slip through).
+    $remoteSha = $null
+    if ($pushOk) { $remoteSha = (((& git ls-remote $originUrl $Branch) -split "\s+")[0]).Trim() }
     Pop-Location
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-    if ($pushOk) {
+    if ($pushOk -and $remoteSha -eq $localSha) {
         $slug = ($originUrl -replace '.*github\.com[:/]','' -replace '\.git$','')
         $owner = ($slug -split '/')[0]; $name = ($slug -split '/')[1]
-        Write-Host "  pushed $Branch. Pages URL (once enabled): https://$owner.github.io/$name/" -ForegroundColor Green
+        Write-Host "  pushed + verified $Branch @ $($localSha.Substring(0,12)). Pages URL (once enabled): https://$owner.github.io/$name/" -ForegroundColor Green
+    } elseif ($pushOk) {
+        Write-Host "  push reported OK but remote $Branch is $remoteSha, expected $localSha - VERIFY MANUALLY" -ForegroundColor Red
     } else {
         Write-Host "  push FAILED" -ForegroundColor Red
     }
@@ -183,4 +192,8 @@ Sect "Done."
 Write-Host "  Full (line, all incl MFC) : $occLine"
 Write-Host "  Branch (core+Qt)          : line $llvmLine / branch $llvmBranch"
 Write-Host "  Landing: $index"
+if ($script:guiTestsFailed) {
+    Write-Host "  WARNING: a GUI-interaction test FAILED (see [prep] above); the published" -ForegroundColor Red
+    Write-Host "           MFC line data includes a failed run - investigate before trusting it." -ForegroundColor Red
+}
 if ($Open -and (Test-Path $index)) { Start-Process $index }

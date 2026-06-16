@@ -36,16 +36,34 @@ $tests = @(
 )
 
 $env:IOCOV_DIR = $rawDir
+$failed = @()                          # tests whose assertion failed (non-zero exit)
 foreach ($t in $tests) {
     $tag = [System.IO.Path]::GetFileNameWithoutExtension($t)
     $env:IOCOV_TAG = $tag
     Write-Host "=== $t (covering) ===" -ForegroundColor Cyan
     & python (Join-Path $PSScriptRoot $t)
-    $cov = Join-Path $rawDir "$tag.cov"
-    if (Test-Path $cov) { Write-Host "  [cov] $tag ($([math]::Round((Get-Item $cov).Length/1kb))kb)" -ForegroundColor Green }
-    else                { Write-Host "  [miss] $tag (no .cov produced)" -ForegroundColor Yellow }
+    $code = $LASTEXITCODE              # OpenCppCoverage records a .cov even when the
+    $cov = Join-Path $rawDir "$tag.cov" # test ASSERTION fails, so check the exit code
+    $kb = if (Test-Path $cov) { [math]::Round((Get-Item $cov).Length / 1kb) } else { 0 }
+    if ($code -ne 0) {
+        $failed += $t
+        Write-Host "  [FAIL] $tag (exit $code) - run folded into coverage but assertion failed" -ForegroundColor Red
+    } elseif (Test-Path $cov) {
+        Write-Host "  [cov] $tag (${kb}kb)" -ForegroundColor Green
+    } else {
+        $failed += $t
+        Write-Host "  [miss] $tag (passed but produced no .cov)" -ForegroundColor Yellow
+    }
 }
 Remove-Item Env:\IOCOV_DIR, Env:\IOCOV_TAG -ErrorAction SilentlyContinue
+
+Write-Host ""
+if ($failed.Count -gt 0) {
+    Write-Host "FAIL: $($failed.Count)/$($tests.Count) GUI test(s) did not pass: $($failed -join ', ')" -ForegroundColor Red
+    Write-Host "      Coverage below includes those runs - do not trust/publish it until they pass." -ForegroundColor Yellow
+} else {
+    Write-Host "PASS: all $($tests.Count) GUI tests passed under coverage" -ForegroundColor Green
+}
 
 $covFiles = Get-ChildItem $rawDir -Filter *.cov -ErrorAction SilentlyContinue
 if (-not $covFiles) { Write-Host "ERROR: no coverage captured" -ForegroundColor Red; exit 1 }
@@ -67,3 +85,6 @@ $index = Join-Path $htmlDir "index.html"
 Write-Host ""
 Write-Host "GUI-interaction coverage report: $index" -ForegroundColor Cyan
 if ($Open -and (Test-Path $index)) { Start-Process $index }
+
+# Non-zero exit if any test failed, so callers (make_coverage_report.ps1) can tell.
+if ($failed.Count -gt 0) { exit 1 }
