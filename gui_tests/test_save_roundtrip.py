@@ -12,7 +12,6 @@ import time
 import subprocess
 import pathlib
 
-import pygetwindow as gw
 import iometer_gui as g
 
 FIXTURE = "worker_rich"
@@ -20,10 +19,6 @@ ICF = g.REPO / "test" / "fixtures" / "icf_compat" / (FIXTURE + ".icf")
 GOLDEN = g.REPO / "test" / "fixtures" / "icf_compat" / "golden_save" / (FIXTURE + ".save.txt")
 DYNAMOTEST = g.REPO / "src" / "msvs11" / "Release" / "x64" / "dynamotest.exe"
 OUT = pathlib.Path("C:/tmp") / ("gui_save_" + FIXTURE + ".icf")
-
-# Save-dialog control offsets (relative to the dialog's top-left, 571x622 layout).
-DLG_FILENAME = (320, 370)
-DLG_SAVE_BTN = (519, 370)
 
 
 def normalize(lines):
@@ -45,42 +40,12 @@ def run_gui_save():
     g.position(win, 50, 30, 1500, 950); time.sleep(1.5)
     win = g.find_window() or win
 
-    dlg = None                            # open Save dialog (retry: focus can flake)
-    for _ in range(3):
-        try: win.activate()
-        except Exception: pass
-        time.sleep(0.3)
-        g.click_window(win, *g.TB_SAVE)
-        for _ in range(8):
-            dlg = next((w for w in gw.getAllWindows()
-                        if w.title.strip() == "Save Test Configuration File" and w.visible), None)
-            if dlg: break
-            time.sleep(0.5)
-        if dlg: break
-    if not dlg:
-        return None, "Save dialog did not appear"
-
-    try: dlg.activate()
-    except Exception: pass
-    time.sleep(0.5)
-
-    import pyautogui
-    # The File name field opens with "Iometer" pre-selected, so typing replaces it
-    # (clicking/Ctrl+A/triple-click don't reliably select-all in this combo edit).
-    time.sleep(0.5)
-    pyautogui.write(str(OUT), interval=0.02)
-    g.click_window(dlg, *DLG_SAVE_BTN)          # Save (all six checkboxes default-checked)
-    time.sleep(0.5)
-    pyautogui.press("enter")                    # confirm any "replace?" prompt
-
-    for _ in range(20):                   # wait for the file
-        if OUT.exists() and OUT.stat().st_size > 0:
-            break
-        time.sleep(0.5)
+    if not g.gui_save(win, OUT):          # drive File>Save (all sections)
+        g.kill_iometer()
+        return None, "GUI Save did not write the file"
+    lines = OUT.read_text().splitlines(keepends=True)
     g.kill_iometer()
-    if not OUT.exists():
-        return None, f"{OUT} was not written"
-    return OUT.read_text().splitlines(keepends=True), None
+    return lines, None
 
 
 def main():

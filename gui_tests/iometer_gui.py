@@ -95,15 +95,14 @@ def click_window(win, rx, ry):
 
 
 def set_field(win, rx, ry, text):
-    """Replace a text/combo field's contents. Ctrl+A and triple-click don't
-    reliably select-all in CFileDialog combo edits, so explicitly select the
-    whole line (End, then Shift+Home) and delete before typing."""
-    pyautogui.click(win.left + rx, win.top + ry)   # focus the field
-    time.sleep(0.2)
-    pyautogui.press("end")
-    pyautogui.keyDown("shift"); pyautogui.press("home"); pyautogui.keyUp("shift")
-    pyautogui.press("delete")
-    time.sleep(0.1)
+    """Replace a field's contents using only plain keys. Modifier-based selection
+    (Ctrl+A, Shift+Home) and triple-click proved unreliable via PyAutoGUI in these
+    MFC edits/combos, so just focus and clear in BOTH directions (backspace clears
+    left of the cursor, delete clears right), then type."""
+    pyautogui.click(win.left + rx, win.top + ry)
+    time.sleep(0.25)
+    pyautogui.press("backspace", presses=160, interval=0)   # clear left of cursor
+    pyautogui.press("delete", presses=160, interval=0)       # clear right of cursor
     pyautogui.write(text, interval=0.01)
     time.sleep(0.2)
 
@@ -112,6 +111,50 @@ def set_field(win, rx, ry, text):
 TB_OPEN = (33, 54)
 TB_SAVE = (70, 54)
 TB_START = (275, 54)
+
+
+SAVE_DIALOG_TITLE = "Save Test Configuration File"
+SAVE_DLG_SAVE_BTN = (519, 370)   # "Save" button, relative to the dialog (571x622)
+
+
+def gui_save(win, out_path):
+    """Drive File>Save to `out_path` with all sections (the default-checked boxes).
+    Returns True once the file is written. Must run in the foreground."""
+    import os
+    out_path = str(out_path)
+    if os.path.exists(out_path):
+        os.remove(out_path)
+
+    dlg = None                                  # opening can flake on focus; retry
+    for _ in range(3):
+        try: win.activate()
+        except Exception: pass
+        time.sleep(0.3)
+        click_window(win, *TB_SAVE)
+        for _ in range(8):
+            dlg = next((w for w in gw.getAllWindows()
+                        if w.title.strip() == SAVE_DIALOG_TITLE and w.visible), None)
+            if dlg:
+                break
+            time.sleep(0.5)
+        if dlg:
+            break
+    if not dlg:
+        return False
+
+    try: dlg.activate()
+    except Exception: pass
+    time.sleep(0.5)
+    # File name field opens with "Iometer" pre-selected -> type to replace.
+    pyautogui.write(out_path, interval=0.02)
+    click_window(dlg, *SAVE_DLG_SAVE_BTN)
+    time.sleep(0.5)
+    pyautogui.press("enter")                    # confirm any "replace?" prompt
+    for _ in range(20):
+        if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+            return True
+        time.sleep(0.5)
+    return os.path.exists(out_path)
 
 
 def screenshot_window(win, name):

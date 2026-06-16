@@ -19,9 +19,13 @@ automated coverage.
 - A built MFC `Release|x64` `IOmeter.exe`.
 
 ## Tests
+Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
 - `test_save_roundtrip.py` - loads `worker_rich` (+ connected dynamotest), drives
-  **File > Save**, and asserts the written ICF byte-matches
+  **File > Save**, asserts the written ICF byte-matches
   `golden_save/worker_rich.save.txt`. Proves the GUI Save path end to end.
+- `test_edit_testsetup.py` - the edit->save->verify pattern: changes the Test
+  Description on the Test Setup tab, Saves, confirms the new text lands in the
+  ICF. This is how interaction tests guard the data model.
 
 ## Gotchas learned (codified in the scripts)
 - Main window title is `Iometer <version>  [Built: ...]`; match `^Iometer\s\d`
