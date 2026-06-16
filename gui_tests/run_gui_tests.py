@@ -18,6 +18,7 @@ TESTS = [
     "test_edit_worker.py",
     "test_assign_spec.py",
     "test_remove_spec.py",
+    "test_reorder_spec.py",
 ]
 
 

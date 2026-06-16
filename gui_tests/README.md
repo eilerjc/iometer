@@ -37,6 +37,8 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
 - `test_remove_spec.py` - the mirror: removes the worker's assigned spec via
   `Remove >>` and verifies the assigned block is empty. Together with the assign
   test, covers both directions of the assignment model.
+- `test_reorder_spec.py` - assigns a 2nd spec, then `Move Up` on it, and verifies
+  the new run order in the assigned block. Guards assigned-spec ordering.
 
 ## Gotchas learned (codified in the scripts)
 - Main window title is `Iometer <version>  [Built: ...]`; match `^Iometer\s\d`
