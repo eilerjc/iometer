@@ -15,6 +15,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 TESTS = [
     "test_save_roundtrip.py",
     "test_edit_testsetup.py",
+    "test_edit_worker.py",
 ]
 
 

@@ -26,6 +26,10 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
 - `test_edit_testsetup.py` - the edit->save->verify pattern: changes the Test
   Description on the Test Setup tab, Saves, confirms the new text lands in the
   ICF. This is how interaction tests guard the data model.
+- `test_edit_worker.py` - the same pattern against the **live Worker** model:
+  changes "# of Outstanding I/Os" on the Disk Targets tab and verifies it reaches
+  the worker in the saved ICF. The coverage most relevant to the data-model
+  unification (which migrates exactly these per-worker target settings).
 
 ## Gotchas learned (codified in the scripts)
 - Main window title is `Iometer <version>  [Built: ...]`; match `^Iometer\s\d`
