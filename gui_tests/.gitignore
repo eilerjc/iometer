@@ -3,3 +3,7 @@ artifacts/
 __pycache__/
 # Scratch recon/debug scripts (underscore-prefixed)
 _*.py
+# Coverage output
+cov_raw/
+cov_html/
+cov_coverage.xml

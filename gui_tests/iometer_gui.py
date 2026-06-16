@@ -3,6 +3,7 @@
 Launch the GUI with a non-local-manager ICF (no local Dynamo spawn -> no UAC),
 find/position its window, capture screenshots, and shut it down.
 """
+import os
 import re
 import subprocess
 import time
@@ -22,13 +23,29 @@ IOMETER_EXE = REPO / "src" / "msvs11" / "Release" / "x64" / "IOmeter.exe"
 NONLOCAL_ICF = REPO / "test" / "fixtures" / "nonlocal_manager.icf"
 ARTIFACTS = HERE / "artifacts"
 
+# Optional coverage: set IOCOV_DIR (raw .cov output dir) to launch IOmeter under
+# OpenCppCoverage (PDB-based, no rebuild). IOCOV_TAG names the per-test .cov file.
+OCC_EXE = pathlib.Path(r"C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe")
+COV_SRC_FILTER = "iometer\\github\\iometer\\src"   # --sources substring
+
 pyautogui.FAILSAFE = True   # slam mouse to a corner to abort
 pyautogui.PAUSE = 0.25      # small settle between actions
 
+_cov_proc = None            # OpenCppCoverage process, when covering
+
 
 def kill_iometer():
+    global _cov_proc
     for exe in ("IOmeter.exe", "Iometer.exe", "Dynamo.exe", "dynamotest.exe"):
         subprocess.run(["taskkill", "/F", "/IM", exe], capture_output=True)
+    if _cov_proc is not None:
+        # Killing IOmeter ends OpenCppCoverage's debuggee; wait for it to flush
+        # the accumulated coverage to the .cov file before we return.
+        try:
+            _cov_proc.wait(timeout=90)
+        except Exception:
+            pass
+        _cov_proc = None
 
 
 def find_window(pattern=MAIN_WINDOW_RE, timeout=20.0):
@@ -61,10 +78,28 @@ def find_dialog(title_exact, timeout=10.0):
 
 
 def launch(icf=NONLOCAL_ICF, extra_args=None):
-    """Launch IOmeter interactively (config only -> not batch mode)."""
+    """Launch IOmeter interactively (config only -> not batch mode).
+
+    If IOCOV_DIR is set, launch under OpenCppCoverage so the interactive session
+    is recorded to IOCOV_DIR/<IOCOV_TAG>.cov (merged into a report afterwards)."""
+    global _cov_proc
     kill_iometer()
     time.sleep(1.0)
     args = [str(IOMETER_EXE), "/c", str(icf)] + (extra_args or [])
+
+    cov_dir = os.environ.get("IOCOV_DIR")
+    if cov_dir:
+        os.makedirs(cov_dir, exist_ok=True)
+        tag = os.environ.get("IOCOV_TAG", "gui")
+        out = str(pathlib.Path(cov_dir) / (tag + ".cov"))
+        occ = [str(OCC_EXE), "--quiet",
+               "--sources", COV_SRC_FILTER, "--modules", "IOmeter.exe",
+               "--excluded_sources", "tests",
+               "--export_type", "binary:" + out, "--"] + args
+        _cov_proc = subprocess.Popen(occ)
+        return _cov_proc
+
+    _cov_proc = None
     return subprocess.Popen(args)
 
 

@@ -40,6 +40,18 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
 - `test_reorder_spec.py` - assigns a 2nd spec, then `Move Up` on it, and verifies
   the new run order in the assigned block. Guards assigned-spec ordering.
 
+## Coverage
+`python -m ... ` not needed - just `.\collect_gui_coverage.ps1` (foreground).
+It runs each test with the MFC `IOmeter.exe` launched under **OpenCppCoverage**
+(PDB-based; no rebuild) and merges the runs into `cov_html\index.html` +
+`cov_coverage.xml`. `iometer_gui.launch()` does the wrapping when `IOCOV_DIR` is
+set, so the tests orchestrate exactly as normal.
+
+This reaches the **interactive** MFC handlers the batch `/c /r /t` scenario in
+`src\qt\collect_coverage_all.ps1` can't: tab switches, field edits, the Save
+dialog, and the access-spec assign/remove/reorder buttons - e.g. `PageAccess.cpp`
+~59%, `PageSetup.cpp` ~71%, `ICFSaveDialog.cpp` ~70%, `AccessSpecList.cpp` ~87%.
+
 ## Gotchas learned (codified in the scripts)
 - Main window title is `Iometer <version>  [Built: ...]`; match `^Iometer\s\d`
   so an editor window with "iometer" in its path isn't picked up.
