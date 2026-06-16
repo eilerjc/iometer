@@ -30,6 +30,10 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
   changes "# of Outstanding I/Os" on the Disk Targets tab and verifies it reaches
   the worker in the saved ICF. The coverage most relevant to the data-model
   unification (which migrates exactly these per-worker target settings).
+- `test_assign_spec.py` - assigns an additional access spec to a worker via the
+  Access Specifications tab (`<< Add`) and verifies it lands in the worker's
+  "Assigned access specs" block. Exercises the Test_Spec assignment model, which
+  has no byte-golden coverage.
 
 ## Gotchas learned (codified in the scripts)
 - Main window title is `Iometer <version>  [Built: ...]`; match `^Iometer\s\d`

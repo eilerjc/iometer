@@ -16,6 +16,7 @@ TESTS = [
     "test_save_roundtrip.py",
     "test_edit_testsetup.py",
     "test_edit_worker.py",
+    "test_assign_spec.py",
 ]
 
 
