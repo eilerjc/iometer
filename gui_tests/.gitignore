@@ -1,0 +1,5 @@
+# Generated screenshots / scratch
+artifacts/
+__pycache__/
+# Scratch recon/debug scripts (underscore-prefixed)
+_*.py
