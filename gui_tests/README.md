@@ -41,7 +41,7 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
   the new run order in the assigned block. Guards assigned-spec ordering.
 
 ## Coverage
-`python -m ... ` not needed - just `.\collect_gui_coverage.ps1` (foreground).
+Run `.\collect_gui_coverage.ps1` (foreground).
 It runs each test with the MFC `IOmeter.exe` launched under **OpenCppCoverage**
 (PDB-based; no rebuild) and merges the runs into `cov_html\index.html` +
 `cov_coverage.xml`. `iometer_gui.launch()` does the wrapping when `IOCOV_DIR` is

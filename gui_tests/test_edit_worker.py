@@ -49,7 +49,7 @@ def run():
         g.kill_iometer()
         return None, f"{OUT} not written"
     lines = OUT.read_text().splitlines()
-    g.kill_iometer()
+    g.close_iometer(win)
     return lines, None
 
 

@@ -34,18 +34,57 @@ pyautogui.PAUSE = 0.25      # small settle between actions
 _cov_proc = None            # OpenCppCoverage process, when covering
 
 
-def kill_iometer():
+def _wait_cov():
+    """Wait for OpenCppCoverage (if any) to flush its .cov after IOmeter exits."""
     global _cov_proc
-    for exe in ("IOmeter.exe", "Iometer.exe", "Dynamo.exe", "dynamotest.exe"):
-        subprocess.run(["taskkill", "/F", "/IM", exe], capture_output=True)
     if _cov_proc is not None:
-        # Killing IOmeter ends OpenCppCoverage's debuggee; wait for it to flush
-        # the accumulated coverage to the .cov file before we return.
         try:
             _cov_proc.wait(timeout=90)
         except Exception:
             pass
         _cov_proc = None
+
+
+def _iometer_alive():
+    r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq IOmeter.exe", "/NH"],
+                       capture_output=True, text=True)
+    return "IOmeter.exe" in (r.stdout or "")
+
+
+def kill_iometer():
+    """Force-kill IOmeter and helpers (used for pre-launch cleanup / fallback)."""
+    for exe in ("IOmeter.exe", "Iometer.exe", "Dynamo.exe", "dynamotest.exe"):
+        subprocess.run(["taskkill", "/F", "/IM", exe], capture_output=True)
+    _wait_cov()
+
+
+def close_iometer(win):
+    """Shut the GUI down gracefully via WM_CLOSE so the MFC exit/cleanup paths run
+    and OpenCppCoverage sees a clean process exit. Iometer does not prompt to save
+    on exit; if a stray modal appears it's answered 'No', and a stuck process is
+    force-killed as a fallback. Also stops dynamotest/Dynamo and flushes coverage."""
+    try:
+        win.close()                       # WM_CLOSE
+    except Exception:
+        try:
+            win.activate(); time.sleep(0.3)
+            pyautogui.hotkey("alt", "f4")
+        except Exception:
+            pass
+
+    for i in range(20):                   # wait ~10s for a clean exit
+        if not _iometer_alive():
+            break
+        if i == 4:                        # still up after ~2s: nudge a possible prompt
+            pyautogui.press("n")          # 'No' on a save-changes dialog, if any
+        time.sleep(0.5)
+
+    if _iometer_alive():                  # fallback: it didn't close on its own
+        for exe in ("IOmeter.exe", "Iometer.exe"):
+            subprocess.run(["taskkill", "/F", "/IM", exe], capture_output=True)
+    for exe in ("Dynamo.exe", "dynamotest.exe"):
+        subprocess.run(["taskkill", "/F", "/IM", exe], capture_output=True)
+    _wait_cov()
 
 
 def find_window(pattern=MAIN_WINDOW_RE, timeout=20.0):

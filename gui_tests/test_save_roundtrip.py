@@ -44,7 +44,7 @@ def run_gui_save():
         g.kill_iometer()
         return None, "GUI Save did not write the file"
     lines = OUT.read_text().splitlines(keepends=True)
-    g.kill_iometer()
+    g.close_iometer(win)
     return lines, None
 
 
