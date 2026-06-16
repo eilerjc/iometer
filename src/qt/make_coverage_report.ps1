@@ -19,6 +19,10 @@
 # Flags:
 #   -SkipMfc     OpenCppCoverage pass without the MFC GUI window (faster; full/
 #                then has no MFC line data).
+#   -IncludeGuiTests  First run the foreground PyAutoGUI suite under coverage
+#                (gui_tests\collect_gui_coverage.ps1) so the interactive MFC
+#                handlers are folded into full/. Requires an interactive desktop;
+#                do not touch the mouse/keyboard during the run.
 #   -NoCollect   Skip running the engines; just (re)assemble /coverage from the
 #                existing build_cov/ and build_cov_occ/ outputs.
 #   -Open        Open the landing page when done.
@@ -26,6 +30,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipMfc,
+    [switch]$IncludeGuiTests,
     [switch]$NoCollect,
     [switch]$Open,
     [switch]$Publish,                  # push the assembled report to the gh-pages branch
@@ -53,6 +58,11 @@ if (-not $NoCollect) {
         $env:PATH = "$QtPrefix\bin;$env:PATH"
         & cmake --build (Join-Path $here "build") --config RelWithDebInfo 2>&1 |
             Select-String -Pattern "error|-> " | Select-Object -Last 3
+    }
+
+    if ($IncludeGuiTests) {
+        Sect "[prep] Foreground GUI-interaction coverage (do not touch mouse/keyboard)..."
+        & (Join-Path $repo "gui_tests\collect_gui_coverage.ps1")
     }
 
     Sect "[1/3] llvm-cov: line + branch (core + Qt)..."
@@ -127,7 +137,10 @@ $html = @"
  coverage, but it cannot build the MFC GUI; only OpenCppCoverage (PDB-based) reaches
  the MFC binary, but is line-only. So <b>Full</b> covers every file incl. MFC at line
  granularity, and <b>Branch detail</b> adds partial-branch highlighting for the
- clang-cl-buildable core + Qt. Regenerate with
+ clang-cl-buildable core + Qt. The MFC line data covers the batch run paths plus,
+ when the foreground PyAutoGUI suite is collected (<code>make_coverage_report.ps1
+ -IncludeGuiTests</code>), the interactive GUI handlers (tab edits, the Save
+ dialog, access-spec assign/remove/reorder). Regenerate with
  <code>src/qt/make_coverage_report.ps1</code>. See <code>coverage/summary.txt</code>
  for the per-file llvm-cov table.
 </p>
