@@ -34,6 +34,9 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
   Access Specifications tab (`<< Add`) and verifies it lands in the worker's
   "Assigned access specs" block. Exercises the Test_Spec assignment model, which
   has no byte-golden coverage.
+- `test_remove_spec.py` - the mirror: removes the worker's assigned spec via
+  `Remove >>` and verifies the assigned block is empty. Together with the assign
+  test, covers both directions of the assignment model.
 
 ## Gotchas learned (codified in the scripts)
 - Main window title is `Iometer <version>  [Built: ...]`; match `^Iometer\s\d`
