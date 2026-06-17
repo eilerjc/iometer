@@ -48,6 +48,12 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
   Options (test type); verifies the TEST SETUP section (`PageSetup.cpp`).
 - `test_save_subset.py` - unchecks "Settings to save" boxes in the Save dialog and
   verifies the omitted sections are absent (`ICFSaveDialog.cpp`).
+- `test_about_eula.py` - opens the About ("Iometer Information") dialog and, from it,
+  the Intel Open Source License box, then closes both (`GalileoApp.cpp`,
+  `LegalBox.cpp`). No ICF assertion - checks the modals open/close cleanly.
+- `test_new_access_spec.py` - clicks "New" on the Access Specifications tab, names a
+  spec and sets its Transfer Request Size in the "Edit Access Specification" dialog,
+  and verifies the new global spec lands in the ICF (`AccessDialog.cpp`).
 
 ## Coverage
 Run `.\collect_gui_coverage.ps1` (foreground).

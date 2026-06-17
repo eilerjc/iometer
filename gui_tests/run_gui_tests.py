@@ -23,6 +23,8 @@ TESTS = [
     "test_edit_results_display.py",
     "test_edit_runtime_cycling.py",
     "test_save_subset.py",
+    "test_about_eula.py",
+    "test_new_access_spec.py",
 ]
 
 
