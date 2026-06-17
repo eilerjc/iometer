@@ -62,6 +62,18 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
   (`ICFOpenDialog.cpp`).
 - `test_topology_workers.py` - adds two disk workers then removes one via the toolbar,
   asserting the worker count in the ICF (1->3->2) (`WorkerView.cpp`, Manager/Worker).
+- `test_edit_access_spec.py` - Edits an existing global spec (Burstiness delay/burst +
+  Insert/Delete row) and verifies the change in the ICF (`AccessDialog.cpp`).
+- `test_bigmeter_controls.py` - drives the Presentation Meter's own controls (stat
+  combo, Show Trace, Start/Stop) during a run (`BigMeter.cpp`, `MeterCtrl.cpp`).
+- `test_run_variants.py` - Start/Stop mid-run, Reset, then a full run + Stop All
+  (`GalileoView.cpp` start/stop/reset, `ManagerList`/`Manager`/`Worker`).
+- `test_results_stat_menu.py` - opens the bar-chart statistic popup and picks a stat
+  (keyboard nav), verifying it in the ICF (`PageDisplay.cpp`, `GalileoView.cpp` menus).
+- `test_cmdline_save.py` - batch `/c /r /s /t` run + re-save, non-interactive
+  (`GalileoCmdLine.cpp` switch parser).
+- `test_network_worker.py` - adds a network worker, renders the Network Targets tab,
+  asserts a NETWORK worker in the ICF (`PageNetwork.cpp`, Manager/Worker).
 
 ## Coverage
 Run `.\collect_gui_coverage.ps1` (foreground).
