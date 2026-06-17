@@ -39,6 +39,15 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
   test, covers both directions of the assignment model.
 - `test_reorder_spec.py` - assigns a 2nd spec, then `Move Up` on it, and verifies
   the new run order in the assigned block. Guards assigned-spec ordering.
+- `test_edit_disk_targets.py` - edits Maximum Disk Size, Starting Sector and the
+  Write IO Data Pattern on the Disk Targets tab; verifies the worker geometry line
+  (`PageDisk.cpp`).
+- `test_edit_results_display.py` - flips "Results Since" to Start of Test and bumps
+  the Update Frequency; verifies the RESULTS DISPLAY section (`PageDisplay.cpp`).
+- `test_edit_runtime_cycling.py` - sets Run Time / Ramp Up and changes the Cycling
+  Options (test type); verifies the TEST SETUP section (`PageSetup.cpp`).
+- `test_save_subset.py` - unchecks "Settings to save" boxes in the Save dialog and
+  verifies the omitted sections are absent (`ICFSaveDialog.cpp`).
 
 ## Coverage
 Run `.\collect_gui_coverage.ps1` (foreground).

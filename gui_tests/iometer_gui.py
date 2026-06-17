@@ -181,6 +181,18 @@ def set_field(win, rx, ry, text):
     time.sleep(0.2)
 
 
+def select_combo(win, rx, ry, key="down", presses=1):
+    """Change a dropdown-list combo by N arrow presses. Click to focus/open, send
+    the arrow(s), then Enter to commit - robust whether the click opened the list
+    or just focused it (in both cases the selection ends N items away)."""
+    pyautogui.click(win.left + rx, win.top + ry)
+    time.sleep(0.3)
+    pyautogui.press(key, presses=presses, interval=0.1)
+    time.sleep(0.2)
+    pyautogui.press("enter")
+    time.sleep(0.3)
+
+
 # Toolbar button centers, relative to the main window's top-left (1500x950 layout).
 TB_OPEN = (33, 54)
 TB_SAVE = (70, 54)
@@ -189,11 +201,18 @@ TB_START = (275, 54)
 
 SAVE_DIALOG_TITLE = "Save Test Configuration File"
 SAVE_DLG_SAVE_BTN = (519, 370)   # "Save" button, relative to the dialog (571x622)
+# "Settings to save" checkboxes, relative to the dialog top-left.
+SAVE_DLG_CHK_TESTSETUP = (46, 460)
+SAVE_DLG_CHK_RESULTS   = (46, 484)
+SAVE_DLG_CHK_GLOBALSPECS = (46, 508)
+SAVE_DLG_CHK_MANAGERS  = (46, 532)
 
 
-def gui_save(win, out_path):
-    """Drive File>Save to `out_path` with all sections (the default-checked boxes).
-    Returns True once the file is written. Must run in the foreground."""
+def gui_save(win, out_path, uncheck=None):
+    """Drive File>Save to `out_path`. By default all sections are saved (the
+    default-checked boxes); pass `uncheck` as a list of dialog-relative checkbox
+    (rx, ry) coords to toggle off first. Returns True once the file is written.
+    Must run in the foreground."""
     import os
     out_path = str(out_path)
     if os.path.exists(out_path):
@@ -221,6 +240,8 @@ def gui_save(win, out_path):
     time.sleep(0.5)
     # File name field opens with "Iometer" pre-selected -> type to replace.
     pyautogui.write(out_path, interval=0.02)
+    for rx, ry in (uncheck or []):              # toggle off any requested sections
+        click_window(dlg, rx, ry)
     click_window(dlg, *SAVE_DLG_SAVE_BTN)
     time.sleep(0.5)
     pyautogui.press("enter")                    # confirm any "replace?" prompt

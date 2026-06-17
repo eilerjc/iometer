@@ -19,6 +19,10 @@ TESTS = [
     "test_assign_spec.py",
     "test_remove_spec.py",
     "test_reorder_spec.py",
+    "test_edit_disk_targets.py",
+    "test_edit_results_display.py",
+    "test_edit_runtime_cycling.py",
+    "test_save_subset.py",
 ]
 
 
