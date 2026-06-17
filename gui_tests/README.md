@@ -54,6 +54,9 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
 - `test_new_access_spec.py` - clicks "New" on the Access Specifications tab, names a
   spec and sets its Transfer Request Size in the "Edit Access Specification" dialog,
   and verifies the new global spec lands in the ICF (`AccessDialog.cpp`).
+- `test_bigmeter.py` - opens the Presentation Meter from a Results Display ">" button,
+  runs a short synthetic test so the needle updates, then closes it (`BigMeter.cpp`,
+  `MeterCtrl.cpp`; also the start/stop + results path). The only test that runs a test.
 
 ## Coverage
 Run `.\collect_gui_coverage.ps1` (foreground).

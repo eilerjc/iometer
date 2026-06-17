@@ -25,6 +25,7 @@ TESTS = [
     "test_save_subset.py",
     "test_about_eula.py",
     "test_new_access_spec.py",
+    "test_bigmeter.py",
 ]
 
 
