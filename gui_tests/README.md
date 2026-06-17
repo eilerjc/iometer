@@ -57,6 +57,11 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
 - `test_bigmeter.py` - opens the Presentation Meter from a Results Display ">" button,
   runs a short synthetic test so the needle updates, then closes it (`BigMeter.cpp`,
   `MeterCtrl.cpp`; also the start/stop + results path). The only test that runs a test.
+- `test_file_open.py` - loads a different config via the custom Open dialog (with
+  Managers unchecked to skip the manager wait) and verifies its description applied
+  (`ICFOpenDialog.cpp`).
+- `test_topology_workers.py` - adds two disk workers then removes one via the toolbar,
+  asserting the worker count in the ICF (1->3->2) (`WorkerView.cpp`, Manager/Worker).
 
 ## Coverage
 Run `.\collect_gui_coverage.ps1` (foreground).

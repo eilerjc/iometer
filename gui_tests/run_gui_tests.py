@@ -12,21 +12,9 @@ import subprocess
 import pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
-TESTS = [
-    "test_save_roundtrip.py",
-    "test_edit_testsetup.py",
-    "test_edit_worker.py",
-    "test_assign_spec.py",
-    "test_remove_spec.py",
-    "test_reorder_spec.py",
-    "test_edit_disk_targets.py",
-    "test_edit_results_display.py",
-    "test_edit_runtime_cycling.py",
-    "test_save_subset.py",
-    "test_about_eula.py",
-    "test_new_access_spec.py",
-    "test_bigmeter.py",
-]
+# Every test_*.py here, globbed so new tests are picked up automatically (and this
+# never drifts from the suite / from collect_gui_coverage.ps1).
+TESTS = [p.name for p in sorted(HERE.glob("test_*.py"))]
 
 
 def main():

@@ -201,11 +201,51 @@ TB_START = (275, 54)
 
 SAVE_DIALOG_TITLE = "Save Test Configuration File"
 SAVE_DLG_SAVE_BTN = (519, 370)   # "Save" button, relative to the dialog (571x622)
-# "Settings to save" checkboxes, relative to the dialog top-left.
+# "Settings to save" checkboxes, relative to the dialog top-left. The Open dialog
+# ("Open Test Configuration File") shares the same 571x622 frame and checkbox layout
+# ("Settings to restore"), so these coords serve both.
 SAVE_DLG_CHK_TESTSETUP = (46, 460)
 SAVE_DLG_CHK_RESULTS   = (46, 484)
 SAVE_DLG_CHK_GLOBALSPECS = (46, 508)
 SAVE_DLG_CHK_MANAGERS  = (46, 532)
+
+OPEN_DIALOG_TITLE = "Open Test Configuration File"
+OPEN_DLG_FILENAME = (320, 370)   # File name field (empty by default)
+OPEN_DLG_OPEN_BTN = (519, 370)   # "Open" button
+
+
+def gui_open(win, in_path, uncheck=None):
+    """Drive File>Open of `in_path` via the custom ICFOpenDialog. `uncheck` is a
+    list of dialog-relative "Settings to restore" checkbox coords to toggle off
+    first (e.g. SAVE_DLG_CHK_MANAGERS to skip loading the manager list and avoid
+    the Waiting-for-Managers modal). Returns True once Open is clicked. Foreground."""
+    dlg = None
+    for _ in range(3):
+        try: win.activate()
+        except Exception: pass
+        time.sleep(0.3)
+        click_window(win, *TB_OPEN)
+        for _ in range(8):
+            dlg = next((w for w in gw.getAllWindows()
+                        if w.title.strip() == OPEN_DIALOG_TITLE and w.visible), None)
+            if dlg:
+                break
+            time.sleep(0.5)
+        if dlg:
+            break
+    if not dlg:
+        return False
+
+    try: dlg.activate()
+    except Exception: pass
+    time.sleep(0.5)
+    click_window(dlg, *OPEN_DLG_FILENAME)        # focus the (empty) File name field
+    pyautogui.write(str(in_path), interval=0.02)
+    for rx, ry in (uncheck or []):
+        click_window(dlg, rx, ry)
+    click_window(dlg, *OPEN_DLG_OPEN_BTN)
+    time.sleep(1.0)
+    return True
 
 
 def gui_save(win, out_path, uncheck=None):
