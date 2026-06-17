@@ -26,14 +26,9 @@ $htmlDir = Join-Path $PSScriptRoot "cov_html"
 Remove-Item $rawDir, $htmlDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $rawDir | Out-Null
 
-$tests = @(
-    "test_save_roundtrip.py",
-    "test_edit_testsetup.py",
-    "test_edit_worker.py",
-    "test_assign_spec.py",
-    "test_remove_spec.py",
-    "test_reorder_spec.py"
-)
+# Every test_*.py in this directory (globbed, so new tests are picked up
+# automatically and this list never drifts from the suite).
+$tests = Get-ChildItem $PSScriptRoot -Filter "test_*.py" | Sort-Object Name | ForEach-Object { $_.Name }
 
 $env:IOCOV_DIR = $rawDir
 $failed = @()                          # tests whose assertion failed (non-zero exit)
