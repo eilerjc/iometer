@@ -74,6 +74,17 @@ Run them all:  `python gui_tests/run_gui_tests.py`  (foreground).
   (`GalileoCmdLine.cpp` switch parser).
 - `test_network_worker.py` - adds a network worker, renders the Network Targets tab,
   asserts a NETWORK worker in the ICF (`PageNetwork.cpp`, Manager/Worker).
+- `test_multi_manager.py` - loads the 2-manager config, connects two dynamotests,
+  runs a test, asserts both managers in the results CSV (`ManagerList.cpp`,
+  `Manager.cpp`, `GalileoView.cpp`, `Worker.cpp`).
+- `test_load_fixtures.py` - opens 4 varied-format fixtures via the Open dialog,
+  checks the GUI parses each without crashing (`ICF_ifstream.cpp`/`IcfDocument`).
+- `test_access_editcopy_delete.py` - Edit Copy + Delete on global specs
+  (`PageAccess.cpp`).
+- `test_cycling_fields.py` - selects a cycling test type and edits the cycling
+  start/step + step-type, asserts the Disk Cycling line (`PageSetup.cpp`).
+- `test_cmdline_switches.py` - bad-switch Fail MessageBox + batch run carrying
+  `/p` and `/m` (`GalileoCmdLine.cpp` error/P/M branches).
 
 ## Coverage
 Run `.\collect_gui_coverage.ps1` (foreground).
