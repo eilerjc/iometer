@@ -50,6 +50,10 @@ private slots:
     void extractUInt64_large();
     void extractToken_stopsAtComma();
     void extractToken_withSpaces_specName();
+    // error / edge branches
+    void getPair_nonCommentFirstLine_returnsFalse();
+    void extractToken_noTokenChars_returnsEmpty();
+    void closedFile_primitivesFailGracefully();
 };
 
 void TestIcfStream::version_semver110() {
@@ -225,6 +229,30 @@ void TestIcfStream::extractToken_withSpaces_specName() {
     QCOMPARE(IcfStream::extractFirstToken(s, true),
              std::string("64 KiB; 100% Read; 0% random"));
     QCOMPARE(s, std::string(",NONE"));
+}
+
+void TestIcfStream::getPair_nonCommentFirstLine_returnsFalse() {
+    // getPair requires the next line to be a comment ('...); a data line -> false.
+    IcfStream s(makeFile("notacomment\n\tvalue\n"));
+    std::string k, v;
+    QVERIFY(!s.getPair(k, v));
+}
+
+void TestIcfStream::extractToken_noTokenChars_returnsEmpty() {
+    // No token characters (only commas/spaces) -> empty token.
+    std::string s = ",, ,";
+    QCOMPARE(IcfStream::extractFirstToken(s), std::string());
+}
+
+void TestIcfStream::closedFile_primitivesFailGracefully() {
+    // Constructing on a path that doesn't open leaves the stream closed; the
+    // primitives must report the "closed file" Iometer-bug error, not crash.
+    const std::string bad = QDir(m_dir.path()).filePath("does_not_exist.icf").toStdString();
+    IcfStream s(bad);
+    QVERIFY(s.getNextLine().empty());
+    std::string k, v;
+    QVERIFY(!s.getPair(k, v));
+    QVERIFY(!s.errors().empty());
 }
 
 QTEST_APPLESS_MAIN(TestIcfStream)
