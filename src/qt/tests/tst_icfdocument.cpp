@@ -70,6 +70,22 @@ private slots:
     void mgr_networkTarget_missingMgrLine_fails();
     void mgr_missingSection_ok();
     void mgr_realFixtureWorkerRich();
+    // worker default-target-settings edge/error branches
+    void workerDefaults_localNetIface_onDiskFails();
+    void workerDefaults_localNetIface_onTcpOk();
+    void workerDefaults_viOutstandingIos_onNonViFails();
+    void workerDefaults_viOutstandingIos_onViOk();
+    void workerDefaults_viOutstandingIos_nonIntFails();
+    void workerDefaults_badDataPattern_fails();
+    void workerDefaults_unrecognizedKey_fails();
+    // network-target + worker-section error branches
+    void mgr_networkTarget_vi();
+    void mgr_networkTarget_badType_fails();
+    void mgr_networkTarget_badManagerId_fails();
+    void mgr_networkTarget_emptyManagerName_fails();
+    void mgr_networkTarget_missingEndTarget_fails();
+    void mgr_target_unknownType_fails();
+    void mgr_worker_unrecognizedLine_fails();
 };
 
 // Fixtures live in test/fixtures/icf_compat (the golden corpus).
@@ -623,6 +639,160 @@ void TestIcfDocument::mgr_realFixtureWorkerRich() {
     QCOMPARE(w.diskMaxSize, Q_UINT64_C(1024));
     QCOMPARE(w.startingSector, Q_UINT64_C(64));
     QCOMPARE(w.dataPattern, 1);
+}
+
+// ---- worker default-target-settings edge/error branches -------------------------
+
+// A worker block with a custom 'Worker type and a custom default-settings body.
+static std::string workerWithDefaults(const std::string &type, const std::string &defaultsBody) {
+    return "'Worker\n\tW\n'Worker type\n\t" + type + "\n"
+           "'Default target settings for worker\n" + defaultsBody +
+           "'End default target settings for worker\n'End worker\n";
+}
+
+void TestIcfDocument::workerDefaults_localNetIface_onDiskFails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + workerWithDefaults("DISK", "'Local network interface\n\teth0\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("Error restoring worker W.  "
+        "Cannot specify \"Local network interface\" for a non-TCP worker."));
+}
+
+void TestIcfDocument::workerDefaults_localNetIface_onTcpOk() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + workerWithDefaults("NETWORK,TCP", "'Local network interface\n\t10.0.0.41\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(doc.loadManagerList(out));
+    const auto &w = out[0].workers[0];
+    QVERIFY(w.localNetIfacePresent);
+    QCOMPARE(w.localNetworkInterface, std::string("10.0.0.41"));
+}
+
+void TestIcfDocument::workerDefaults_viOutstandingIos_onNonViFails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + workerWithDefaults("NETWORK,TCP", "'VI outstanding IOs\n\t8\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("Error restoring worker W.  "
+        "Cannot specify \"VI outstanding IOs\" for a non-VI worker."));
+}
+
+void TestIcfDocument::workerDefaults_viOutstandingIos_onViOk() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + workerWithDefaults("NETWORK,VI", "'VI outstanding IOs\n\t16\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(doc.loadManagerList(out));
+    const auto &w = out[0].workers[0];
+    QVERIFY(w.viIosPresent);
+    QCOMPARE(w.viOutstandingIos, 16);
+}
+
+void TestIcfDocument::workerDefaults_viOutstandingIos_nonIntFails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + workerWithDefaults("NETWORK,VI", "'VI outstanding IOs\n\tNOTANINT\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("Error while reading file.  "
+        "\"VI outstanding IOs\" should be specified as an integer value."));
+}
+
+void TestIcfDocument::workerDefaults_badDataPattern_fails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + workerWithDefaults("DISK", "'Disk maximum size,starting sector,Data pattern\n\t0,0,NOTANINT\n")
+        + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("Error while reading file.  "
+        "\"Data pattern\" should be specified as an integer value."));
+}
+
+void TestIcfDocument::workerDefaults_unrecognizedKey_fails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + workerWithDefaults("DISK", "'Bogus default key\n\t1\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QVERIFY(doc.errors().back().find("DEFAULT TARGET SETTINGS FOR WORKER section contained an unrecognized")
+            != std::string::npos);
+}
+
+// ---- network-target + worker-section error branches -----------------------------
+
+// A network worker carrying one network target with the given target-type line and
+// target-manager line (before 'End target).
+static std::string netWorker(const std::string &targetType, const std::string &mgrLine,
+                             const std::string &endLine = "'End target\n") {
+    return "'Worker\n\tNet 1\n'Worker type\n\tNETWORK,TCP\n"
+           "'Target assignments\n'Target\n\t192.168.0.5\n'Target type\n\t" + targetType + "\n"
+           + mgrLine + endLine + "'End target assignments\n'End worker\n";
+}
+
+void TestIcfDocument::mgr_networkTarget_vi() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + netWorker("NETWORK,VI", "'Target manager ID, manager name\n\t2,REMOTE\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(doc.loadManagerList(out));
+    QCOMPARE((int)out[0].workers[0].targets[0].kind, (int)IcfWorkerKind::NetVI);
+}
+
+void TestIcfDocument::mgr_networkTarget_badType_fails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + netWorker("NETWORK,BANANA", "'Target manager ID, manager name\n\t2,REMOTE\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("Error restoring target 192.168.0.5.  "
+        "Network target type is neither TCP nor VI."));
+}
+
+void TestIcfDocument::mgr_networkTarget_badManagerId_fails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + netWorker("NETWORK,TCP", "'Target manager ID, manager name\n\tNOTANINT,REMOTE\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("Error while reading file.  "
+        "\"Target manager ID\" should be specified as an integer value."));
+}
+
+void TestIcfDocument::mgr_networkTarget_emptyManagerName_fails() {
+    // value "2" with no name -> after extracting the int the name is empty.
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + netWorker("NETWORK,TCP", "'Target manager ID, manager name\n\t2\n") + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("File is improperly formatted.  Expected "
+        "a target \"manager name\"."));
+}
+
+void TestIcfDocument::mgr_networkTarget_missingEndTarget_fails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + netWorker("NETWORK,TCP", "'Target manager ID, manager name\n\t2,REMOTE\n", "'Not end target\n")
+        + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("File is improperly formatted.  "
+        "Expected an \"End target\" comment."));
+}
+
+void TestIcfDocument::mgr_target_unknownType_fails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + "'Worker\n\tW\n'Worker type\n\tDISK\n"
+          "'Target assignments\n'Target\n\tT\n'Target type\n\tBANANA\n'End target\n"
+          "'End target assignments\n'End worker\n"
+        + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QCOMPARE(doc.errors().back(), std::string("Error restoring target T.  "
+        "Target type is neither DISK nor NETWORK."));
+}
+
+void TestIcfDocument::mgr_worker_unrecognizedLine_fails() {
+    IcfDocument doc(makeFile(mgrFile(mgrHdr(1, "M", "localhost")
+        + "'Worker\n\tW\n'Worker type\n\tDISK\n'Bogus worker line\n\tx\n'End worker\n"
+        + "'End manager\n")));
+    std::vector<IcfManagerConfig> out;
+    QVERIFY(!doc.loadManagerList(out));
+    QVERIFY(doc.errors().back().find("WORKER section contained an unrecognized line")
+            != std::string::npos);
 }
 
 QTEST_APPLESS_MAIN(TestIcfDocument)
