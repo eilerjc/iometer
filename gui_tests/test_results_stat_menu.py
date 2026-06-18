@@ -44,14 +44,16 @@ def run():
 
     g.click_window(win, *TAB_RESULTS); time.sleep(0.6)
 
-    # Row 1: open the stat menu and pick a different statistic.
-    g.click_window(win, *STAT_BTN_1); time.sleep(0.7)
+    # Row 1: open the stat menu and pick a different statistic. The TrackPopupMenu
+    # can be slow to appear under the coverage debugger, so wait generously before
+    # and between keystrokes.
+    g.click_window(win, *STAT_BTN_1); time.sleep(1.5)
     for k in ("down", "right", "down", "enter"):
-        pyautogui.press(k); time.sleep(0.4)
+        pyautogui.press(k); time.sleep(0.7)
 
     # Extra coverage: open the row-2 stat menu and the worker menu, dismiss them.
-    g.click_window(win, *STAT_BTN_2); time.sleep(0.6); pyautogui.press("escape"); time.sleep(0.3)
-    g.click_window(win, *WORKER_BTN_1); time.sleep(0.6); pyautogui.press("escape"); time.sleep(0.3)
+    g.click_window(win, *STAT_BTN_2); time.sleep(1.0); pyautogui.press("escape"); time.sleep(0.4)
+    g.click_window(win, *WORKER_BTN_1); time.sleep(1.0); pyautogui.press("escape"); time.sleep(0.4)
 
     if not g.gui_save(win, OUT):
         g.kill_iometer(); return None, f"{OUT} not written"
