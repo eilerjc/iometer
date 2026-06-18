@@ -241,19 +241,22 @@ $summary = & $llvmCov report $firstObj @restObj "-instr-profile=$profdata" `
 $summaryFile = Join-Path $covDir "summary.txt"
 $summary | Set-Content -Path $summaryFile -Encoding utf8
 
-# HTML (line-by-line) for all first-party sources. Two gotchas vs the 'report'
-# command above: (1) 'show' needs source FILE paths, not directories (dirs are
-# silently ignored); (2) -output-dir silently produces NOTHING when combined with
-# -show-line-counts-or-regions, so that flag is omitted here. Output is not fully
-# suppressed so a real failure is visible.
+# HTML (line-by-line) for all first-party sources. Gotchas with this llvm-cov:
+# (1) 'show' needs source FILE paths, not directories (dirs are silently ignored);
+# (2) as of LLVM 22, `-format=html -output-dir=<dir>` silently writes NOTHING,
+# while the very same command to stdout emits a complete (single-page) HTML report
+# - so capture stdout into index.html instead of using -output-dir. stderr (the
+# "mismatched data" warnings) is dropped so it can't corrupt the piped HTML.
 Remove-Item $htmlDir -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Path $htmlDir -Force | Out-Null
 $showSrc = Get-ChildItem -Recurse -File -Include *.cpp,*.h -Path $coreDir,$qtDir |
     Where-Object { $_.FullName -notmatch 'tests|autogen|moc_|qrc_|build_cov' } |
     ForEach-Object { $_.FullName }
+$indexHtml = Join-Path $htmlDir 'index.html'
 & $llvmCov show $firstObj @restObj "-instr-profile=$profdata" `
     "-ignore-filename-regex=$ignore" `
-    -format=html -output-dir=$htmlDir @showSrc 2> $null
-if (-not (Test-Path (Join-Path $htmlDir 'index.html'))) {
+    -format=html @showSrc 2> $null | Set-Content -Path $indexHtml -Encoding utf8
+if (-not ((Test-Path $indexHtml) -and (Get-Item $indexHtml).Length -gt 0)) {
     Write-Host "WARNING: llvm-cov HTML was not generated" -ForegroundColor Yellow
 }
 
