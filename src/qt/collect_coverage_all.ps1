@@ -13,6 +13,10 @@
 #      AsInvoker IOmetertest.exe + a non-local-manager ICF so the GUI does NOT
 #      auto-spawn the elevated local Dynamo (no UAC). Launches a window; off by
 #      default. Covers GUI startup/cmdline/doc/login paths.
+#   - gui_tests\cov_raw\*.cov (if present)          -> INTERACTIVE MFC handlers.
+#      Folded in automatically; produced out-of-band by the foreground PyAutoGUI
+#      suite (gui_tests\collect_gui_coverage.ps1): tab edits, the Save dialog, and
+#      the access-spec assign/remove/reorder buttons the batch run can't reach.
 #
 # Requires: OpenCppCoverage, a Qt build WITH PDBs (RelWithDebInfo), and the
 # MSVC Dynamotest build. Run from anywhere; paths are derived from $PSScriptRoot.
@@ -148,6 +152,17 @@ if ($IncludeMfc) {
         else { Write-Host "  [miss] mfc_iometer" -ForegroundColor Yellow }
     } else {
         Write-Host "  [skip] IOmetertest.exe or nonlocal_manager.icf missing" -ForegroundColor Yellow
+    }
+}
+
+# --- 4c. Fold in GUI-interaction coverage if it was collected ----------------
+# gui_tests\collect_gui_coverage.ps1 (foreground PyAutoGUI) leaves per-test .cov
+# files here; including them adds the interactive MFC handlers (tab edits, Save
+# dialog, access-spec assign/remove/reorder) that the batch [4b] run can't reach.
+$guiRaw = Join-Path $root "gui_tests\cov_raw"
+if (Test-Path $guiRaw) {
+    Get-ChildItem $guiRaw -Filter *.cov -ErrorAction SilentlyContinue | ForEach-Object {
+        $covFiles += $_.FullName; Write-Host "  [cov] gui:$($_.BaseName)" -ForegroundColor Green
     }
 }
 

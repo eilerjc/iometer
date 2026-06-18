@@ -19,6 +19,10 @@
 # Flags:
 #   -SkipMfc     OpenCppCoverage pass without the MFC GUI window (faster; full/
 #                then has no MFC line data).
+#   -IncludeGuiTests  First run the foreground PyAutoGUI suite under coverage
+#                (gui_tests\collect_gui_coverage.ps1) so the interactive MFC
+#                handlers are folded into full/. Requires an interactive desktop;
+#                do not touch the mouse/keyboard during the run.
 #   -NoCollect   Skip running the engines; just (re)assemble /coverage from the
 #                existing build_cov/ and build_cov_occ/ outputs.
 #   -Open        Open the landing page when done.
@@ -26,6 +30,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipMfc,
+    [switch]$IncludeGuiTests,
     [switch]$NoCollect,
     [switch]$Open,
     [switch]$Publish,                  # push the assembled report to the gh-pages branch
@@ -37,6 +42,7 @@ $ErrorActionPreference = "Continue"
 $here = $PSScriptRoot
 $repo = (Resolve-Path (Join-Path $here "..\..")).Path
 $out  = Join-Path $repo "coverage"
+$script:guiTestsFailed = $false       # set if -IncludeGuiTests has a failing test
 
 $llvmHtml = Join-Path $here "build_cov\coverage\html"
 $llvmSum  = Join-Path $here "build_cov\coverage\summary.txt"
@@ -53,6 +59,12 @@ if (-not $NoCollect) {
         $env:PATH = "$QtPrefix\bin;$env:PATH"
         & cmake --build (Join-Path $here "build") --config RelWithDebInfo 2>&1 |
             Select-String -Pattern "error|-> " | Select-Object -Last 3
+    }
+
+    if ($IncludeGuiTests) {
+        Sect "[prep] Foreground GUI-interaction coverage (do not touch mouse/keyboard)..."
+        & (Join-Path $repo "gui_tests\collect_gui_coverage.ps1")
+        $script:guiTestsFailed = ($LASTEXITCODE -ne 0)   # surfaced in the final summary
     }
 
     Sect "[1/3] llvm-cov: line + branch (core + Qt)..."
@@ -127,7 +139,10 @@ $html = @"
  coverage, but it cannot build the MFC GUI; only OpenCppCoverage (PDB-based) reaches
  the MFC binary, but is line-only. So <b>Full</b> covers every file incl. MFC at line
  granularity, and <b>Branch detail</b> adds partial-branch highlighting for the
- clang-cl-buildable core + Qt. Regenerate with
+ clang-cl-buildable core + Qt. The MFC line data covers the batch run paths plus,
+ when the foreground PyAutoGUI suite is collected (<code>make_coverage_report.ps1
+ -IncludeGuiTests</code>), the interactive GUI handlers (tab edits, the Save
+ dialog, access-spec assign/remove/reorder). Regenerate with
  <code>src/qt/make_coverage_report.ps1</code>. See <code>coverage/summary.txt</code>
  for the per-file llvm-cov table.
 </p>
@@ -153,14 +168,21 @@ if ($Publish) {
     & git checkout -q -b $Branch
     & git add -A
     & git -c user.name="coverage-bot" -c user.email="noreply@eiler.net" commit -q -m "Coverage report (generated $ts)"
+    $localSha = (& git rev-parse HEAD).Trim()
     & git push -q --force $originUrl "$($Branch):$Branch"
     $pushOk = $LASTEXITCODE -eq 0
+    # Verify the remote branch actually advanced to the commit we just pushed,
+    # not just that git returned 0 (a stale/cached success would slip through).
+    $remoteSha = $null
+    if ($pushOk) { $remoteSha = (((& git ls-remote $originUrl $Branch) -split "\s+")[0]).Trim() }
     Pop-Location
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-    if ($pushOk) {
+    if ($pushOk -and $remoteSha -eq $localSha) {
         $slug = ($originUrl -replace '.*github\.com[:/]','' -replace '\.git$','')
         $owner = ($slug -split '/')[0]; $name = ($slug -split '/')[1]
-        Write-Host "  pushed $Branch. Pages URL (once enabled): https://$owner.github.io/$name/" -ForegroundColor Green
+        Write-Host "  pushed + verified $Branch @ $($localSha.Substring(0,12)). Pages URL (once enabled): https://$owner.github.io/$name/" -ForegroundColor Green
+    } elseif ($pushOk) {
+        Write-Host "  push reported OK but remote $Branch is $remoteSha, expected $localSha - VERIFY MANUALLY" -ForegroundColor Red
     } else {
         Write-Host "  push FAILED" -ForegroundColor Red
     }
@@ -170,4 +192,8 @@ Sect "Done."
 Write-Host "  Full (line, all incl MFC) : $occLine"
 Write-Host "  Branch (core+Qt)          : line $llvmLine / branch $llvmBranch"
 Write-Host "  Landing: $index"
+if ($script:guiTestsFailed) {
+    Write-Host "  WARNING: a GUI-interaction test FAILED (see [prep] above); the published" -ForegroundColor Red
+    Write-Host "           MFC line data includes a failed run - investigate before trusting it." -ForegroundColor Red
+}
 if ($Open -and (Test-Path $index)) { Start-Process $index }
