@@ -4,12 +4,16 @@
 #include <QTest>
 #include <QListWidget>
 #include <QSpinBox>
+#include <QCheckBox>
+#include <QComboBox>
 #include "QtPageSetup.h"
 #include "QtDemoEngine.h"
 
 class PageSetupTest : public QObject
 {
     Q_OBJECT
+
+    static WorkerInfo worker0(QtDemoEngine &e) { return e.managers()[0].workers[0]; }
 private slots:
 
     // Regression: editing a disk target / worker param calls updateWorker, which
@@ -31,6 +35,34 @@ private slots:
         for (auto *sb : page.findChildren<QSpinBox *>())  // edit the worker params
             sb->setValue(sb->value() + 1);
         QVERIFY(true);                                    // survived (no crash)
+    }
+
+    // Toggle the Use-Fixed-Seed / Test-Connection-Rate checkboxes and the Write IO
+    // Data Pattern combo; each saves back to the worker (covers onFixedSeedToggled,
+    // onConnRateToggled, onDataPatternChanged and their enable branches).
+    void toggleSeedConnRateAndDataPattern_savesToWorker() {
+        QtDemoEngine engine; QtPageSetup page(&engine);
+        const auto mgrs = engine.managers();
+        page.setSelectedWorker(QString::fromStdString(mgrs[0].name),
+                               QString::fromStdString(mgrs[0].workers[0].id));
+
+        auto chks = page.findChildren<QCheckBox *>();      // [0]=Fixed Seed, [1]=Conn Rate
+        QVERIFY(chks.size() >= 2);
+        chks[0]->setChecked(true);                         // onFixedSeedToggled
+        chks[1]->setChecked(true);                         // onConnRateToggled
+        QVERIFY(worker0(engine).useFixedSeed);
+        QVERIFY(worker0(engine).testConnRate);
+
+        auto *combo = page.findChild<QComboBox *>();        // Write IO Data Pattern
+        QVERIFY(combo);
+        const int dp = (combo->currentIndex() + 1) % combo->count();
+        combo->setCurrentIndex(dp);                        // onDataPatternChanged
+        QCOMPARE(worker0(engine).dataPattern, dp);
+
+        chks[0]->setChecked(false);                        // un-toggle (other branch)
+        chks[1]->setChecked(false);
+        QVERIFY(!worker0(engine).useFixedSeed);
+        QVERIFY(!worker0(engine).testConnRate);
     }
 
     void construct_withDemoEngine() {

@@ -149,6 +149,36 @@ private slots:
         // QtDemoEngine simulates a quad-core system with 4 disk workers
         QCOMPARE(eng.managers().first().workers.size(), 4);
     }
+
+    // ── Config + manager API ─────────────────────────────────────────────────
+    void loadConfig_realFixtureSucceeds_badPathFails() {
+        QtDemoEngine eng;
+        const QString good = QString(IOMETER_FIXTURE_DIR) + "/icf_compat/worker_rich.icf";
+        QVERIFY(eng.loadConfig(good));                    // parses via shared core
+        QVERIFY(!eng.loadConfig("Z:/no/such/file.icf"));  // error path -> errorOccurred
+    }
+
+    void saveConfig_demoReturnsFalse() {
+        QtDemoEngine eng;
+        QVERIFY(!eng.saveConfig("ignored.icf"));          // not implemented in demo mode
+    }
+
+    void newConfig_rebuildsDefault() {
+        QtDemoEngine eng;
+        eng.newConfig();
+        QVERIFY(!eng.managers().isEmpty());
+        QCOMPARE(eng.managers().first().workers.size(), 4);
+    }
+
+    void connectAndDisconnectManager() {
+        QtDemoEngine eng;
+        const int before = eng.managers().size();
+        eng.connectManager("10.9.9.9", "NewMgr");         // new address -> append
+        QCOMPARE(eng.managers().size(), before + 1);
+        eng.connectManager("127.0.0.1", "");              // existing address -> reconnect
+        eng.disconnectManager("NewMgr");
+        QVERIFY(true);
+    }
 };
 
 QTEST_GUILESS_MAIN(DemoEngineTest)
