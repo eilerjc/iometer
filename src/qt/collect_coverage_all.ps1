@@ -17,6 +17,8 @@
 #      Folded in automatically; produced out-of-band by the foreground PyAutoGUI
 #      suite (gui_tests\collect_gui_coverage.ps1): tab edits, the Save dialog, and
 #      the access-spec assign/remove/reorder buttons the batch run can't reach.
+#   - test\smoke\cov_raw\*.cov (if present)         -> the whole smoke suite under
+#      OpenCppCoverage (test\smoke\run_smoke.ps1 -Coverage); folded in automatically.
 #
 # Requires: OpenCppCoverage, a Qt build WITH PDBs (RelWithDebInfo), and the
 # MSVC Dynamotest build. Run from anywhere; paths are derived from $PSScriptRoot.
@@ -163,6 +165,16 @@ $guiRaw = Join-Path $root "gui_tests\cov_raw"
 if (Test-Path $guiRaw) {
     Get-ChildItem $guiRaw -Filter *.cov -ErrorAction SilentlyContinue | ForEach-Object {
         $covFiles += $_.FullName; Write-Host "  [cov] gui:$($_.BaseName)" -ForegroundColor Green
+    }
+}
+
+# --- 4d. Fold in smoke-suite coverage if it was collected --------------------
+# test\smoke\run_smoke.ps1 -Coverage leaves a whole-run .cov here (every binary the
+# smoke scenarios launch: IometerQt, dynamotest, Dynamo, MFC GUI, ctest exes).
+$smokeRaw = Join-Path $root "test\smoke\cov_raw"
+if (Test-Path $smokeRaw) {
+    Get-ChildItem $smokeRaw -Filter *.cov -ErrorAction SilentlyContinue | ForEach-Object {
+        $covFiles += $_.FullName; Write-Host "  [cov] smoke:$($_.BaseName)" -ForegroundColor Green
     }
 }
 
