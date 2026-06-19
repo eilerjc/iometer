@@ -53,6 +53,10 @@ private:
     QString          m_selManagerName;
     QString          m_selWorkerId;
     bool             m_updating        = false;
+    // Set while this page is writing its own edit back to the engine, so the
+    // engine's resulting configChanged doesn't re-enter refreshForEngine and
+    // rebuild the tree/combo out from under the widget signal in flight.
+    bool             m_applyingEdit    = false;
 
     // Left panel
     QTreeWidget     *m_targetTree      = nullptr;
