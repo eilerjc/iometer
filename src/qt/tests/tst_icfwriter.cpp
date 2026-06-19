@@ -164,6 +164,71 @@ private slots:
         QCOMPARE(wb.targets.size(), wa.targets.size());
         QCOMPARE(wb.targets[0].name, wa.targets[0].name);
     }
+
+    // ---- authored-byte checks for the writer enum branches the fixtures miss ----
+
+    void testSetup_recordResultsTokens() {
+        const char *expect[] = { nullptr, "NO_TARGETS", "NO_WORKERS", "NO_MANAGERS" };
+        for (int rt = 1; rt <= 3; ++rt) {
+            IcfTestSetup ts; ts.resultType = rt;
+            std::ostringstream os; IcfWriter::writeTestSetup(os, ts);
+            QVERIFY2(os.str().find(std::string("'Record Results\n\t") + expect[rt] + "\n")
+                     != std::string::npos, expect[rt]);
+        }
+    }
+
+    void testSetup_testTypeTokens() {
+        const char *expect[] = { nullptr, nullptr, "CYCLE_WORKERS",
+            "INCREMENT_TARGETS_PARALLEL", "INCREMENT_TARGETS_SERIAL",
+            "CYCLE_WORKERS_AND_TARGETS", "CYCLE_OUTSTANDING_IOS" };
+        for (int tt = 2; tt <= 6; ++tt) {
+            IcfTestSetup ts; ts.testType = tt;
+            std::ostringstream os; IcfWriter::writeTestSetup(os, ts);
+            QVERIFY2(os.str().find(std::string("'Test Type\n\t") + expect[tt] + "\n")
+                     != std::string::npos, expect[tt]);
+        }
+    }
+
+    void resultsDisplay_managerAndWorkerBars() {
+        IcfDisplaySettings ds;
+        IcfDisplaySettings::Bar mb; mb.kind = IcfDisplaySettings::Bar::Manager;
+        mb.index = 1; mb.id = 7; mb.name = "MGR";
+        IcfDisplaySettings::Bar wb; wb.kind = IcfDisplaySettings::Bar::Worker;
+        wb.index = 2; wb.id = 9; wb.name = "WRK";
+        ds.bars.push_back(mb); ds.bars.push_back(wb);
+        std::ostringstream os; IcfWriter::writeResultsDisplay(os, ds);
+        const std::string s = os.str();
+        QVERIFY(s.find("'Bar chart 2 manager ID, manager name\n\t7,MGR\n") != std::string::npos);
+        QVERIFY(s.find("'Bar chart 3 worker ID, worker name\n\t9,WRK\n") != std::string::npos);
+    }
+
+    void accessSpecs_defaultAssignmentTokens() {
+        const char *expect[] = { "NONE", "ALL", "DISK", "NET" };
+        for (int a = 1; a <= 3; ++a) {
+            IcfAccessSpec spec; spec.name = "S"; spec.defaultAssignment = a;
+            std::ostringstream os;
+            IcfWriter::writeAccessSpecs(os, std::vector<IcfAccessSpec>{spec});
+            QVERIFY2(os.str().find(std::string("\tS,") + expect[a] + "\n")
+                     != std::string::npos, expect[a]);
+        }
+    }
+
+    void managerList_netViWorkerAndTarget() {
+        IcfManagerConfig mgr; mgr.name = "M"; mgr.id = 1; mgr.address = "localhost";
+        IcfWorkerConfig w; w.name = "NetW"; w.kind = IcfWorkerKind::NetVI;
+        w.localNetworkInterface = "10.0.0.1"; w.viOutstandingIos = 8;
+        IcfTargetConfig t; t.name = "T"; t.kind = IcfWorkerKind::NetVI;
+        t.targetManagerId = 2; t.targetManagerName = "REMOTE";
+        w.targets.push_back(t);
+        mgr.workers.push_back(w);
+        std::ostringstream os;
+        IcfWriter::writeManagerList(os, std::vector<IcfManagerConfig>{mgr}, true, true);
+        const std::string s = os.str();
+        QVERIFY(s.find("'Worker type\n\tNETWORK,VI\n") != std::string::npos);
+        QVERIFY(s.find("'VI outstanding IOs\n\t8\n") != std::string::npos);
+        QVERIFY(s.find("'Target type\n\tNETWORK,VI\n") != std::string::npos);
+        QVERIFY(s.find("'Target manager ID, manager name\n\t2,REMOTE\n") != std::string::npos);
+    }
 };
 
 QTEST_APPLESS_MAIN(TestIcfWriter)
