@@ -214,6 +214,7 @@ iometer_test(tst_qtbarchartwidget)
 iometer_test(tst_qtbigmeterwidget)
 iometer_test(tst_qtpageaccess)
 iometer_test(tst_qtpagenetwork)
+iometer_test(tst_qtpagedisplay)
 
 # ── Coverage: set up test environment for profdata collection ──────────────────
 if(IOMETER_COVERAGE)
