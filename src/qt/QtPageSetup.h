@@ -56,6 +56,10 @@ private:
     QString         m_selManagerName;
     QString         m_selWorkerId;
     bool            m_updating        = false;
+    // Set while writing our own edit back to the engine, so the resulting
+    // configChanged doesn't re-enter refreshForEngine and rebuild the target list
+    // out from under the itemChanged signal in flight (use-after-free).
+    bool            m_applyingEdit    = false;
 
     // Left panel
     QListWidget    *m_targetList      = nullptr;

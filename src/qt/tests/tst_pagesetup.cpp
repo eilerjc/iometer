@@ -2,6 +2,8 @@
 // Verifies target list, worker params, and state management.
 #include <QObject>
 #include <QTest>
+#include <QListWidget>
+#include <QSpinBox>
 #include "QtPageSetup.h"
 #include "QtDemoEngine.h"
 
@@ -9,6 +11,27 @@ class PageSetupTest : public QObject
 {
     Q_OBJECT
 private slots:
+
+    // Regression: editing a disk target / worker param calls updateWorker, which
+    // emits configChanged; without the m_applyingEdit guard the page rebuilt the
+    // target list out from under the itemChanged signal -> use-after-free crash.
+    void editTargetAndParams_noReentrancyCrash() {
+        QtDemoEngine engine;
+        QtPageSetup page(&engine);
+        const auto mgrs = engine.managers();
+        page.setSelectedWorker(QString::fromStdString(mgrs[0].name),
+                               QString::fromStdString(mgrs[0].workers[0].id));
+
+        auto *list = page.findChild<QListWidget *>();
+        QVERIFY(list);
+        QVERIFY(list->count() > 0);
+        auto *item = list->item(0);                       // toggle a disk target
+        item->setCheckState(item->checkState() == Qt::Checked ? Qt::Unchecked
+                                                              : Qt::Checked);
+        for (auto *sb : page.findChildren<QSpinBox *>())  // edit the worker params
+            sb->setValue(sb->value() + 1);
+        QVERIFY(true);                                    // survived (no crash)
+    }
 
     void construct_withDemoEngine() {
         QtDemoEngine engine;

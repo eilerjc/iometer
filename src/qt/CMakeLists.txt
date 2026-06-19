@@ -210,6 +210,10 @@ iometer_test(tst_wirestructs)
 iometer_test(tst_meters)
 iometer_test(tst_pagesetup)
 iometer_test(tst_mainwindow)
+iometer_test(tst_qtbarchartwidget)
+iometer_test(tst_qtbigmeterwidget)
+iometer_test(tst_qtpageaccess)
+iometer_test(tst_qtpagenetwork)
 
 # ── Coverage: set up test environment for profdata collection ──────────────────
 if(IOMETER_COVERAGE)

@@ -140,6 +140,10 @@ void QtPageNetwork::setSelectedWorker(const QString &mgrName, const QString &wor
 
 void QtPageNetwork::refreshForEngine()
 {
+    // Ignore the configChanged our own edit just caused (we already hold the
+    // correct state); rebuilding here would delete the tree item / combo entry
+    // whose signal is still being processed.
+    if (m_applyingEdit) return;
     if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty())
         setSelectedWorker(m_selManagerName, m_selWorkerId);
     else if (!m_selManagerName.isEmpty())
@@ -252,7 +256,9 @@ void QtPageNetwork::saveWorkerParams()
             w.maxOutstandingSends = m_maxSends->value();
             w.testConnRate        = m_testConnRateChk->isChecked();
             w.transPerConn        = m_transPerConn->value();
+            m_applyingEdit = true;
             m_engine->updateWorker(w);
+            m_applyingEdit = false;
             return;
         }
     }
@@ -292,7 +298,9 @@ void QtPageNetwork::onTargetItemChanged(QTreeWidgetItem *item, int /*column*/)
             if (w.id != m_selWorkerId.toStdString()) continue;
             w.targets.clear();
             for (const auto &s : assigned) w.targets.push_back(s.toStdString());
+            m_applyingEdit = true;
             m_engine->updateWorker(w);
+            m_applyingEdit = false;
             return;
         }
     }

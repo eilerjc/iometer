@@ -212,6 +212,9 @@ void QtPageSetup::setSelectedWorker(const QString &mgrName, const QString &worke
 
 void QtPageSetup::refreshForEngine()
 {
+    // Ignore the configChanged our own edit just caused; rebuilding the target
+    // list here would delete the item whose itemChanged signal is still running.
+    if (m_applyingEdit) return;
     // Re-populate with the current selection intact (e.g. after manager connects)
     if (!m_selManagerName.isEmpty() && !m_selWorkerId.isEmpty())
         setSelectedWorker(m_selManagerName, m_selWorkerId);
@@ -330,7 +333,9 @@ void QtPageSetup::saveWorkerParams()
             w.testConnRate  = m_connRateChk->isChecked();
             w.transPerConn  = m_transPerConn->value();
             w.dataPattern   = m_dataPattern->currentIndex();
+            m_applyingEdit = true;
             m_engine->updateWorker(w);
+            m_applyingEdit = false;
             return;
         }
     }
@@ -371,7 +376,9 @@ void QtPageSetup::onTargetItemChanged(QListWidgetItem *item)
             if (w.id != m_selWorkerId.toStdString()) continue;
             w.targets.clear();
             for (const auto &s : assigned) w.targets.push_back(s.toStdString());
+            m_applyingEdit = true;
             m_engine->updateWorker(w);
+            m_applyingEdit = false;
             return;
         }
     }

@@ -134,6 +134,40 @@ private slots:
         QVERIFY(true);
     }
 
+    // ── Rendering (force paintEvent via grab) ────────────────────────────────
+    void paint_fixedRangeWithValue() {
+        QtMeterWidget m;
+        m.setRange(0, 100, false);
+        m.resize(160, 160);
+        m.setValue(50);
+        QVERIFY(!m.grab().isNull());     // draws dial + needle at mid-scale
+    }
+
+    void paint_autoRangeRatchetsAndDrawsWatermark() {
+        QtMeterWidget m;
+        m.setRange(0, 100, true);
+        m.showWatermark = true;
+        m.resize(180, 180);
+        // A climbing then dropping series moves the needle + sets the low/high
+        // watermark band and forces an auto-range ratchet; grab each to paint.
+        for (double v : {10.0, 250.0, 2500.0, 800.0, 1.0}) {
+            m.setValue(v);
+            QVERIFY(!m.grab().isNull());
+        }
+        m.resetWatermark();
+        QVERIFY(!m.grab().isNull());
+    }
+
+    void paint_zeroAndOverMax() {
+        QtMeterWidget m;
+        m.setRange(0, 100, false);
+        m.resize(140, 140);
+        m.setValue(0);
+        QVERIFY(!m.grab().isNull());
+        m.setValue(500);                 // pegs past max -> clamped needle
+        QVERIFY(!m.grab().isNull());
+    }
+
 };
 
 QTEST_MAIN(MeterWidgetTest)
