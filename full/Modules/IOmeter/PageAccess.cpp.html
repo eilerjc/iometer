@@ -1,0 +1,1250 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>PageAccess.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / PageAccess.cpp                                         ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CPageAccess class, which is     ## */
+/* ##               responsible for the "Access Specifications" tab in    ## */
+/* ##               Iometer's main window.                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2004-05-13 (lamontcranston41@yahoo.com)               ## */
+/* ##               - Make sure the current access spec is visible        ## */
+/* ##               2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               2003-03-02 (joe@eiler.net)                            ## */
+/* ##               - Changed LONG_PTR to ULONG_PTR, which is what it is  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "PageAccess.h"
+#include "GalileoView.h"
+#include "AccessDialog.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CPageAccess property page
+
+<span style = "background-color:#dfd">IMPLEMENT_DYNCREATE(CPageAccess, CPropertyPage)</span>
+
+<span style = "background-color:#dfd">CPageAccess::CPageAccess():CPropertyPage(CPageAccess::IDD)
+{
+	global_dragging = FALSE;</span>
+	assigned_dragging = FALSE;
+	//{{AFX_DATA_INIT(CPageAccess)
+	//}}AFX_DATA_INIT
+<span style = "background-color:#dfd">}</span>
+
+void CPageAccess::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CPropertyPage::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CPageAccess)
+<span style = "background-color:#dfd">	DDX_Control(pDX, GGlobalFrame, m_GGlobalFrame);
+	DDX_Control(pDX, GAssignedFrame, m_GAssignedFrame);
+	DDX_Control(pDX, BEditCopy, m_BEditCopy);
+	DDX_Control(pDX, LAssignedAccess, m_LAssignedAccess);
+	DDX_Control(pDX, BUp, m_BUp);
+	DDX_Control(pDX, LGlobalAccess, m_LGlobalAccess);
+	DDX_Control(pDX, BRemove, m_BRemove);
+	DDX_Control(pDX, BNew, m_BNew);
+	DDX_Control(pDX, BEdit, m_BEdit);
+	DDX_Control(pDX, BDown, m_BDown);
+	DDX_Control(pDX, BAdd, m_BAdd);
+	DDX_Control(pDX, BDelete, m_BDelete);</span>
+	//}}AFX_DATA_MAP
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CPageAccess, CPropertyPage)</span>
+    //{{AFX_MSG_MAP(CPageAccess)
+    ON_BN_CLICKED(BEdit, OnBEdit)
+    ON_BN_CLICKED(BNew, OnBNew)
+    ON_BN_CLICKED(BDelete, OnBDelete)
+    ON_BN_CLICKED(BAdd, OnBAdd)
+    ON_BN_CLICKED(BRemove, OnBRemove)
+    ON_BN_CLICKED(BDown, OnBDown)
+    ON_BN_CLICKED(BUp, OnBUp)
+    ON_NOTIFY(NM_DBLCLK, LGlobalAccess, OnDblclkLGlobalAccess)
+    ON_NOTIFY(LVN_BEGINDRAG, LGlobalAccess, OnBegindragLGlobalAccess)
+    ON_WM_SETCURSOR()
+    ON_NOTIFY(LVN_ITEMCHANGED, LAssignedAccess, OnItemchangedLAssignedAccess)
+    ON_NOTIFY(LVN_BEGINDRAG, LAssignedAccess, OnBegindragLAssignedAccess)
+    ON_NOTIFY(LVN_ITEMCHANGED, LGlobalAccess, OnItemchangedLGlobalAccess)
+    ON_NOTIFY(NM_SETFOCUS, LGlobalAccess, OnSetfocusLGlobalAccess)
+    ON_NOTIFY(NM_SETFOCUS, LAssignedAccess, OnSetfocusLAssignedAccess)
+    ON_BN_CLICKED(BEditCopy, OnBEditCopy)
+    ON_NOTIFY(NM_KILLFOCUS, LGlobalAccess, OnKillfocusLGlobalAccess)
+    ON_NOTIFY(NM_KILLFOCUS, LAssignedAccess, OnKillfocusLAssignedAccess)
+    ON_NOTIFY(NM_CLICK, LGlobalAccess, OnClickLGlobalAccess)
+	ON_NOTIFY(NM_CLICK, LAssignedAccess, OnClickLAssignedAccess)
+	ON_NOTIFY(LVN_KEYDOWN, LGlobalAccess, OnKeyDownGlobalAccess)
+	ON_NOTIFY(LVN_KEYDOWN, LAssignedAccess, OnKeyDownAssignedAccess)
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+/////////////////////////////////////////////////////////////////////////////
+// CPageAccess message handlers
+BOOL CPageAccess::OnInitDialog()
+<span style = "background-color:#dfd">{
+	CPropertyPage::OnInitDialog();
+	CRect rect;</span>
+
+	// Create and attach the LED image list to the assigned list control.
+<span style = "background-color:#dfd">	m_AssignedImageList.Create(IDB_LED, ACCESS_ICON_SIZE, ACCESS_ICON_EXPAND, ASSIGNED_ACCESS_ICON_BGCOLOR);
+	m_LAssignedAccess.SetImageList(&amp;m_AssignedImageList, LVSIL_SMALL);</span>
+
+	// Create and attach the default assignment image list to the global list control.
+<span style = "background-color:#dfd">	m_GlobalImageList.Create(IDB_ACCESS_ICONS, ACCESS_ICON_SIZE, ACCESS_ICON_EXPAND, GLOBAL_ACCESS_ICON_BGCOLOR);
+	m_LGlobalAccess.SetImageList(&amp;m_GlobalImageList, LVSIL_SMALL);</span>
+
+	// modify list controls to always show the selection, even when they don't have the focus.
+<span style = "background-color:#dfd">	m_LAssignedAccess.ModifyStyle(NULL, LVS_SHOWSELALWAYS);
+	m_LGlobalAccess.ModifyStyle(NULL, LVS_SHOWSELALWAYS);</span>
+
+	// Creates a single column the width of the list control.
+	// for the assigned list.
+<span style = "background-color:#dfd">	m_LAssignedAccess.GetClientRect(&amp;rect);
+	m_LAssignedAccess.InsertColumn(0, "", LVCFMT_LEFT, rect.Width());</span>
+	// for the global list.
+<span style = "background-color:#dfd">	m_LGlobalAccess.GetClientRect(&amp;rect);
+	m_LGlobalAccess.InsertColumn(0, "", LVCFMT_LEFT, rect.Width());</span>
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);</span>
+
+	// Display the global access list.
+<span style = "background-color:#dfd">	ShowGlobalAccess();</span>
+
+	// Disable the assigned-specific items in the GUI.
+<span style = "background-color:#dfd">	SetAssignedButtons(FALSE);
+	SetAssignedAccess(FALSE);</span>
+
+<span style = "background-color:#dfd">	return TRUE;		// return TRUE unless you set the focus to a control</span>
+	// EXCEPTION: OCX Property Pages should return FALSE
+<span style = "background-color:#dfd">}</span>
+
+void CPageAccess::ShowGlobalAccess()
+<span style = "background-color:#dfd">{</span>
+	int spec_count;
+	Test_Spec *spec;
+
+<span style = "background-color:#dfd">	m_LGlobalAccess.DeleteAllItems();</span>
+	// Display the contents of the access spec list.
+<span style = "background-color:#dfd">	spec_count = theApp.access_spec_list.Count();
+	for (int i = 0; i &lt; spec_count; i++) {
+		spec = theApp.access_spec_list.Get(i);</span>
+		// Insert the Spec into the GUI.
+		// Set the data portion to the index of the access spec in 
+		// the access spec list.  Do not set the state to selected, since the
+		// list box allows multiple selection.
+<span style = "background-color:#dfd">		m_LGlobalAccess.InsertItem(LVIF_STATE | LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE,</span>
+					   i,
+					   spec-&gt;name, NULL, LVIS_SELECTED, spec-&gt;default_assignment, (ULONG_PTR) spec);
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Create a new access spec object and add it to the gui.
+//
+void CPageAccess::OnBNew()
+<span style = "background-color:#dfd">{</span>
+	// Create a new access spec object and store the returned pointer.
+	Test_Spec *spec;
+
+<span style = "background-color:#dfd">	spec = theApp.access_spec_list.New();</span>
+
+	// Check for validity of returned index before adding anything to GUI.
+<span style = "background-color:#dfd">	if (!spec)</span>
+		return;
+
+	// Clear any selection in the global list.
+<span style = "background-color:#dfd">	int i = m_LGlobalAccess.GetNextItem(-1, LVIS_SELECTED);</span>
+
+<span style = "background-color:#dfd">	while (i != NOTHING) {</span>
+<span style = "background-color:#fdd">		m_LGlobalAccess.SetItemState(i, NULL, LVIS_SELECTED);
+		i = m_LGlobalAccess.GetNextItem(i, LVIS_SELECTED);</span>
+	}
+
+	// Add the Access Spec to the global list view.
+	// Set the data portion to the index of the access spec in the access spec
+	// list. Select the newly added item.
+<span style = "background-color:#dfd">	m_LGlobalAccess.InsertItem(LVIF_STATE | LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE,</span>
+				   theApp.access_spec_list.IndexByRef(spec), spec-&gt;name,
+				   LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED,
+				   AssignNone, (ULONG_PTR) spec);
+
+	// Automatically call the edit function for the new spec.
+	// Deletes the spec if editing was cancelled.
+<span style = "background-color:#dfd">	if (!Edit())</span>
+<span style = "background-color:#fdd">		Delete();</span>
+
+	// Set the focus to the ListCtrl
+<span style = "background-color:#dfd">	m_LGlobalAccess.SetFocus();
+}</span>
+
+//
+// Edit button handler.
+//
+void CPageAccess::OnBEdit()
+<span style = "background-color:#dfd">{
+	Edit();
+	m_LGlobalAccess.SetFocus();
+}</span>
+
+//
+// Pops up an edit form for the currently selected item in the global list.
+//
+BOOL CPageAccess::Edit()
+<span style = "background-color:#dfd">{</span>
+	// Get currently selected spec.
+<span style = "background-color:#dfd">	int item_index = m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+<span style = "background-color:#dfd">	if (item_index == NOTHING || item_index == IDLE_SPEC)</span>
+<span style = "background-color:#fdd">		return FALSE;</span>
+
+<span style = "background-color:#dfd">	Test_Spec *spec = (Test_Spec *) m_LGlobalAccess.GetItemData(item_index);</span>
+
+	// Create access spec edit dialog and pass currently selected item's index.
+<span style = "background-color:#dfd">	CAccessDialog EditDlg(spec);</span>
+
+<span style = "background-color:#dfd">	if (EditDlg.DoModal() == IDCANCEL)</span>
+		return FALSE;
+
+	// Display the correct default assignment icon for the new access spec.
+<span style = "background-color:#dfd">	m_LGlobalAccess.SetItem(item_index, 0, LVIF_IMAGE, NULL, spec-&gt;default_assignment, NULL, NULL, NULL);</span>
+
+	// Update a name change
+<span style = "background-color:#dfd">	m_LGlobalAccess.SetItemText(item_index, 0, spec-&gt;name);
+	ShowAssignedAccess();</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Deletes the selected access spec.
+//
+void CPageAccess::OnBDelete()
+<span style = "background-color:#dfd">{
+	Delete();
+	m_LGlobalAccess.SetFocus();
+}</span>
+
+void CPageAccess::Delete()
+<span style = "background-color:#dfd">{
+	int item_index = m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+	// Keep track of the first selected item so the highlight
+	// will remain on the same index after item removal.
+<span style = "background-color:#dfd">	int new_selected = item_index;</span>
+
+<span style = "background-color:#dfd">	LockWindowUpdate();</span>
+	// Loop through all the selected list items and delete them.
+<span style = "background-color:#dfd">	while (item_index != NOTHING) {</span>
+		// Only delete the item if it isn't the idle spec.
+<span style = "background-color:#dfd">		if (item_index != IDLE_SPEC) {
+			theApp.access_spec_list.Delete((Test_Spec *) m_LGlobalAccess.GetItemData(item_index));</span>
+		}
+<span style = "background-color:#dfd">		item_index = m_LGlobalAccess.GetNextItem(item_index, LVNI_SELECTED);</span>
+	}
+	// Display the global access specs.
+<span style = "background-color:#dfd">	ShowGlobalAccess();</span>
+
+	// Make sure the item selection won't be beyond the end of the list.
+<span style = "background-color:#dfd">	if (new_selected &gt;= m_LGlobalAccess.GetItemCount())
+		new_selected = m_LGlobalAccess.GetItemCount() - 1;</span>
+
+	// Make a selection in the list.
+<span style = "background-color:#dfd">	m_LGlobalAccess.SetItemState(new_selected, LVNI_SELECTED, LVNI_SELECTED);</span>
+
+	// Update the assigned access specs in case we just deleted one.
+<span style = "background-color:#dfd">	ShowAssignedAccess();
+	UnlockWindowUpdate();
+}</span>
+
+//
+// Adds the selected access spec from the global list to the selected assigned (all managers, manager, or worker).
+//
+void CPageAccess::OnBAdd()
+<span style = "background-color:#dfd">{
+	CPoint point;</span>
+
+<span style = "background-color:#dfd">	GetCursorPos(&amp;point);</span>
+	// Add button has same functionality as dragging from the global list.
+	global_dragging = TRUE;
+<span style = "background-color:#dfd">	Insert(point);
+	m_LAssignedAccess.SetFocus();
+}</span>
+
+//
+// Removes the selected items from the worker's assigned access specs.
+//
+void CPageAccess::OnBRemove()
+<span style = "background-color:#dfd">{
+	Remove();</span>
+	// Set the focus to the assigned access spec list so that the buttons do
+	// not get disabled.
+<span style = "background-color:#dfd">	m_LAssignedAccess.SetFocus();
+}</span>
+
+//
+// Removes the item at item_index from the assigned list.
+//
+void CPageAccess::Remove()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+	int new_selection;
+	int selected_type;
+	int item_index, old_item_index;
+
+	// Check to make sure something was selected.
+<span style = "background-color:#dfd">	if (m_LAssignedAccess.GetSelectedCount() == 0)</span>
+		return;
+
+	// Store the first selected index as the index to be selected after removal.
+<span style = "background-color:#dfd">	new_selection = m_LAssignedAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+	// Store the manager/worker selection type since it is used inside the while loop.
+<span style = "background-color:#dfd">	selected_type = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType();</span>
+
+	// Find out who is selected: All managers, a manager, or a worker.
+<span style = "background-color:#dfd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+<span style = "background-color:#dfd">	LockWindowUpdate();</span>
+
+	// Items must be removed in reverse order (bottom --&gt; up).
+	// This isn't the case for the global access spec list.
+	// See the comment within the removal loop below.
+
+	// See if the last item in the list is selected.
+<span style = "background-color:#dfd">	if (m_LAssignedAccess.GetItemState(m_LAssignedAccess.GetItemCount() - 1, LVNI_SELECTED)) {</span>
+		// It is.
+<span style = "background-color:#dfd">		item_index = m_LAssignedAccess.GetItemCount() - 1;
+	} else {</span>
+		// It isn't.  Find the next highest selected item.
+<span style = "background-color:#fdd">		item_index = m_LAssignedAccess.GetNextItem(m_LAssignedAccess.GetItemCount() - 1,</span>
+							   LVNI_ABOVE | LVNI_SELECTED);
+	}
+
+	// Loop through all the selected list items and remove them.
+<span style = "background-color:#dfd">	while (item_index != NOTHING) {</span>
+		// Remove the entry from the selected assigned (all managers,
+		// manager, or worker).  There is no point in updating the
+		// GUI since we will just refresh the contents when we are done
+		// deleting.
+<span style = "background-color:#dfd">		switch (selected_type) {</span>
+			// Nothing is actually removed from the GUI until the call to
+			// ShowAssignedAccess(), below.  This is why we have to remove
+			// the list items from the bottom up.
+		case ALL_MANAGERS:
+<span style = "background-color:#fdd">			theApp.manager_list.RemoveAccessSpecAt(item_index);</span>
+			break;
+		case MANAGER:
+<span style = "background-color:#fdd">			manager-&gt;RemoveAccessSpecAt(item_index);
+			break;</span>
+		case WORKER:
+<span style = "background-color:#dfd">			worker-&gt;RemoveAccessSpecAt(item_index);</span>
+			break;
+		}
+
+		// Keep track of the last item we removed.
+<span style = "background-color:#dfd">		old_item_index = item_index;</span>
+		// Find the next selected item above it.
+<span style = "background-color:#dfd">		item_index = m_LAssignedAccess.GetNextItem(old_item_index, LVNI_ABOVE | LVNI_SELECTED);</span>
+		// If the values are the same, we're at the top of the list.
+		// (The CListCtrl should return -1, but doesn't.)
+<span style = "background-color:#dfd">		if (item_index == old_item_index)</span>
+			break;
+	}
+
+<span style = "background-color:#dfd">	ShowAssignedAccess();</span>
+
+	// See if the selected item is beyond the end of the list now.
+<span style = "background-color:#dfd">	if (new_selection &gt;= m_LAssignedAccess.GetItemCount())
+		new_selection = m_LAssignedAccess.GetItemCount() - 1;</span>
+
+<span style = "background-color:#dfd">	m_LAssignedAccess.SetItemState(new_selection, LVNI_SELECTED, LVNI_SELECTED);</span>
+
+<span style = "background-color:#dfd">	UnlockWindowUpdate();
+}</span>
+
+//
+// This function is called whenever the selection in the WorkerView changes.
+// If the selection changes to a worker, it displays that worker's access
+// spec assignment.
+//
+void CPageAccess::ShowAssignedAccess()
+<span style = "background-color:#dfd">{</span>
+<span style = "background-color:#fdd">	int m, w, s, mgr_count, wkr_count = 0, spec_count;
+	Manager *mgr = NULL;</span>
+	Worker *wkr = NULL;
+	Test_Spec *spec;
+
+	// Clear the list of assigned access specs.
+<span style = "background-color:#dfd">	m_LAssignedAccess.DeleteAllItems();</span>
+
+	// find out who is selected: All managers, a manager, or a worker.
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case ALL_MANAGERS:
+		// Disable the Assigned Access Spec listbox if there are no workers.
+<span style = "background-color:#dfd">		if (!theApp.manager_list.WorkerCount()) {
+			SetAssignedAccess(FALSE);</span>
+			return;
+		}
+		// Enable the Assigned Access Spec listbox.
+<span style = "background-color:#dfd">		SetAssignedAccess(TRUE);</span>
+
+		// Only display items in the listbox if all the descended workers
+		// have the same access spec list.
+<span style = "background-color:#dfd">		if (!theApp.manager_list.AreAccessSpecsIdentical())</span>
+			return;
+
+		// All access specs are the same.  Show the specs stored by any worker.
+
+		// Find a manager with any non-client workers.
+<span style = "background-color:#dfd">		mgr_count = theApp.manager_list.ManagerCount();
+		for (m = 0; m &lt; mgr_count; m++) {
+			mgr = theApp.manager_list.GetManager(m);
+			wkr_count = mgr-&gt;WorkerCount();
+			if (wkr_count &gt; mgr-&gt;WorkerCount(GenericClientType))</span>
+				break;
+		}
+
+		// Find the manager's first non-client worker.
+<span style = "background-color:#dfd">		for (w = 0; w &lt; wkr_count; w++) {</span>
+			// Find the first non-client worker.
+<span style = "background-color:#dfd">			wkr = mgr-&gt;GetWorker(w);
+			if (!IsType(wkr-&gt;Type(), GenericClientType))</span>
+				break;
+		}
+		break;
+
+	case MANAGER:
+<span style = "background-color:#dfd">		mgr = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		wkr_count = mgr-&gt;WorkerCount();</span>
+
+		// Disable the access spec list if there are no non-client workers.
+<span style = "background-color:#dfd">		if (wkr_count == mgr-&gt;WorkerCount(GenericClientType)) {</span>
+			SetAssignedAccess(FALSE);
+			return;
+		}
+		// Enable the Assigned Access Spec listbox.
+<span style = "background-color:#dfd">		SetAssignedAccess(TRUE);</span>
+
+		// Only display items in the listbox if all the descended workers
+		// have the same access spec list.
+<span style = "background-color:#dfd">		if (!mgr-&gt;AreAccessSpecsIdentical())</span>
+			return;
+
+		// All the access specs are the same.
+
+		// Find the first non-client worker.
+<span style = "background-color:#dfd">		for (w = 0; w &lt; wkr_count; w++) {
+			wkr = mgr-&gt;GetWorker(w);
+			if (!IsType(wkr-&gt;Type(), GenericClientType))</span>
+				break;
+		}
+<span style = "background-color:#fdd">		break;</span>
+
+	case WORKER:
+
+<span style = "background-color:#dfd">		wkr = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+<span style = "background-color:#dfd">		if (IsType(wkr-&gt;Type(), GenericClientType)) {</span>
+			// Worker is a net client.  Display it's net server's spec 
+			// assignment, but disable the view.
+<span style = "background-color:#fdd">			wkr = wkr-&gt;net_partner;
+			SetAssignedAccess(FALSE);
+		} else {</span>
+<span style = "background-color:#dfd">			SetAssignedAccess(TRUE);</span>
+		}
+		break;
+	}
+<span style = "background-color:#dfd">	if (!wkr) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("No valid worker in CPageAccess::ShowAssignedAccess().");</span>
+		return;
+	}
+	// Add the Access Spec to the assigned access spec list view.
+<span style = "background-color:#dfd">	spec_count = wkr-&gt;AccessSpecCount();
+	for (s = 0; s &lt; spec_count; s++) {
+		spec = wkr-&gt;GetAccessSpec(s);</span>
+		// Set the data portion to pointer to the access spec in the
+		// worker's access spec list.
+<span style = "background-color:#dfd">		m_LAssignedAccess.InsertItem(LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE,</span>
+					     s, spec-&gt;name, NULL, LVIS_SELECTED, BLUE, (ULONG_PTR) spec);
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Enables the assigned list and add button based on the input variable.
+// Verifies that enabling is allowed before enabling.
+//
+void CPageAccess::SetAssignedAccess(BOOL enable)
+<span style = "background-color:#dfd">{</span>
+	Manager *mgr;
+	Worker *wkr;
+	BOOL enabling_worker = FALSE;
+
+	// Get the currently selected manager and worker.
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case ALL_MANAGERS:
+		// Allow enabling if there are any workers,
+<span style = "background-color:#dfd">		enabling_worker = theApp.manager_list.WorkerCount();</span>
+		break;
+
+	case MANAGER:
+<span style = "background-color:#dfd">		mgr = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();</span>
+
+		// Allow enabling if there are non-client workers.
+<span style = "background-color:#dfd">		enabling_worker = (mgr-&gt;WorkerCount() &gt; mgr-&gt;WorkerCount(GenericClientType));
+		break;</span>
+
+	case WORKER:
+<span style = "background-color:#dfd">		wkr = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+		// Allow enabling if it's not a client.
+<span style = "background-color:#dfd">		enabling_worker = !IsType(wkr-&gt;Type(), GenericClientType);</span>
+		break;
+	}
+
+<span style = "background-color:#dfd">	m_LAssignedAccess.EnableWindow(enable &amp;&amp; enabling_worker &amp;&amp; theApp.test_state == TestIdle);</span>
+
+<span style = "background-color:#dfd">	m_BAdd.EnableWindow(enable &amp;&amp; enabling_worker &amp;&amp; theApp.test_state == TestIdle &amp;&amp;</span>
+			    (m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED) != -1));
+
+<span style = "background-color:#dfd">	m_LAssignedAccess.RedrawWindow();
+	m_BAdd.RedrawWindow();
+}</span>
+
+//
+// Called by both the up and down button handlers.  This function actually moves the things around
+// in both the GUI and the selected assigned's access spec list.
+//
+void CPageAccess::Move(int desired_index)
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+<span style = "background-color:#dfd">	int item_index = m_LAssignedAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+	// Check to make sure something was selected.
+<span style = "background-color:#dfd">	if (m_LAssignedAccess.GetSelectedCount() == 0)</span>
+		return;
+
+<span style = "background-color:#dfd">	LockWindowUpdate();</span>
+	// Move the access spec referred to by the selected item.
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		theApp.manager_list.MoveAccessSpec(item_index, desired_index);</span>
+		break;
+	case MANAGER:
+<span style = "background-color:#fdd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		manager-&gt;MoveAccessSpec(item_index, desired_index);
+		break;</span>
+	case WORKER:
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		worker-&gt;MoveAccessSpec(item_index, desired_index);</span>
+		break;
+	}
+<span style = "background-color:#dfd">	ShowAssignedAccess();</span>
+	// Select the moved item so that the move buttons are still enabled.
+<span style = "background-color:#dfd">	m_LAssignedAccess.SetItemState(desired_index, LVNI_SELECTED, LVNI_SELECTED);
+	UnlockWindowUpdate();
+}</span>
+
+//
+// Moves the selected item up/down in the assigned's list of access specs.
+//
+void CPageAccess::OnBDown()
+<span style = "background-color:#fdd">{</span>
+	// Get the currently selected item from the workers ListCtrl.
+<span style = "background-color:#fdd">	int item_index = m_LAssignedAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+<span style = "background-color:#fdd">	Move(item_index + 1);
+	m_LAssignedAccess.SetFocus();
+}</span>
+
+void CPageAccess::OnBUp()
+<span style = "background-color:#dfd">{</span>
+	// Get the currently selected item from the workers ListCtrl.
+<span style = "background-color:#dfd">	int item_index = m_LAssignedAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+<span style = "background-color:#dfd">	Move(item_index - 1);
+	m_LAssignedAccess.SetFocus();
+}</span>
+
+//
+// Enables or disable the Up, Down, and Remove buttons.
+//
+void CPageAccess::SetAssignedButtons(BOOL enable)
+<span style = "background-color:#dfd">{
+	int item_index = m_LAssignedAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);
+	BOOL net_client_selected = (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorkerType()</span>
+				    == GenericClientType);
+
+	// Enables the Up Button when the selected item is at least the second entry
+<span style = "background-color:#dfd">	m_BUp.EnableWindow(enable &amp;&amp;</span>
+			   item_index &gt; 0 &amp;&amp;
+			   !net_client_selected &amp;&amp;
+			   m_LAssignedAccess.GetSelectedCount() == 1 &amp;&amp;
+			   theApp.test_state == TestIdle &amp;&amp; GetFocus() == &amp;m_LAssignedAccess);
+	// Enables the Down Button when the selected item is not the last entry.
+<span style = "background-color:#dfd">	m_BDown.EnableWindow(enable &amp;&amp;</span>
+			     item_index &lt; m_LAssignedAccess.GetItemCount() - 1 &amp;&amp;
+			     item_index &gt;= 0 &amp;&amp;
+			     !net_client_selected &amp;&amp;
+			     m_LAssignedAccess.GetSelectedCount() == 1 &amp;&amp;
+			     theApp.test_state == TestIdle &amp;&amp; GetFocus() == &amp;m_LAssignedAccess);
+	// Remove Button when any item is selected.
+<span style = "background-color:#dfd">	m_BRemove.EnableWindow(enable &amp;&amp;</span>
+			       item_index != NOTHING &amp;&amp;
+			       !net_client_selected &amp;&amp;
+			       theApp.test_state == TestIdle &amp;&amp; GetFocus() == &amp;m_LAssignedAccess);
+
+<span style = "background-color:#dfd">	m_BUp.RedrawWindow();
+	m_BDown.RedrawWindow();
+	m_BRemove.RedrawWindow();
+}</span>
+
+//
+// Edits an access spec when the user double clicks on it in the global list.
+//
+void CPageAccess::OnDblclkLGlobalAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	Edit();
+	m_LGlobalAccess.SetFocus();</span>
+
+	*pResult = 0;
+<span style = "background-color:#fdd">}</span>
+
+//
+// The user is beginning a drag operation from the global list.
+//
+void CPageAccess::OnBegindragLGlobalAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	// check that input parameter is valid and that we are allowed to drag.
+	if (!pNMHDR || theApp.test_state != TestIdle || theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorkerType()
+<span style = "background-color:#fdd">	    == GenericClientType || !m_LAssignedAccess.IsWindowEnabled()) {</span>
+		return;
+	}
+	// Select the item to drag.
+	NM_LISTVIEW *pNMListView = (NM_LISTVIEW *) pNMHDR;
+
+	// Set flag indicating that a drag operation is underway.
+<span style = "background-color:#fdd">	global_dragging = TRUE;
+	CPoint point;</span>
+
+<span style = "background-color:#fdd">	p_DragImage = m_LGlobalAccess.CreateDragImage(pNMListView-&gt;iItem, &amp;point);</span>
+
+	// set hot spot to middle of 16x16 icon
+<span style = "background-color:#fdd">	point.x = 8;
+	point.y = 8;</span>
+
+	// set drag icon to icon of current selection
+<span style = "background-color:#fdd">	p_DragImage-&gt;BeginDrag(0, point);</span>
+
+<span style = "background-color:#fdd">	if (m_LGlobalAccess.GetSelectedCount() &gt; 1) 	
+	theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);</span>
+
+<span style = "background-color:#fdd">	*pResult = 0;
+}</span>
+
+//
+// The user is beginning a drag operation from the assigned list.
+//
+void CPageAccess::OnBegindragLAssignedAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	// check that input parameter is valid
+	if (!pNMHDR || theApp.test_state != TestIdle || theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorkerType()
+<span style = "background-color:#fdd">	    == GenericClientType || !m_LAssignedAccess.IsWindowEnabled()) {</span>
+		return;
+	}
+	// Set focus to assigned access list.
+<span style = "background-color:#fdd">	m_LAssignedAccess.SetFocus();</span>
+
+	// Select the item to drag.
+	NM_LISTVIEW *pNMListView = (NM_LISTVIEW *) pNMHDR;
+
+	// Set flag indicating that a drag operation is underway.
+<span style = "background-color:#fdd">	assigned_dragging = TRUE;
+	CPoint point;</span>
+
+<span style = "background-color:#fdd">	p_DragImage = m_LAssignedAccess.CreateDragImage(pNMListView-&gt;iItem, &amp;point);</span>
+
+	// set hot spot to middle of 16x16 icon
+<span style = "background-color:#fdd">	point.x = 24;
+	point.y = 8;</span>
+
+	// set drag icon to icon of current selection
+<span style = "background-color:#fdd">	p_DragImage-&gt;BeginDrag(0, point);</span>
+
+<span style = "background-color:#fdd">	if (m_LAssignedAccess.GetSelectedCount() &gt; 1) 	
+		theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);</span>
+	
+<span style = "background-color:#fdd">	*pResult = 0;
+}</span>
+
+//
+// Updates the cursor during a drag operation.
+//
+BOOL CPageAccess::OnSetCursor(CWnd * pWnd, UINT nHitTest, UINT message)
+<span style = "background-color:#dfd">{
+	CPoint point;
+	CRect global_rect, assigned_rect;</span>
+
+	// Get the areas of the two list controls.
+<span style = "background-color:#dfd">	m_LAssignedAccess.GetWindowRect(&amp;assigned_rect);
+	m_LGlobalAccess.GetWindowRect(&amp;global_rect);</span>
+
+	// Normalize these areas so that we have no negative widths or heights.
+<span style = "background-color:#dfd">	assigned_rect.NormalizeRect();
+	global_rect.NormalizeRect();</span>
+
+	// Check to see if the mouse is moved during a drag event.
+<span style = "background-color:#dfd">	if (message == WM_MOUSEMOVE &amp;&amp; (global_dragging || assigned_dragging)) {</span>
+		// Get current curser position.
+<span style = "background-color:#fdd">		GetCursorPos(&amp;point);</span>
+
+		// Set the curser to either the arrow or the crossed circle.
+<span style = "background-color:#fdd">		if (global_dragging &amp;&amp; !assigned_rect.PtInRect(point) &amp;&amp; !global_rect.PtInRect(point))
+			SetCursor(LoadCursor(NULL, IDC_NO));</span>
+		else
+<span style = "background-color:#fdd">			SetCursor(LoadCursor(NULL, IDC_ARROW));</span>
+
+		// Show the drag image in addition to the cursor.
+<span style = "background-color:#fdd">		p_DragImage-&gt;DragShowNolock(TRUE);
+		p_DragImage-&gt;DragMove(point);</span>
+
+<span style = "background-color:#fdd">		return TRUE;</span>
+	}
+	// Check to see if the button up mouse event happened after a drag event.
+<span style = "background-color:#dfd">	if ((message == WM_LBUTTONUP || message == WM_LBUTTONDOWN) &amp;&amp; (global_dragging || assigned_dragging)) {</span>
+<span style = "background-color:#fdd">		p_DragImage-&gt;EndDrag();</span>
+
+<span style = "background-color:#fdd">		delete p_DragImage;</span>
+
+		// Return the cursor to the Arrow.
+<span style = "background-color:#fdd">		SetCursor(LoadCursor(NULL, IDC_ARROW));</span>
+
+<span style = "background-color:#fdd">		GetCursorPos(&amp;point);</span>
+
+		// dragging within the assigned list?
+<span style = "background-color:#fdd">		if (assigned_dragging) {
+			if (assigned_rect.PtInRect(point)) {	// dropped within the assigned list.
+				if (m_LAssignedAccess.GetSelectedCount() == 1)
+					Insert(point);</span>
+			} else {	// dropped outside the assigned list.
+<span style = "background-color:#fdd">				Remove();</span>
+			}
+		}
+		// dragging from the global list to the assigned list?
+<span style = "background-color:#fdd">		else if (global_dragging &amp;&amp; assigned_rect.PtInRect(point)) {
+			Insert(point);
+			m_LAssignedAccess.SetFocus();</span>
+		}
+
+		assigned_dragging = FALSE;
+<span style = "background-color:#fdd">		global_dragging = FALSE;
+		return TRUE;</span>
+	}
+
+<span style = "background-color:#dfd">	return CPropertyPage::OnSetCursor(pWnd, nHitTest, message);
+}</span>
+
+//
+// Handle the item selection changing in the assigned list.
+//
+void CPageAccess::OnItemchangedLAssignedAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{</span>
+	NM_LISTVIEW *pNMListView = (NM_LISTVIEW *) pNMHDR;
+
+	// Set buttons correctly.
+<span style = "background-color:#dfd">	SetAssignedButtons(TRUE);</span>
+
+<span style = "background-color:#dfd">	m_LAssignedAccess.RedrawWindow();</span>
+	*pResult = 0;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Inserts an item into the assigned list before the currently selected item.
+//
+void CPageAccess::Insert(CPoint point)
+<span style = "background-color:#dfd">{</span>
+	int move_to_index, global_index;
+	Manager *manager;
+	Worker *worker;
+
+<span style = "background-color:#dfd">	global_index = m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+<span style = "background-color:#dfd">	if (global_dragging &amp;&amp; global_index == NOTHING)</span>
+		return;
+
+	// find out who is selected: All managers, a manager, or a worker.
+<span style = "background-color:#dfd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+	// Set all spec LED's to their initial state.
+<span style = "background-color:#dfd">	Reset();</span>
+
+	// If this is a new selection, any additions to all managers or to a manager
+	// will clear all their children workers' access spec settings.
+<span style = "background-color:#dfd">	if (!worker &amp;&amp; m_LAssignedAccess.GetItemCount() == 0) {</span>
+		// There is nothing in the GUI.  The Add will replace
+		// all the children workers' selection.
+<span style = "background-color:#fdd">		if (!manager)
+			theApp.manager_list.RemoveAllAccessSpecs();</span>
+		else
+<span style = "background-color:#fdd">			manager-&gt;RemoveAllAccessSpecs();</span>
+	}
+	// Find the item being hovered over.
+<span style = "background-color:#dfd">	m_LAssignedAccess.ScreenToClient(&amp;point);
+	move_to_index = m_LAssignedAccess.HitTest(point);
+	if (move_to_index == -1)
+		move_to_index = m_LAssignedAccess.GetItemCount();</span>
+
+<span style = "background-color:#dfd">	if (global_dragging) {
+		InsertAt(move_to_index);</span>
+<span style = "background-color:#fdd">	} else if (assigned_dragging) {
+		Move(move_to_index);</span>
+
+<span style = "background-color:#fdd">		assigned_dragging = FALSE;	// Reset assigned dragging flag.</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+void CPageAccess::InsertAt(int insert_index)
+<span style = "background-color:#dfd">{</span>
+	Test_Spec *spec;
+<span style = "background-color:#dfd">	int inserted_count = 0;
+	int global_index = m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+	// find out who is selected: All managers, a manager, or a worker.
+<span style = "background-color:#dfd">	Manager *manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	Worker *worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+<span style = "background-color:#dfd">	LockWindowUpdate();</span>
+	// Loop through all the selected list items from the global list
+	// and add them to the assigned list.
+<span style = "background-color:#dfd">	while (global_index != NOTHING) {
+		spec = (Test_Spec *) m_LGlobalAccess.GetItemData(global_index);
+		switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+		case ALL_MANAGERS:
+			// Insert access spec to all managers
+<span style = "background-color:#fdd">			if (!theApp.manager_list.InsertAccessSpec(spec, insert_index + inserted_count++)) {
+				UnlockWindowUpdate();
+				ErrorMessage</span>
+				    ("Failed to add the selected access spec to all managers in CPageAccess::Insert().");
+<span style = "background-color:#fdd">				return;</span>
+			}
+			break;
+		case MANAGER:
+			// Insert access spec to a manager
+<span style = "background-color:#fdd">			if (!manager-&gt;InsertAccessSpec(spec, insert_index + inserted_count++)) {
+				UnlockWindowUpdate();
+				ErrorMessage</span>
+				    ("Failed to add the selected access spec to the selected managers in CPageAccess::Insert().");
+<span style = "background-color:#fdd">				return;</span>
+			}
+			break;
+		case WORKER:
+			// Insert acces spec to a worker
+<span style = "background-color:#dfd">			if (!worker-&gt;InsertAccessSpec(spec, insert_index + inserted_count++)) {</span>
+<span style = "background-color:#fdd">				UnlockWindowUpdate();
+				ErrorMessage</span>
+				    ("Failed to add the selected access spec to the selected worker in CPageAccess::Insert().");
+<span style = "background-color:#fdd">				return;</span>
+			}
+			break;
+		}
+<span style = "background-color:#dfd">		global_index = m_LGlobalAccess.GetNextItem(global_index, LVNI_SELECTED);</span>
+	}
+<span style = "background-color:#dfd">	ShowAssignedAccess();
+	UnlockWindowUpdate();
+	global_dragging = FALSE;	// Reset global dragging flag.
+}</span>
+
+void CPageAccess::OnItemchangedLGlobalAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{</span>
+	NM_LISTVIEW *pNMListView = (NM_LISTVIEW *) pNMHDR;
+
+<span style = "background-color:#dfd">	SetAssignedAccess(TRUE);</span>
+
+	// Disable delete and edit buttons for the Idle Spec
+<span style = "background-color:#dfd">	SetGlobalButtons(pNMListView-&gt;iItem != IDLE_SPEC &amp;&amp; (pNMListView-&gt;uNewState &amp;&amp; LVIS_SELECTED));</span>
+
+<span style = "background-color:#dfd">	*pResult = 0;
+}</span>
+
+//
+// Enables the apropriate window objects after test run.
+//
+void CPageAccess::EnableWindow(BOOL enable)
+<span style = "background-color:#dfd">{</span>
+	// Enables the assigned list and the add button unless the selected worker is a TCPClient.
+<span style = "background-color:#dfd">	SetAssignedAccess(enable);</span>
+
+<span style = "background-color:#dfd">	m_BNew.EnableWindow(enable);
+	m_BNew.RedrawWindow();</span>
+
+<span style = "background-color:#dfd">	m_LGlobalAccess.EnableWindow(enable);
+	m_LGlobalAccess.RedrawWindow();
+}</span>
+
+//
+// Resets all the LED's to BLUE
+//
+void CPageAccess::Reset()
+<span style = "background-color:#dfd">{
+	for (int i = 0; i &lt; m_LAssignedAccess.GetItemCount(); i++)
+		MarkAccess(i, BLUE);
+}</span>
+
+//
+// Mark given spec given color.
+//
+void CPageAccess::MarkAccess(int access_index, int color)
+<span style = "background-color:#dfd">{
+	m_LAssignedAccess.SetItem(access_index,	// item index</span>
+				  NULL,	// subitem index
+				  LVIF_IMAGE,	// mask
+				  NULL,	// text
+				  color,	// image
+				  NULL,	// state
+				  NULL,	// state mask
+				  NULL);	// data
+
+<span style = "background-color:#dfd">}</span>
+
+//
+// Set the LEDs for the currently displayed access specs based on the 
+// currently running spec.
+//
+void CPageAccess::MarkAccesses(int current_access)
+<span style = "background-color:#dfd">{
+	for (int i = 0; i &lt; m_LAssignedAccess.GetItemCount(); i++) {
+		if ((theApp.test_state == TestIdle) || (theApp.test_state == TestPreparing) || i &gt; current_access) {
+			MarkAccess(i, BLUE);</span>
+		} else {
+<span style = "background-color:#dfd">			if (i == current_access) {
+				MarkAccess(i, GREEN);
+				m_LAssignedAccess.EnsureVisible(i, FALSE);
+			} else {</span>
+<span style = "background-color:#fdd">				MarkAccess(i, RED);</span>
+			}
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Enables the edit and delete buttons for the global access spec list.
+//
+void CPageAccess::SetGlobalButtons(BOOL enable)
+<span style = "background-color:#dfd">{
+	int global_index = m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+<span style = "background-color:#dfd">	m_BEdit.EnableWindow(enable &amp;&amp;</span>
+			     global_index != IDLE_SPEC &amp;&amp;
+			     GetFocus() == &amp;m_LGlobalAccess &amp;&amp; m_LGlobalAccess.GetSelectedCount() == 1);
+<span style = "background-color:#dfd">	m_BEditCopy.EnableWindow(enable &amp;&amp;</span>
+				 global_index != IDLE_SPEC &amp;&amp;
+				 GetFocus() == &amp;m_LGlobalAccess &amp;&amp; m_LGlobalAccess.GetSelectedCount() == 1);
+<span style = "background-color:#dfd">	m_BDelete.EnableWindow(enable &amp;&amp; global_index != IDLE_SPEC</span>
+			       &amp;&amp; GetFocus() == &amp;m_LGlobalAccess &amp;&amp; global_index != NOTHING);
+
+<span style = "background-color:#dfd">	m_BEdit.RedrawWindow();
+	m_BEditCopy.RedrawWindow();
+	m_BDelete.RedrawWindow();
+}</span>
+
+/////////////////////////////////////////////////////////////////////////
+//
+// The following functions enable and disable GUI buttons
+// based on the input focus.
+//
+/////////////////////////////////////////////////////////////////////////
+void CPageAccess::OnKillfocusLGlobalAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{
+	CPoint point;
+	CRect frame_rect, button_rect;</span>
+
+<span style = "background-color:#dfd">	GetCursorPos(&amp;point);</span>
+
+	// Get the area of the global list controls.
+<span style = "background-color:#dfd">	m_GGlobalFrame.GetWindowRect(&amp;frame_rect);
+	m_BAdd.GetWindowRect(&amp;button_rect);</span>
+
+	// Normalize the area so that we have no negative widths or heights.
+<span style = "background-color:#dfd">	frame_rect.NormalizeRect();
+	button_rect.NormalizeRect();</span>
+
+<span style = "background-color:#dfd">	frame_rect.UnionRect(frame_rect, button_rect);</span>
+
+<span style = "background-color:#dfd">	if (!frame_rect.PtInRect(point))
+		SetGlobalButtons(FALSE);</span>
+
+	// Clear the status bar when the focus is moved away from the access list
+<span style = "background-color:#dfd">	if (theApp.m_wndStatusBar.m_hWnd) theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);
+}</span>
+
+void CPageAccess::OnKillfocusLAssignedAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{
+	CPoint point;
+	CRect frame_rect, button_rect;</span>
+
+<span style = "background-color:#dfd">	GetCursorPos(&amp;point);</span>
+
+	// Get the area of the global list controls.
+<span style = "background-color:#dfd">	m_GAssignedFrame.GetWindowRect(&amp;frame_rect);
+	m_BRemove.GetWindowRect(&amp;button_rect);</span>
+
+	// Normalize the area so that we have no negative widths or heights.
+<span style = "background-color:#dfd">	frame_rect.NormalizeRect();
+	button_rect.NormalizeRect();</span>
+
+<span style = "background-color:#dfd">	frame_rect.UnionRect(frame_rect, button_rect);</span>
+
+<span style = "background-color:#dfd">	if (!frame_rect.PtInRect(point))
+		SetAssignedButtons(FALSE);</span>
+
+	// Clear the status bar when the focus is moved away from the access list
+<span style = "background-color:#dfd">	theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);
+}</span>
+
+void CPageAccess::OnSetfocusLGlobalAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{
+	SetGlobalButtons(TRUE);
+	*pResult = 0;
+}</span>
+
+void CPageAccess::OnSetfocusLAssignedAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{
+	SetAssignedButtons(TRUE);
+	*pResult = 0;
+}</span>
+
+void CPageAccess::OnBEditCopy()
+<span style = "background-color:#dfd">{</span>
+	Test_Spec *spec;
+
+	// Get the selected access spec's index into the global list.
+<span style = "background-color:#dfd">	spec = (Test_Spec *) m_LGlobalAccess.GetItemData(m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED));</span>
+	// Create the copy of the spec object.
+<span style = "background-color:#dfd">	spec = theApp.access_spec_list.Copy(spec);</span>
+
+	// Check for validity of returned index before adding anything to GUI.
+<span style = "background-color:#dfd">	if (!spec)</span>
+		return;
+
+	// Add the Access Spec to the global list view.
+	// Set the data portion to the index of the access spec in the access spec list.
+	// Select the newly added item and remove the selection from the previous
+	// selected item.
+<span style = "background-color:#dfd">	m_LGlobalAccess.SetItemState(m_LGlobalAccess.GetNextItem(FIND_FIRST, LVNI_SELECTED), NULL, LVIS_SELECTED);
+	m_LGlobalAccess.InsertItem(LVIF_STATE | LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE,</span>
+				   m_LGlobalAccess.GetItemCount(), spec-&gt;name,
+				   LVIS_SELECTED, LVIS_SELECTED, AssignNone, (ULONG_PTR) spec);
+
+	// Automatically call the edit function for the new spec.
+	// Deletes the spec if editing was cancelled.
+<span style = "background-color:#dfd">	if (!Edit())</span>
+<span style = "background-color:#fdd">		Delete();</span>
+
+	// Set the focus to the ListCtrl
+<span style = "background-color:#dfd">	m_LGlobalAccess.SetFocus();
+}</span>
+
+void CPageAccess::OnClickLGlobalAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{
+	SetGlobalButtons(TRUE);
+	*pResult = 0;</span>
+
+	// Display the access spec name in the left most field of the status bar
+#if 0 // null the status bar if more than one item selected
+	if (m_LGlobalAccess.GetSelectedCount() &gt; 1) 
+	{
+		theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);
+		return;
+	}
+#endif
+
+<span style = "background-color:#dfd">	int item_index = m_LGlobalAccess.GetSelectionMark();
+	CString str = m_LGlobalAccess.GetItemText(item_index, 0);
+	theApp.m_wndStatusBar.GetStatusBarCtrl().SetText(str, 0, 0);
+}</span>
+
+void CPageAccess::OnClickLAssignedAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{
+	SetAssignedButtons(TRUE);
+	*pResult = 0;</span>
+
+	// Display the access spec name in the left most field of the status bar
+#if 0 // null the status bar if more than one item selected
+	if (m_LAssignedAccess.GetSelectedCount() &gt; 1) 
+	{
+		theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);
+		return;
+	}
+#endif
+
+<span style = "background-color:#dfd">	int item_index = m_LAssignedAccess.GetSelectionMark(); 
+	CString str = m_LAssignedAccess.GetItemText(item_index, 0);
+	theApp.m_wndStatusBar.GetStatusBarCtrl().SetText(str, 0, 0);
+}</span>
+
+// Ved: Added key up/down handlers (OnKeyDownGlobalAccess, OnKeyDownAssignedAccess) to deal with 
+// status bar updates when the GUI does not display the full access spec string.
+
+void CPageAccess::OnKeyDownGlobalAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	LV_KEYDOWN* pLVKeyDown = (LV_KEYDOWN*)pNMHDR;
+<span style = "background-color:#fdd">	*pResult = 0;</span>
+
+#if 0 // null the status bar if more than one item selected
+	if (m_LGlobalAccess.GetSelectedCount() &gt; 1) 
+	{
+			theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);
+			return;
+	}
+#endif
+
+<span style = "background-color:#fdd">	int item_index = m_LGlobalAccess.GetSelectionMark(); //GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+<span style = "background-color:#fdd">	if(pLVKeyDown-&gt;wVKey == VK_UP ) </span>
+	{
+<span style = "background-color:#fdd">		if (item_index)</span>
+		{
+<span style = "background-color:#fdd">			m_LGlobalAccess.SetSelectionMark(--item_index);</span>
+		}
+<span style = "background-color:#fdd">	}
+	else if (pLVKeyDown-&gt;wVKey == VK_DOWN ) </span>
+	{
+<span style = "background-color:#fdd">		if (item_index &lt; m_LGlobalAccess.GetItemCount() - 1)</span>
+		{
+<span style = "background-color:#fdd">			m_LGlobalAccess.SetSelectionMark(++item_index);</span>
+		}
+	}
+
+<span style = "background-color:#fdd">	CString str = m_LGlobalAccess.GetItemText(item_index, 0);
+	theApp.m_wndStatusBar.GetStatusBarCtrl().SetText(str, 0, 0);
+}</span>
+
+void CPageAccess::OnKeyDownAssignedAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	LV_KEYDOWN* pLVKeyDown = (LV_KEYDOWN*)pNMHDR;
+<span style = "background-color:#fdd">	*pResult = 0;</span>
+
+#if 0 // null the status bar if more than one item selected
+	if (m_LAssignedAccess.GetSelectedCount() &gt; 1) 
+	{
+			theApp.m_wndStatusBar.GetStatusBarCtrl().SetText("", 0, 0);
+			return;
+	}
+#endif
+
+<span style = "background-color:#fdd">	int item_index = m_LAssignedAccess.GetSelectionMark(); //GetNextItem(FIND_FIRST, LVNI_SELECTED);</span>
+
+<span style = "background-color:#fdd">	if(pLVKeyDown-&gt;wVKey == VK_UP ) </span>
+	{
+<span style = "background-color:#fdd">		if (item_index)</span>
+		{
+<span style = "background-color:#fdd">			m_LAssignedAccess.SetSelectionMark(--item_index);</span>
+		}
+<span style = "background-color:#fdd">	}
+	else if (pLVKeyDown-&gt;wVKey == VK_DOWN ) </span>
+	{
+<span style = "background-color:#fdd">		if (item_index &lt; m_LAssignedAccess.GetItemCount() - 1)</span>
+		{
+<span style = "background-color:#fdd">			m_LAssignedAccess.SetSelectionMark(++item_index);</span>
+		}
+	}
+
+<span style = "background-color:#fdd">	CString str = m_LAssignedAccess.GetItemText(item_index, 0);
+	theApp.m_wndStatusBar.GetStatusBarCtrl().SetText(str, 0, 0);
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

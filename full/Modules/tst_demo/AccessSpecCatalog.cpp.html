@@ -1,0 +1,168 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>AccessSpecCatalog.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "AccessSpecCatalog.h"
+
+namespace iocore {
+
+std::string formatSize(int bytes)
+<span style = "background-color:#dfd">{
+    if (bytes &lt;= 0)        return "0 B";
+    if (bytes &gt;= 1048576)  return std::to_string(bytes / 1048576) + " MiB";
+    if (bytes &gt;= 1024)     return std::to_string(bytes / 1024)    + " KiB";
+    return                        std::to_string(bytes)            + " B";
+}</span>
+
+std::string accessSpecLabel(const AccessSpec &amp;spec)
+<span style = "background-color:#dfd">{
+    if (spec.lines.size() != 1)
+        return spec.name;</span>
+    const AccessSpecLine &amp;l = spec.lines[0];
+<span style = "background-color:#dfd">    return formatSize(l.sizeBytes) + "; "</span>
+         + std::to_string(l.readPercent)       + "% Read; "
+         + std::to_string(100 - l.seqPercent)  + "% random";
+<span style = "background-color:#dfd">}</span>
+
+std::string smartNameText(int sizeBytes, int randomPct, int readPct)
+<span style = "background-color:#dfd">{</span>
+    // Size part: "512 B" / "1 MiB" / "N KiB".
+<span style = "background-color:#dfd">    std::string name;
+    if (sizeBytes == 512)            name = "512 B";
+    else if (sizeBytes == 1048576)   name = "1 MiB";
+    else                             name = std::to_string(sizeBytes / 1024) + " KiB";</span>
+
+    // Random/sequential part.
+<span style = "background-color:#dfd">    if (randomPct == 0)         name += " sequential";
+    else if (randomPct == 100)  name += " random";
+    else                        name += " " + std::to_string(randomPct) + "% random";</span>
+
+    // Read/write part.
+<span style = "background-color:#dfd">    if (readPct == 0)         name += " writes";
+    else if (readPct == 100)  name += " reads";
+    else                      name += " " + std::to_string(readPct) + "% reads";</span>
+
+<span style = "background-color:#dfd">    return name;
+}</span>
+
+// Helper: a single I/O pattern row.
+static AccessSpecLine line(int sizeBytes, int readPct, int seqPct,
+                           int alignBytes = 0, int ofSize = 100)
+<span style = "background-color:#dfd">{</span>
+    AccessSpecLine l;
+    l.sizeBytes   = sizeBytes;
+    l.readPercent = readPct;
+    l.seqPercent  = seqPct;
+<span style = "background-color:#dfd">    l.alignBytes  = alignBytes;
+    l.ofSize      = ofSize;
+    return l;
+}</span>
+
+std::vector&lt;AccessSpec&gt; defaultAccessSpecs()
+<span style = "background-color:#dfd">{
+    std::vector&lt;AccessSpec&gt; specs;</span>
+
+    auto addOne = [&amp;](const std::string &amp;name, const AccessSpecLine &amp;l) {
+<span style = "background-color:#fdd">        AccessSpec s;
+        s.name = name;
+        s.lines.push_back(l);
+        specs.push_back(s);
+    };</span>
+
+    // -- Idle (size = 0) --------------------------------------------------------
+    {
+<span style = "background-color:#dfd">        AccessSpec s;
+        s.name = "Idle";</span>
+        AccessSpecLine l;
+<span style = "background-color:#dfd">        l.sizeBytes = 0;
+        l.ofSize    = 100;
+        s.lines.push_back(l);
+        specs.push_back(s);
+    }</span>
+
+    // -- Default (64 KiB, 100% read, sequential) -------------------------------
+    {
+<span style = "background-color:#dfd">        AccessSpec s;
+        s.name        = "Default";
+        s.defaultSpec = true;
+        s.lines.push_back(line(65536, 100, 100));
+        specs.push_back(s);
+    }</span>
+
+    // -- All patterns, in order (also used to build "All in one") --------------
+    struct Pat { const char *name; AccessSpecLine l; };
+<span style = "background-color:#dfd">    const std::vector&lt;Pat&gt; patterns = {</span>
+        { "512 B; 100% Read; 0% random",  line(512, 100, 100) },
+        { "512 B; 75% Read; 0% random",   line(512,  75, 100) },
+        { "512 B; 50% Read; 0% random",   line(512,  50, 100) },
+        { "512 B; 25% Read; 0% random",   line(512,  25, 100) },
+        { "512 B; 0% Read; 0% random",    line(512,   0, 100) },
+        { "4 KiB; 100% Read; 0% random",  line(4096, 100, 100) },
+        { "4 KiB; 75% Read; 0% random",   line(4096,  75, 100) },
+        { "4 KiB; 50% Read; 0% random",   line(4096,  50, 100) },
+        { "4 KiB; 25% Read; 0% random",   line(4096,  25, 100) },
+        { "4 KiB; 0% Read; 0% random",    line(4096,   0, 100) },
+        { "4 KiB aligned; 100% Read; 100% random", line(4096, 100, 0, 4096) },
+        { "4 KiB aligned; 50% Read; 100% random",  line(4096,  50, 0, 4096) },
+        { "4 KiB aligned; 0% Read; 100% random",   line(4096,   0, 0, 4096) },
+        { "16 KiB; 100% Read; 0% random", line(16384, 100, 100) },
+        { "16 KiB; 75% Read; 0% random",  line(16384,  75, 100) },
+        { "16 KiB; 50% Read; 0% random",  line(16384,  50, 100) },
+        { "16 KiB; 25% Read; 0% random",  line(16384,  25, 100) },
+        { "16 KiB; 0% Read; 0% random",   line(16384,   0, 100) },
+        { "32 KiB; 100% Read; 0% random", line(32768, 100, 100) },
+        { "32 KiB; 75% Read; 0% random",  line(32768,  75, 100) },
+        { "32 KiB; 50% Read; 0% random",  line(32768,  50, 100) },
+        { "32 KiB; 25% Read; 0% random",  line(32768,  25, 100) },
+        { "32 KiB; 0% Read; 0% random",   line(32768,   0, 100) },
+        { "64 KiB; 100% Read; 0% random", line(65536, 100, 100) },
+        { "64 KiB; 50% Read; 0% random",  line(65536,  50, 100) },
+        { "64 KiB; 0% Read; 0% random",   line(65536,   0, 100) },
+        { "256 KiB; 100% Read; 0% random", line(262144, 100, 100) },
+        { "256 KiB; 50% Read; 0% random",  line(262144,  50, 100) },
+        { "256 KiB; 0% Read; 0% random",   line(262144,   0, 100) },
+    };
+
+<span style = "background-color:#dfd">    for (const auto &amp;p : patterns)
+        addOne(p.name, p.l);</span>
+
+    // -- "All in one" - every pattern with an even % access distribution -------
+    {
+<span style = "background-color:#dfd">        AccessSpec s;
+        s.name = "All in one";</span>
+<span style = "background-color:#fdd">        const int n = static_cast&lt;int&gt;(patterns.size());</span>
+<span style = "background-color:#dfd">        for (int i = 0; i &lt; n; ++i) {
+            AccessSpecLine l = patterns[i].l;</span>
+            // Distribute 100% as evenly as possible (matches the original rounding).
+<span style = "background-color:#dfd">            l.ofSize = (i &lt; 100 % n) ? 100 / n + 1 : 100 / n;
+            s.lines.push_back(l);</span>
+        }
+<span style = "background-color:#dfd">        specs.push_back(s);
+    }</span>
+
+<span style = "background-color:#dfd">    return specs;
+}</span>
+
+} // namespace iocore</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

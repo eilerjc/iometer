@@ -1,0 +1,255 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtDemoEngine.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtDemoEngine.cpp
+#include "QtDemoEngine.h"
+#include "QtIometerEngine.h"
+#include "../core/IcfFile.h"
+#include "../core/ResultsAggregator.h"
+#include &lt;cmath&gt;
+#include &lt;QRandomGenerator&gt;
+
+static constexpr double PI = 3.14159265358979323846;
+
+<span style = "background-color:#dfd">QtDemoEngine::QtDemoEngine(QObject *parent) : QtIometerEngine(parent)
+{
+    connect(&amp;m_timer, &amp;QTimer::timeout, this, &amp;QtDemoEngine::tick);
+    m_timer.setInterval(500);   // update twice per second
+    buildDefaultConfig();
+}</span>
+
+void QtDemoEngine::buildDefaultConfig()
+<span style = "background-color:#dfd">{</span>
+    // ---- Local manager with 4 disk workers ----------------------------------
+<span style = "background-color:#dfd">    ManagerInfo local;
+    local.name           = "Local System";
+    local.address        = "127.0.0.1";
+    local.connected      = true;
+    local.processorCount = 4;   // simulated quad-core</span>
+
+    // Available targets visible to the demo system (matches the Disk Targets tab)
+    // C: has a filesystem but no iobw.tst â unprepared (red slash)
+    // W: has a filesystem and iobw.tst   â prepared (normal icon)
+    // PhysicalDriveN are raw devices     â always testable (normal icon)
+<span style = "background-color:#dfd">    local.availableTargets = {</span>
+        TargetInfo{"C: \"Windows\"",         TargetKind::LogicalDisk,  false},
+        TargetInfo{"W: \"nvme\"",            TargetKind::LogicalDisk,  true},
+        TargetInfo{"\\\\.\\PhysicalDrive0",  TargetKind::PhysicalDisk, true},
+        TargetInfo{"\\\\.\\PhysicalDrive1",  TargetKind::PhysicalDisk, true}
+    };
+
+    // Network interfaces available on this system
+<span style = "background-color:#dfd">    local.availableNetInterfaces = {</span>
+        "192.168.1.100",
+        "10.0.0.1"
+    };
+
+<span style = "background-color:#dfd">    const QStringList diskNames = {"W:", "X:", "Y:", "Z:"};
+    for (int i = 0; i &lt; 4; ++i) {
+        WorkerInfo w;
+        w.id          = QString("local-w%1").arg(i).toStdString();
+        w.name        = QString("Worker %1").arg(i + 1).toStdString();
+        w.type        = "Disk";
+        w.managerName = local.name;
+        w.targets     = { diskNames[i].toStdString() };
+        w.queueDepth  = (i == 0) ? 32 : (i == 1) ? 16 : 8;
+        local.workers.push_back(w);
+    }
+    m_managers.append(local);</span>
+
+    // ---- Access specs: use shared built-in library -------
+<span style = "background-color:#dfd">    m_specs = QtIometerEngine::builtinAccessSpecs();
+}</span>
+
+// ---- Test control -----------------------------------------------------------
+
+void QtDemoEngine::startTest()
+<span style = "background-color:#dfd">{
+    if (m_running) return;
+    m_running = true;
+    m_t       = 0.0;
+    m_timer.start();
+    emit testStarted();
+    emit statusMessage("Test running...");
+}</span>
+
+void QtDemoEngine::stopTest()
+<span style = "background-color:#dfd">{
+    if (!m_running) return;
+    m_running = false;
+    m_timer.stop();</span>
+
+<span style = "background-color:#dfd">    if (!m_current.isEmpty())
+        m_saved.append(m_current.last());</span>
+
+<span style = "background-color:#dfd">    emit testStopped();
+    emit statusMessage("Test stopped.");
+}</span>
+
+void QtDemoEngine::stopAll()
+<span style = "background-color:#dfd">{
+    stopTest();</span>
+}
+
+// ---- Simulation tick --------------------------------------------------------
+
+WorkerResult QtDemoEngine::makeResult(const WorkerInfo &amp;w, const std::string &amp;mgrName, double t) const
+<span style = "background-color:#dfd">{
+    int idx = 0;
+    for (int i = 0; i &lt; m_managers.first().workers.size(); ++i)
+        if (m_managers.first().workers[i].id == w.id) { idx = i; break; }
+    const double phase = idx * 0.7;</span>
+
+<span style = "background-color:#dfd">    const double baseMbps = 500.0 + 100.0 * idx;
+    const double waveMbps = 80.0  * std::sin(t * 0.4 + phase);
+    const double spike    = (std::fmod(t + phase, 15.0) &lt; 0.6) ? 250.0 : 0.0;
+    const double mbps     = std::max(10.0, baseMbps + waveMbps + spike);</span>
+
+<span style = "background-color:#dfd">    const double iops       = (mbps * 1e6) / (64.0 * 1024.0);
+    const double latBase    = 1000.0 / iops * w.queueDepth;
+    const double latJitter  = latBase * 0.15 * std::sin(t * 1.3 + phase);</span>
+
+<span style = "background-color:#dfd">    WorkerResult r;
+    r.managerName  = mgrName;          // std::string
+    r.workerName   = w.name;           // std::string
+    r.mbpsDec      = mbps;</span>
+    r.readMbpsDec  = mbps;
+<span style = "background-color:#dfd">    r.mbpsBin      = mbps / 1.048576;
+    r.iops         = iops;</span>
+    r.readIops     = iops;
+<span style = "background-color:#dfd">    r.avgLatencyMs = std::max(0.01, latBase + latJitter);
+    r.maxLatencyMs = r.avgLatencyMs * (1.5 + 0.5 * std::sin(t * 0.8 + phase));
+    r.cpuUtil      = 5.0 + 3.0 * idx + 2.0 * std::sin(t * 0.6 + phase);
+    r.cpuUser      = r.cpuUtil * 0.4;
+    r.cpuKernel    = r.cpuUtil * 0.6;
+    r.errors       = 0;
+    return r;
+}</span>
+
+void QtDemoEngine::tick()
+<span style = "background-color:#dfd">{
+    m_t += 0.5;
+    m_current.clear();</span>
+
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : std::as_const(m_managers)) {
+        if (!mgr.connected) continue;
+        for (const auto &amp;w : mgr.workers)
+            m_current.append(makeResult(w, mgr.name, m_t));   // mgr.name is std::string</span>
+    }
+
+    // Prepend the ALL aggregate (shared core logic - same math everywhere).
+<span style = "background-color:#dfd">    if (!m_current.isEmpty()) {
+        const std::vector&lt;WorkerResult&gt; v(m_current.begin(), m_current.end());
+        m_current.prepend(iocore::aggregateResults(v).all);
+    }</span>
+
+<span style = "background-color:#dfd">    emit resultsUpdated(m_current);
+}</span>
+
+// ---- Config -----------------------------------------------------------------
+
+void QtDemoEngine::newConfig()
+<span style = "background-color:#dfd">{
+    m_managers.clear();
+    m_specs.clear();
+    m_current.clear();
+    buildDefaultConfig();
+    emit configChanged();
+}</span>
+
+bool QtDemoEngine::loadConfig(const QString &amp;filepath)
+<span style = "background-color:#dfd">{</span>
+    // The demo engine doubles as a "test dynamo": it parses a real ICF through
+    // the shared core parser so configs can be exercised end-to-end without a
+    // live Dynamo. Worker layout stays as the synthetic default; only the test
+    // config and access-spec library come from the file.
+<span style = "background-color:#dfd">    TestConfig cfg;
+    std::vector&lt;AccessSpec&gt; specs;
+    std::vector&lt;IcfFile::BatchWorker&gt; batchWorkers;
+    if (!IcfFile::load(filepath.toStdString(), cfg, specs, batchWorkers)) {
+        emit errorOccurred(QString("Failed to load ICF: %1").arg(filepath));</span>
+        return false;
+    }
+
+<span style = "background-color:#dfd">    m_testConfig = cfg;
+    if (!specs.empty())
+        m_specs = QList&lt;AccessSpec&gt;(specs.begin(), specs.end());
+    emit configChanged();
+    return true;
+}</span>
+
+bool QtDemoEngine::saveConfig(const QString &amp;)
+<span style = "background-color:#dfd">{
+    emit statusMessage("Config save not yet implemented in demo mode.");
+    return false;
+}</span>
+
+// ---- Manager / worker management --------------------------------------------
+
+void QtDemoEngine::connectManager(const QString &amp;address, const QString &amp;name)
+<span style = "background-color:#dfd">{
+    for (auto &amp;m : m_managers) {
+        if (m.address == address.toStdString()) { m.connected = true; emit managerConnected(m); return; }</span>
+    }
+<span style = "background-color:#dfd">    ManagerInfo m;
+    m.name      = (name.isEmpty() ? address : name).toStdString();
+    m.address   = address.toStdString();
+    m.connected = true;
+    m_managers.append(m);
+    emit managerConnected(m);
+}</span>
+
+void QtDemoEngine::disconnectManager(const QString &amp;mgrName)
+<span style = "background-color:#dfd">{
+    for (int i = 0; i &lt; m_managers.size(); ++i) {
+        if (m_managers[i].name == mgrName.toStdString()) {
+            m_managers[i].connected = false;
+            emit managerDisconnected(mgrName);</span>
+            return;
+        }
+    }
+<span style = "background-color:#dfd">}</span>
+
+void QtDemoEngine::addWorker(const QString &amp;mgrName, const WorkerInfo &amp;w)
+<span style = "background-color:#dfd">{
+    for (auto &amp;m : m_managers)
+        if (m.name == mgrName.toStdString()) { m.workers.push_back(w); emit configChanged(); return; }
+}</span>
+
+void QtDemoEngine::removeWorker(const QString &amp;mgrName, const QString &amp;workerId)
+<span style = "background-color:#dfd">{
+    for (auto &amp;m : m_managers)
+        if (m.name == mgrName.toStdString())
+            for (size_t i = 0; i &lt; m.workers.size(); ++i)
+                if (m.workers[i].id == workerId.toStdString()) { m.workers.erase(m.workers.begin() + i); emit configChanged(); return; }
+}</span>
+
+void QtDemoEngine::updateWorker(const WorkerInfo &amp;w)
+<span style = "background-color:#dfd">{
+    for (auto &amp;m : m_managers)
+        for (auto &amp;worker : m.workers)
+            if (worker.id == w.id) { worker = w; emit configChanged(); return; }
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

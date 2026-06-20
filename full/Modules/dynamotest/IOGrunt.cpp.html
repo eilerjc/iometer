@@ -1,0 +1,1665 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOGrunt.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / IOGrunt.cpp                                               ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: This is Dynamo's worker class.                        ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2005-04-18 (raltherr@apple.com)                       ## */
+/* ##               - Support for MacOS X                                 ## */
+/* ##               2005-04-05 (ACurrid@nvidia.com)                       ## */
+/* ##               - Fixed bug #1088486. Wait outstanding IO complete.   ## */
+/* ##               2004-09-01 (henryx.w.tieman@intel.com)                ## */
+/* ##               - The Interlocked functions take different parameters ## */
+/* ##                 in some of the different environments. The x86_64   ## */
+/* ##                 DDK compiler and x86_64 GCC are the two most at     ## */
+/* ##                 odds. Doing a cast in a macro seemed to be the best ## */
+/* ##                 solution.                                           ## */
+/* ##               2004-05-13 (lamontcranston41@yahoo.com)               ## */
+/* ##               - Use cur_trans_slots to prevent shifting transaction ## */
+/* ##                 queue.                                              ## */
+/* ##               2004-03-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Code cleanup to ensure common style.                ## */
+/* ##               - Applied Thayne Harmon's patch for supporting        ## */
+/* ##                 Netware support (on I386).                          ## */
+/* ##               2004-03-04 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Suggested by Ming Zhang, I removed an old left      ## */
+/* ##                 over _DETAIL code.                                  ## */
+/* ##               2003-12-21 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Changed NO_DYNAMO_VI to IOMTR_SETTING_VI_SUPPORT    ## */
+/* ##               2003-08-02 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Integrated the modification contributed by          ## */
+/* ##                 Vedran Degoricija, to get the code compile with     ## */
+/* ##                 the MS DDK on IA64.                                 ## */
+/* ##               2003-07-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Implemented the IOMTR_[OSFAMILY|OS|CPU]_* global    ## */
+/* ##                 define as well as their integrity checks.           ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-05-07 (yakker@aparity.com)                       ## */
+/* ##               - Applied the iometerCIOB5.2003.05.02.patch file      ## */
+/* ##                 (avoiding cache line collisions and performance     ## */
+/* ##                 lock-ups for some chipsets).                        ## */
+/* ##               2003-03-04 (joe@eiler.net)                            ## */
+/* ##               - Changed NO_LINUX_VI to NO_DYNAMO_VI                 ## */
+/* ##               2003-02-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##               - Applied Matt D. Robinson's iometer.patch file       ## */
+/* ##                 (modifies the Set_Access() method to ensure that    ## */
+/* ##                 there is an allocated buffer for each worker        ## */
+/* ##                 thread - needed for large amounts of I/O through    ## */
+/* ##                 ServerWorks chipsets).                              ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOGrunt.h"
+#include "IOCommon.h"
+#include "IOTargetDisk.h"
+#include "IOTargetTCP.h"
+
+extern struct dynamo_param param;
+
+#if defined(IOMTR_SETTING_VI_SUPPORT)
+#include "IOTargetVI.h"
+#endif
+
+#if defined(IOMTR_OS_SOLARIS)
+#include &lt;thread.h&gt;
+#endif
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE)
+#include &lt;assert.h&gt;
+#endif
+
+#if defined(IOMTR_OS_NETWARE)
+void nwtime(timeb * a)
+{
+	double time = clock();
+
+	a-&gt;time = time / CLOCKS_PER_SEC;
+	a-&gt;millitm = (time - (a-&gt;time * CLOCKS_PER_SEC)) * 10;
+}
+#endif
+
+//
+// Initializing Grunt variables before their first use.
+//
+Grunt::Grunt()
+<span style = "background-color:#dfd">{
+	type = InvalidType;</span>
+
+<span style = "background-color:#dfd">	holdrand = 1L;
+	grunt_state = TestIdle;
+	not_ready = 0;
+	target_count = 0;
+	targets_closing_count = 0;</span>
+
+	// Transaction request information.
+<span style = "background-color:#dfd">	total_trans_slots = 0;</span>
+	cur_trans_slots = 0;
+<span style = "background-color:#dfd">	trans_slots = NULL;
+	available_trans_queue = NULL;
+	outstanding_ios = 0;</span>
+
+<span style = "background-color:#dfd">	io_cq = NULL;</span>
+
+	idle = TRUE;
+<span style = "background-color:#dfd">	data_size = 0;
+	read_data = NULL;
+	write_data = NULL;
+	prepare_thread = NULL;
+	targets = NULL;
+}</span>
+
+//
+// Grunt destructor.
+//
+Grunt::~Grunt()
+<span style = "background-color:#dfd">{</span>
+	// Remove completion queue, if any.
+<span style = "background-color:#dfd">	if ((type != InvalidType) &amp;&amp; !IsType(type, GenericVIType) &amp;&amp; io_cq)
+		delete io_cq;</span>
+
+<span style = "background-color:#dfd">	Size_Target_Array(0);</span>
+
+	// Release grunt's I/O data buffers if they are in use.
+<span style = "background-color:#dfd">	if (data_size)</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	NXMemFree(read_data);
+	NXMemFree(write_data);
+#elif defined(IOMTR_OSFAMILY_UNIX)
+	free(read_data);
+	free(write_data);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">	VirtualFree(read_data, 0, MEM_RELEASE);
+	VirtualFree(write_data, 0, MEM_RELEASE);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+<span style = "background-color:#dfd">	Free_Transaction_Arrays();
+}</span>
+
+//
+// Initialize all results for all targets.
+//
+void Grunt::Initialize_Results()
+<span style = "background-color:#dfd">{
+	memset(&amp;worker_performance, 0, sizeof(Worker_Results));
+	memset(&amp;prev_worker_performance, 0, sizeof(Worker_Results));
+}</span>
+
+<span style = "background-color:#fdd">int Grunt::Get_Maximum_Sector_Size() {</span>
+
+	int max_sector_size = 0;
+<span style = "background-color:#fdd">	for (int i = 0; i &lt; target_count; i++) {
+		max_sector_size = __max(targets[i]-&gt;spec.disk_info.sector_size, max_sector_size);</span>
+	}
+	return max_sector_size;
+<span style = "background-color:#fdd">}</span>
+
+<span style = "background-color:#dfd">BOOL Grunt::Need_Random_Buffer() {</span>
+
+<span style = "background-color:#dfd">	BOOL need_random_buffer = false;
+	BOOL has_write = access_spec.HasWrite();</span>
+
+<span style = "background-color:#dfd">	for (int i = 0; i &lt; target_count; i++) {
+		if(targets[i]-&gt;spec.DataPattern == DATA_PATTERN_FULL_RANDOM &amp;&amp; has_write) {</span>
+			need_random_buffer = true;
+			break;
+		}
+	}
+	return need_random_buffer;
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#fdd">DWORDLONG Grunt::Get_Target_Spec_Random_Value(int target_index){
+	return targets[target_index]-&gt;spec.random;
+}</span>
+
+//
+// Setting the size of the target array to hold the number and type of 
+// targets specified.  If the requested number of targets is 0, the 
+// array will be freed.
+//
+BOOL Grunt::Size_Target_Array(int count, const Target_Spec * target_specs)
+<span style = "background-color:#dfd">{</span>
+	int i;
+
+	// Free all current targets.  This is needed in case the newer targets
+	// are of a different type, even if we have the same number of targets.
+<span style = "background-color:#dfd">	for (i = 0; i &lt; target_count; i++)
+		delete targets[i];</span>
+
+<span style = "background-color:#dfd">	target_count = 0;</span>
+
+	// Reset the grunt's target type.
+<span style = "background-color:#dfd">	type = InvalidType;</span>
+
+	// Release the memory if everything is being freed.
+<span style = "background-color:#dfd">	if (!count || !target_specs) {</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+		NXMemFree(targets);
+#elif defined(IOMTR_OSFAMILY_UNIX)
+		free(targets);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">		free(targets);	// TODO: Check if VirtualFree() is not needed here.</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">		targets = NULL;</span>
+		return TRUE;
+	}
+	// Allocate enough pointers to refer to all targets.
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	targets = (Target **) NXMemRealloc(targets, sizeof(Target *) * count, 1);
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">	targets = (Target **) realloc(targets, sizeof(Target *) * count);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">	if (!targets)</span>
+		return FALSE;
+
+	// Create the requested number of targets.
+<span style = "background-color:#dfd">	for (i = 0; i &lt; count; i++) {
+		type = (TargetType) (type | target_specs[i].type);</span>
+
+<span style = "background-color:#dfd">		if (IsType(target_specs[i].type, GenericDiskType))
+			targets[i] = new TargetDisk;</span>
+<span style = "background-color:#fdd">		else if (IsType(target_specs[i].type, GenericTCPType))
+			targets[i] = new TargetTCP;</span>
+#if defined(IOMTR_SETTING_VI_SUPPORT)
+		else if (IsType(target_specs[i].type, GenericVIType))
+			targets[i] = new TargetVI;
+#endif				// IOMTR_SETTING_VI_SUPPORT
+
+<span style = "background-color:#dfd">		if (!targets[i])</span>
+<span style = "background-color:#fdd">			return FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	target_count = count;
+	return TRUE;
+}</span>
+
+//
+// Checking and resizing the related transaction arrays based on the requested
+// number of outstanding I/Os.
+//
+BOOL Grunt::Resize_Transaction_Arrays()
+<span style = "background-color:#dfd">{</span>
+	int i;
+	int max_queue_per_target = 0;
+	void *new_mem;
+
+	cur_trans_slots = 0;
+
+	// Get the maximum number of I/O's which can be outstanding at one time 
+	// to all targets and a single target.
+<span style = "background-color:#dfd">	for (i = 0; i &lt; target_count; i++) {
+		max_queue_per_target = __max(targets[i]-&gt;spec.queue_depth, max_queue_per_target);
+		cur_trans_slots += targets[i]-&gt;spec.queue_depth;</span>
+	}
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	if (io_cq-&gt;SetQueueSize(cur_trans_slots) == FALSE) {
+		return FALSE;
+	}
+#elif(IOMTR_OSFAMILY_WINDOWS)
+	// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+	//
+	// Ensure that the related I/O request arrays are large enough.
+	//
+<span style = "background-color:#dfd">	if (total_trans_slots &gt;= cur_trans_slots) {</span>
+		return TRUE;
+	}
+	// Grow the transaction array.  We perform two casts to ensure that the
+	// memory is aligned properly.
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	if (!(new_mem = (void *)((Transaction *) NXMemRealloc(trans_slots, cur_trans_slots * sizeof(Transaction), 1))))
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">	if (!(new_mem = (void *)((Transaction *) realloc(trans_slots, cur_trans_slots * sizeof(Transaction)))))</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+<span style = "background-color:#fdd">		Free_Transaction_Arrays();
+		cout &lt;&lt; "*** Grunt could not allocate transaction request list." &lt;&lt; endl;
+		return FALSE;</span>
+	}
+	trans_slots = (Transaction *) new_mem;
+
+	// Grow the available queue.  We need one more element in the available
+	// queue than there are transactions.  This allows us to determine if the
+	// queue is empty by checking that head == tail.  (Without it, head == tail
+	// could also indicate that the queue is entirely full.)
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	if (!(new_mem = (void *)((int *)NXMemRealloc(available_trans_queue, (cur_trans_slots + 1) * sizeof(int), 1))))
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">	if (!(new_mem = (void *)((int *)realloc(available_trans_queue, (cur_trans_slots + 1) * sizeof(int)))))</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+<span style = "background-color:#fdd">		Free_Transaction_Arrays();
+		cout &lt;&lt; "*** Grunt could not allocate available queue." &lt;&lt; endl;
+		return FALSE;</span>
+	}
+<span style = "background-color:#dfd">	available_trans_queue = (int *)new_mem;</span>
+
+	// Successfully resized all related transaction arrays.
+<span style = "background-color:#dfd">	total_trans_slots = cur_trans_slots;</span>
+	return TRUE;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Free all memory associated with related I/O request arrays.
+//
+void Grunt::Free_Transaction_Arrays()
+<span style = "background-color:#dfd">{
+	if (trans_slots)</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+		NXMemFree(trans_slots);
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">		free(trans_slots);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">		if (available_trans_queue)</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+			NXMemFree(available_trans_queue);
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">			free(available_trans_queue);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+			total_trans_slots = 0;
+	cur_trans_slots = 0;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Initialize transaction availability queue.
+//
+void Grunt::Initialize_Transaction_Arrays()
+<span style = "background-color:#dfd">{</span>
+	int i, depth;
+	int max_queue_per_target = 0;
+	int trans_slot = 0;
+
+	// Get the maximum number of I/O's which can be outstanding at one time 
+	// to a single target.
+<span style = "background-color:#dfd">	for (i = 0; i &lt; target_count; i++) {
+		max_queue_per_target = __max(targets[i]-&gt;spec.queue_depth, max_queue_per_target);</span>
+	}
+
+	//
+	// Initialize transaction information.
+	//
+<span style = "background-color:#dfd">	for (i = 0; i &lt; cur_trans_slots; i++) {
+		trans_slots[i].asynchronous_io.hEvent = NULL;
+		trans_slots[i].request_number = i;</span>
+
+<span style = "background-color:#dfd">		trans_slots[i].remaining_requests = 0;
+		trans_slots[i].remaining_replies = 0;</span>
+	}
+
+	// Initialize the available queue.
+<span style = "background-color:#dfd">	available_head = 0;</span>
+	available_tail = 0;
+
+	// Adding transactions to available queue in a round robin fashion.
+<span style = "background-color:#dfd">	for (depth = 0; depth &lt; max_queue_per_target; depth++) {
+		for (i = 0; i &lt; target_count; i++) {
+			if (targets[i]-&gt;spec.queue_depth &gt; depth) {
+				trans_slots[trans_slot++].target_id = i;</span>
+				// We have to init available_trans_queue[] slots in two steps
+				// because the order of execution could give different results
+				// with different compilers.
+<span style = "background-color:#dfd">				available_trans_queue[available_tail] = available_tail;
+				available_tail++;</span>
+			}
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Setting the targets that this grunt will access.
+//
+BOOL Grunt::Set_Targets(int count, Target_Spec * target_specs)
+<span style = "background-color:#dfd">{</span>
+	// Remove previous completion queue if it was created by the Grunt.
+<span style = "background-color:#dfd">	if (!IsType(type, GenericVIType) &amp;&amp; io_cq) {</span>
+<span style = "background-color:#fdd">		delete io_cq;</span>
+	}
+<span style = "background-color:#dfd">	io_cq = NULL;</span>
+
+	// If no targets are being set, simply clear the target list.
+<span style = "background-color:#dfd">	if (!count) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; "   clearing target list." &lt;&lt; endl;
+		return Size_Target_Array(0);</span>
+	}
+	// Allocate enough targets
+<span style = "background-color:#dfd">	if (!Size_Target_Array(count, target_specs))</span>
+		return FALSE;
+
+<span style = "background-color:#dfd">	worker_performance.target_results.count = count;</span>
+
+	// Create appropriate completion queue object based on targets.
+	// If the Grunt will manage VI targets, the targets will provide a
+	// pointer to the completion queue to use.
+#if defined(IOMTR_SETTING_VI_SUPPORT)
+	if (IsType(type, GenericVIType)) {
+		// VI targets must know where the data buffer is and its size before
+		// being initialized.
+		((TargetVI *) targets[0])-&gt;data_buffer = (char *)read_data;
+		((TargetVI *) targets[0])-&gt;data_buffer_size = access_spec.max_transfer;
+		io_cq = &amp;((TargetVI *) targets[0])-&gt;vi.vi_cq;
+	} else
+#endif				// IOMTR_SETTING_VI_SUPPORT
+	{
+		// Create completion queue and verify its creation.
+<span style = "background-color:#dfd">		if (!(io_cq = new CQAIO)) {</span>
+<span style = "background-color:#fdd">			cout &lt;&lt; "*** Unable to create completion queue while setting " &lt;&lt; "targets." &lt;&lt; endl;</span>
+			return FALSE;
+		}
+	}
+
+	// Initialize the specific targets.
+<span style = "background-color:#dfd">	for (int i = 0; i &lt; count; i++) {
+		if (!targets[i]-&gt;Initialize(&amp;target_specs[i], io_cq))</span>
+			return FALSE;
+	}
+
+
+	// Seed the random number generator.  Grunts transferring data over a
+	// network will use the same seed to produce the same sequence of random
+	// numbers.  This will keep them in synch.
+<span style = "background-color:#dfd">	cout &lt;&lt; "Seeding random Number Generator(" &lt;&lt; target_specs[0].random &lt;&lt; ")" &lt;&lt; endl;
+	Srand(target_specs[0].random);</span>
+
+<span style = "background-color:#dfd">	return Resize_Transaction_Arrays();
+}</span>
+
+//
+// Start recording test data.
+//
+void Grunt::Record_On()
+<span style = "background-color:#dfd">{
+	if (!target_count || idle || critical_error)</span>
+		return;
+
+<span style = "background-color:#dfd">	worker_performance.time[FIRST_SNAPSHOT] = timer_value();
+	prev_worker_performance.time[LAST_SNAPSHOT] = timer_value();</span>
+
+<span style = "background-color:#dfd">	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(int)&amp;grunt_state, (int)TestRecording);
+}</span>
+
+//
+// Stop recording test data.
+//
+void Grunt::Record_Off()
+<span style = "background-color:#fdd">{
+	if (!target_count || idle || critical_error)</span>
+		return;
+
+<span style = "background-color:#fdd">	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(int)&amp;grunt_state, (int)TestRampingDown);</span>
+
+<span style = "background-color:#fdd">	worker_performance.time[LAST_SNAPSHOT] = timer_value();
+}</span>
+
+//
+// Stopping a test.
+//
+void Grunt::Stop_Test()
+<span style = "background-color:#fdd">{
+	if (!target_count || idle || critical_error)</span>
+		return;
+
+<span style = "background-color:#fdd">	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(long)&amp;not_ready, 1L);
+	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(int) &amp; grunt_state, (int)TestIdle);
+}</span>
+
+//
+// Waiting for threads to process stop command.
+//
+void Grunt::Wait_For_Stop()
+<span style = "background-color:#fdd">{
+	if (!target_count || idle)</span>
+		return;
+
+	// Waiting for all threads to finish.
+<span style = "background-color:#fdd">	while (not_ready)
+		Sleep(1);
+}</span>
+
+void Grunt::Set_Random_Data_Buffer(unsigned char* _random_data_buffer, long long _random_data_buffer_size) 
+<span style = "background-color:#fdd">{
+	random_data_buffer = _random_data_buffer;
+	random_data_buffer_size = _random_data_buffer_size;
+}</span>
+
+//
+// Setting access specifications for worker.  Also ensuring that a data buffer
+// large enough to support the maximum requested transfer has been allocated.
+// Note that Iometer will call Set_Access before testing starts to ensure that
+// Dynamo can run the spec with the largest transfer request.
+//
+BOOL Grunt::Set_Access(const Test_Spec * spec)
+<span style = "background-color:#dfd">{</span>
+	// Check for idle spec.
+<span style = "background-color:#dfd">	if ((idle = (spec-&gt;access[0].of_size == IOERROR)))</span>
+<span style = "background-color:#fdd">		return TRUE;</span>
+
+<span style = "background-color:#dfd">	access_spec.Initialize(&amp;(spec-&gt;access[0]));</span>
+
+	// Allocate a data buffer large enough to support the maximum requested 
+	// transfer.  We do this only if the current buffer is too small and
+	// we're using per worker data buffers.
+<span style = "background-color:#dfd">	if (data_size &gt;= access_spec.max_transfer) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; "Grunt: Grunt data buffer size " &lt;&lt; data_size &lt;&lt; " &gt;= "</span>
+		    &lt;&lt; access_spec.max_transfer &lt;&lt; ", returning" &lt;&lt; endl;
+<span style = "background-color:#fdd">		return TRUE;</span>
+<span style = "background-color:#dfd">	} else if (!data_size) {</span>
+		// We always want to use our own buffers, not the manager's
+		// buffer.  This is due to a bug in some ServerWorks chipsets
+		// (confirmed on the HE-SL chipset) where performing both
+		// read and write operations to the same cache line can cause
+		// the PCI bridge (the CIOB5) to hang indefinitely until a
+		// third PCI bus request comes in.
+		//
+		// Using per-grunt buffers eliminates that problem, as you
+		// aren't thrashing on the same buffer for both read and
+		// write operations.
+		data_size = access_spec.max_transfer;
+<span style = "background-color:#dfd">		cout &lt;&lt; "Grunt: Growing grunt data buffer from " &lt;&lt; data_size &lt;&lt; " to "</span>
+		    &lt;&lt; access_spec.max_transfer &lt;&lt; endl;
+	}
+	// Allocating a larger buffer.
+#ifdef _DEBUG
+	cout &lt;&lt; "Growing grunt data buffers from " &lt;&lt; data_size &lt;&lt; " to " &lt;&lt; access_spec.max_transfer &lt;&lt; endl;
+#endif
+
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	if (read_data) {
+		NXMemFree(read_data);
+	}
+	errno = 0;
+	if (!(read_data = NXMemAlloc(access_spec.max_transfer, 1)))
+#elif defined(IOMTR_OSFAMILY_UNIX)
+	if (read_data) {
+		free(read_data);
+	}
+	errno = 0;
+#if defined(IOMTR_OS_LINUX)
+	if (posix_memalign(&amp;read_data, sysconf(_SC_PAGESIZE), access_spec.max_transfer))
+#elif defined(IOMTR_OS_SOLARIS) || defined(IOMTR_OS_OSX)
+	if (!(read_data = valloc(access_spec.max_transfer)))
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">	if (read_data) {</span>
+<span style = "background-color:#fdd">		VirtualFree(read_data, 0, MEM_RELEASE);</span>
+	}
+<span style = "background-color:#dfd">	if (!(read_data = VirtualAlloc(NULL, access_spec.max_transfer, MEM_COMMIT, PAGE_READWRITE)))</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		// Could not allocate a larger buffer.  Signal failure.
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Grunt could not allocate read data buffer for I/O transfers." &lt;&lt; endl;</span>
+		data_size = 0;
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	if (write_data) {
+		NXMemFree(write_data);
+	}
+	errno = 0;
+	if (!(write_data = NXMemAlloc(access_spec.max_transfer, 1)))
+#elif defined(IOMTR_OSFAMILY_UNIX)
+	if (write_data) {
+		free(write_data);
+	}
+	errno = 0;
+#if defined(IOMTR_OS_LINUX)
+        if (posix_memalign(&amp;write_data, sysconf(_SC_PAGESIZE), access_spec.max_transfer))
+#elif defined(IOMTR_OS_SOLARIS) || defined(IOMTR_OS_OSX)
+        if (!(write_data = valloc(access_spec.max_transfer)))
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">	if (write_data) {</span>
+<span style = "background-color:#fdd">		VirtualFree(write_data, 0, MEM_RELEASE);</span>
+	}
+<span style = "background-color:#dfd">	if (!(write_data = VirtualAlloc(NULL, access_spec.max_transfer, MEM_COMMIT, PAGE_READWRITE)))</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		// Could not allocate a larger buffer.  Signal failure.
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Grunt could not allocate write data buffer for I/O transfers." &lt;&lt; endl;</span>
+		data_size = 0;
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	data_size = access_spec.max_transfer;</span>
+
+<span style = "background-color:#dfd">	saved_write_data_pointer = write_data;</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+// Do not do this yet
+#if defined(IOMTR_SETTING_CPU_AFFINITY)
+//
+// The idea is to set each of the worker threads to their own CPU, within the 
+// constraint of any other cpu affinity we have been passed at the cmd line.
+//
+void Grunt::Set_Affinity(DWORD_PTR affinity)
+<span style = "background-color:#fdd">{</span>
+	int one_bits = -1; // seed this guy so the first ++ starts at 0 to help with 0-based index
+<span style = "background-color:#fdd">	int effective_procs = 0;</span>
+	int effective_index = 0;
+<span style = "background-color:#fdd">	int bit_position = 0;
+	DWORD_PTR effective_affinity = 1, temp_affinity = affinity;</span>
+
+	// Count the number of bits in the affinity mask. We use this
+	// as the number of effective processers we will bind to.
+<span style = "background-color:#fdd">	while (temp_affinity)</span>
+	{
+<span style = "background-color:#fdd">		if (temp_affinity &amp; 0x1)</span>
+			effective_procs++;
+<span style = "background-color:#fdd">		temp_affinity = temp_affinity &gt;&gt; (DWORD_PTR) 1;</span>
+	}
+
+	// Use the workers index to round robin across the number
+	// of effective procs.
+	// Both index values are 0-based. 
+	effective_index = worker_index % effective_procs;
+	
+	// Map the live bits of the affinity mask to workers and
+	// set the thread affinity.
+
+	temp_affinity = affinity;
+	while (temp_affinity)
+	{
+<span style = "background-color:#fdd">		if (temp_affinity &amp; (DWORD_PTR) 0x1)</span>
+			one_bits++; // 0-based index!
+
+<span style = "background-color:#fdd">		if (effective_index == one_bits)</span>
+		{
+			// We have a match for our index, so set the affinity for the thread
+<span style = "background-color:#fdd">			effective_affinity =  (DWORD_PTR) 1 &lt;&lt; bit_position;</span>
+#if defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">			SetThreadAffinityMask(GetCurrentThread(), effective_affinity);</span>
+#elif defined(IOMTR_OS_LINUX)
+			cpu_set_t cpuset;
+			CPU_ZERO(&amp;cpuset);
+			CPU_SET(bit_position, &amp;cpuset); // same as effective_affinity
+			pthread_setaffinity_np(pthread_self(), CPU_SETSIZE,  &amp;cpuset);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#fdd">			cout &lt;&lt; "Worker " &lt;&lt; worker_index &lt;&lt; " setting thread affinity mask to 0x" </span>
+				 &lt;&lt; hex &lt;&lt; effective_affinity &lt;&lt; "." &lt;&lt; endl;
+			break;
+		}
+		temp_affinity = temp_affinity &gt;&gt; (DWORD_PTR) 0x1;
+<span style = "background-color:#fdd">		bit_position++;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+#else
+void Grunt::Set_Affinity(DWORD_PTR affinity)
+{
+	return;
+}
+#endif //IOMTR_SETTING_CPU_AFFINITY
+//
+// Starting threads to prepare disks for tests.  Returning TRUE if we
+// successfully started the disk preparation.
+//
+BOOL Grunt::Prepare_Disks()
+<span style = "background-color:#fdd">{</span>
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	pthread_t newThread;
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+	// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+	grunt_state = TestPreparing;
+<span style = "background-color:#fdd">	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(long)&amp;not_ready, (long)target_count);</span>
+
+	// Creating a thread to prepare each disk.
+<span style = "background-color:#fdd">	cout &lt;&lt; "Preparing disks..." &lt;&lt; endl;</span>
+
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	prepare_thread = (Thread_Info *) NXMemAlloc(sizeof(Thread_Info) * target_count, 1);
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	prepare_thread = (Thread_Info *) malloc(sizeof(Thread_Info) * target_count);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#fdd">	if (!prepare_thread) {
+		cout &lt;&lt; "*** Unable to allocate memory for preparation threads." &lt;&lt; endl;
+		return FALSE;</span>
+	};
+
+<span style = "background-color:#fdd">	for (int i = 0; i &lt; target_count; i++) {
+		if (IsType(targets[i]-&gt;spec.type, LogicalDiskType)) {
+			prepare_thread[i].parent = this;</span>
+			prepare_thread[i].id = i;
+<span style = "background-color:#fdd">			cout &lt;&lt; "   " &lt;&lt; targets[i]-&gt;spec.name &lt;&lt; " preparing." &lt;&lt; endl;</span>
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+			// Assuming that thr_create call will not fail !!!
+
+			pthread_create(&amp;newThread, NULL, (void *(*)(void *))Prepare_Disk_Wrapper,
+				       (void *)&amp;(prepare_thread[i]));
+			pthread_detach(newThread);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">			_beginthread(Prepare_Disk_Wrapper, 0, (void *)&amp;(prepare_thread[i]));</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+		}
+	}
+<span style = "background-color:#fdd">	return TRUE;
+}</span>
+
+//
+// Wrapper for Grunt::Prepare_Disk(), used by _beginthread().
+//
+void CDECL Prepare_Disk_Wrapper(void *disk_thread_info)
+<span style = "background-color:#fdd">{</span>
+	Grunt *grunt = (Grunt *) (((Thread_Info *) disk_thread_info)-&gt;parent);
+	int disk_id = ((Thread_Info *) disk_thread_info)-&gt;id;
+
+<span style = "background-color:#fdd">	grunt-&gt;Prepare_Disk(disk_id);</span>
+}
+
+//
+// Preparing a disk for access by a worker thread.  The disk must have been 
+// previously initialized.
+//
+void Grunt::Prepare_Disk(int disk_id)
+<span style = "background-color:#fdd">{</span>
+	void *buffer = NULL;
+	//DWORD buffer_size;
+	DWORDLONG prepare_offset = 0;
+<span style = "background-color:#fdd">	TargetDisk *disk = (TargetDisk *) targets[disk_id];</span>
+
+	critical_error = FALSE;
+/*
+	// Allocate a large (64k for 512 byte sector size) buffer for the preparation.
+	buffer_size = disk-&gt;spec.disk_info.sector_size * 128;
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	NXMemFree(buffer);
+	errno = 0;
+	if (!(buffer = NXMemAlloc(buffer_size, 1)))
+#elif defined(IOMTR_OSFAMILY_UNIX)
+	free(buffer);
+	errno = 0;
+	if (!(buffer = valloc(buffer_size)))
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+	VirtualFree(buffer, 0, MEM_RELEASE);
+	if (!(buffer = VirtualAlloc(NULL, buffer_size, MEM_COMMIT, PAGE_READWRITE)))
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		cout &lt;&lt; "*** Could not allocate buffer to prepare disk." &lt;&lt; endl;
+		critical_error = TRUE;
+		InterlockedDecrement(IOMTR_MACRO_INTERLOCK_CAST(long) &amp; not_ready);
+
+		return;
+	}
+*/
+	// Open the disk for preparation.
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	// The disk::prepare() operation writes to a file iobw.tst till it uses up
+	// all the available disk space. Now, Solaris allows a file to be created
+	// with a (logical) size that is larger than the actual size of the file.
+	// Later, when an attempt is made to write to the unwritten portion of the
+	// file, Solaris attempts to expand the actual size on the disk to 
+	// accomodate the new writes.
+	//
+	// The disk::prepare() throws up a problem here. Since we write in parallel
+	// to the the file, Solaris allows us to create an iobw.tst that is larger
+	// than the available space on the disk. A later write to the unfilled
+	// portion throws up an ENOSPC error. To avoid this problem, we use the
+	// O_APPEND flag which always sets the write offset to the eof.
+	if (!disk-&gt;Open(&amp;grunt_state, O_APPEND))
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	if (!disk-&gt;Open(&amp;grunt_state))</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Could not open disk." &lt;&lt; endl;
+		critical_error = TRUE;
+	}</span>
+	else {
+		// Prepare the disk, first with large block sizes, then with single sectors.
+<span style = "background-color:#fdd">		if (!disk-&gt;Prepare(&amp;prepare_offset, &amp;grunt_state, disk-&gt;spec.disk_info.sector_size, random_data_buffer, random_data_buffer_size)) {
+			cout &lt;&lt; "*** An error occurred while preparing the disk." &lt;&lt; endl;
+			critical_error = TRUE;</span>
+		}
+
+<span style = "background-color:#fdd">		disk-&gt;Close(NULL);</span>
+	}
+
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	NXMemFree(buffer);
+#elif defined(IOMTR_OSFAMILY_UNIX)
+	free(buffer);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	VirtualFree(buffer, 0, MEM_RELEASE);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#fdd">	cout &lt;&lt; "   " &lt;&lt; disk-&gt;spec.name &lt;&lt; " done." &lt;&lt; endl;
+	InterlockedDecrement(IOMTR_MACRO_INTERLOCK_CAST(long) &amp; not_ready);
+}</span>
+
+ //
+// Recording information about an asynchronous I/O.  The results of the
+// I/O may or may not actually be added to the total results, depending on if
+// there are any outstanding non-recorded I/O's still pending.
+//
+// If 0 is passed in for the end_IO time, an I/O error is assumed.
+// If the I/O was not completed and an error occurred, record the error.
+//
+// Each I/O is part of a transaction.  The transaction slots hold information
+// about the number of I/Os remaining in each transaction.
+//
+void Grunt::Record_IO(Transaction * transaction, DWORDLONG end_IO)
+<span style = "background-color:#dfd">{</span>
+	DWORDLONG transfer_time;	// Time to complete a successful transfer.
+<span style = "background-color:#dfd">	Raw_Result *result = &amp;(worker_performance.target_results.result[transaction-&gt;target_id]);</span>
+	Raw_Result *prev_result = &amp;(prev_worker_performance.target_results.result[transaction-&gt;target_id]);
+
+	// Update the target's number of outstanding I/Os.
+<span style = "background-color:#dfd">	targets[transaction-&gt;target_id]-&gt;outstanding_ios--;</span>
+
+	// Update the grunt's number of outstanding I/Os
+<span style = "background-color:#dfd">	outstanding_ios--;</span>
+
+	// See if it's okay to record the completed I/O.
+<span style = "background-color:#dfd">	if (transaction-&gt;start_IO &amp;&amp; (ramp_up_ios_pending &lt;= 0) &amp;&amp; (grunt_state == TestRecording)) {</span>
+		// Updating results for I/O.
+		// (If end_IO is zero, this value won't be used anyway)
+		transfer_time = end_IO - transaction-&gt;start_IO;
+
+		// Calculating is_read...the value is the opposite for client threads.
+<span style = "background-color:#dfd">		if (transaction-&gt;is_read ^ IsType(targets[transaction-&gt;target_id]-&gt;spec.type, GenericServerType)) {
+			if (end_IO) {</span>
+				// I/O was completed without an error.
+<span style = "background-color:#dfd">				result-&gt;read_count++;
+				result-&gt;bytes_read += transaction-&gt;remaining_requests</span>
+				    ? transaction-&gt;request_size : transaction-&gt;reply_size;
+<span style = "background-color:#dfd">				result-&gt;read_latency_sum += transfer_time;</span>
+				// Finding if last transfer took the longest.
+<span style = "background-color:#dfd">				if (transfer_time &gt; result-&gt;max_raw_read_latency)
+					result-&gt;max_raw_read_latency = transfer_time;
+				if (transfer_time &gt; prev_result-&gt;max_raw_read_latency)
+					prev_result-&gt;max_raw_read_latency = transfer_time;</span>
+
+<span style = "background-color:#dfd">				for(int binNum=1; binNum &lt; LATENCY_BIN_SIZE; binNum++) {
+					if((double)transfer_time &lt; access_spec.latency_bin_values[binNum]) {</span>
+						result-&gt;latency_bin[binNum - 1] += 1;
+						break;
+					}
+				}
+			} else {
+				// Error occurred.
+<span style = "background-color:#fdd">				result-&gt;read_errors++;</span>
+			}
+<span style = "background-color:#fdd">		} else		// was a write I/O</span>
+		{
+<span style = "background-color:#dfd">			if (end_IO) {</span>
+				// I/O was completed without an error.
+<span style = "background-color:#dfd">				result-&gt;write_count++;
+				result-&gt;bytes_written += transaction-&gt;remaining_requests</span>
+				    ? transaction-&gt;request_size : transaction-&gt;reply_size;
+<span style = "background-color:#dfd">				result-&gt;write_latency_sum += transfer_time;</span>
+				// Finding if last transfer took the longest.
+<span style = "background-color:#dfd">				if (transfer_time &gt; result-&gt;max_raw_write_latency)
+					result-&gt;max_raw_write_latency = transfer_time;
+				if (transfer_time &gt; prev_result-&gt;max_raw_write_latency)
+					prev_result-&gt;max_raw_write_latency = transfer_time;</span>
+
+<span style = "background-color:#dfd">				for(int binNum=1; binNum &lt; LATENCY_BIN_SIZE; binNum++) {
+					if((double)transfer_time &lt; access_spec.latency_bin_values[binNum]) {</span>
+						result-&gt;latency_bin[binNum - 1] += 1;
+						break;
+					}
+				}
+
+			} else {
+				// Error occurred.
+<span style = "background-color:#fdd">				result-&gt;write_errors++;</span>
+			}
+		}
+
+		// If this I/O was the last in the transaction, record the transaction time.
+<span style = "background-color:#dfd">		if (transaction-&gt;start_transaction &amp;&amp;</span>
+		    (transaction-&gt;remaining_requests + transaction-&gt;remaining_replies) == 1) {
+			// A transaction was completed.
+<span style = "background-color:#dfd">			result-&gt;transaction_count++;</span>
+
+			// this is the final I/O of a recorded transaction,
+			// so record the elapsed transaction time
+<span style = "background-color:#dfd">			transfer_time = end_IO - transaction-&gt;start_transaction;</span>
+
+<span style = "background-color:#dfd">			result-&gt;transaction_latency_sum += transfer_time;
+			if (transfer_time &gt; result-&gt;max_raw_transaction_latency)
+				result-&gt;max_raw_transaction_latency = transfer_time;
+			if (transfer_time &gt; prev_result-&gt;max_raw_transaction_latency)
+				prev_result-&gt;max_raw_transaction_latency = transfer_time;</span>
+		}
+<span style = "background-color:#dfd">	} else {</span>
+		// there was no starting time on this transfer
+
+<span style = "background-color:#dfd">		if (ramp_up_ios_pending) {
+			--ramp_up_ios_pending;</span>
+
+			// If ramp_up_ios_pending just went to ZERO and the grunt is in the
+			// recording state, set the test's start_counter to the current time.
+<span style = "background-color:#dfd">			if ((ramp_up_ios_pending &lt;= 0) &amp;&amp; (grunt_state == TestRecording)) {
+				worker_performance.time[FIRST_SNAPSHOT] = timer_value();</span>
+			}
+		}
+	}
+
+	// If there are any REQUEST I/Os remaining for this transfer
+	// deduct the completed I/O from the REQUEST counter.
+<span style = "background-color:#dfd">	if (transaction-&gt;remaining_requests &gt; 0) {
+		if (!--(transaction-&gt;remaining_requests)) {</span>
+			// If this was the last REQUEST, start replies
+<span style = "background-color:#dfd">			transaction-&gt;is_read = !transaction-&gt;is_read;</span>
+		}
+<span style = "background-color:#dfd">	} else</span>
+#ifdef _DEBUG
+	if (transaction-&gt;remaining_requests == 0 &amp;&amp; transaction-&gt;remaining_replies &gt; 0)
+#endif
+	{
+<span style = "background-color:#fdd">		--transaction-&gt;remaining_replies;</span>
+	}
+#ifdef _DEBUG
+	else {
+		if (transaction-&gt;remaining_requests &lt; 0)
+			cout &lt;&lt; "*** ERROR: remaining_requests is negative" &lt;&lt; endl;
+
+		if (transaction-&gt;remaining_replies &lt; 0)
+			cout &lt;&lt; "*** ERROR: remaining_replies is negative" &lt;&lt; endl;
+	}
+#endif
+
+	// Put this transaction slot back on the available queue.
+<span style = "background-color:#dfd">	available_trans_queue[available_tail] = transaction-&gt;request_number;
+	if ((++available_tail) &gt; cur_trans_slots) {
+		available_tail = 0;</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Inserting a delay between transfers.  We still need to process completed 
+// I/O's, but no new ones should be initiated.
+//
+void Grunt::Asynchronous_Delay(int transfer_delay)
+<span style = "background-color:#fdd">{</span>
+	struct _timeb start_wait_time;	// Time before thread started waiting for an I/O to complete.
+	struct _timeb end_wait_time;	// Time after a thread waited for an I/O to complete./
+
+	do {
+<span style = "background-color:#fdd">		_ftime(&amp;start_wait_time);</span>
+
+<span style = "background-color:#fdd">		if (Complete_IO(transfer_delay) == ReturnTimeout)</span>
+			return;
+
+		// More waiting is needed before allowing additional requests.
+<span style = "background-color:#fdd">		_ftime(&amp;end_wait_time);
+		transfer_delay -= (int)(((end_wait_time._time - start_wait_time._time) * 1000)</span>
+				   + end_wait_time._millitm - start_wait_time._millitm);
+	}
+<span style = "background-color:#fdd">	while (transfer_delay &gt; 0);
+}</span>
+
+//
+// Wrapper for Grunt::DoIOs(), used by _beginthread().
+//
+void CDECL Grunt_Thread_Wrapper(void *grunt)
+<span style = "background-color:#dfd">{
+	if (param.cpu_affinity) // only if we have been provided an overriding affinity</span>
+<span style = "background-color:#fdd">		((Grunt *) grunt)-&gt;Set_Affinity(param.cpu_affinity);</span>
+
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[0] =	0;												// 0us
+<span style = "background-color:#dfd">	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[1] =	((Grunt *) grunt)-&gt;timer_resolution / 20000;	// 50us</span>
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[2] =	((Grunt *) grunt)-&gt;timer_resolution / 10000;	// 100us
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[3] =	((Grunt *) grunt)-&gt;timer_resolution / 5000;		// 200us
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[4] =	((Grunt *) grunt)-&gt;timer_resolution / 2000;		// 500us
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[5] =	((Grunt *) grunt)-&gt;timer_resolution / 1000;		// 1ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[6] =	((Grunt *) grunt)-&gt;timer_resolution / 500;		// 2ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[7] =	((Grunt *) grunt)-&gt;timer_resolution / 200;		// 5ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[8] =	((Grunt *) grunt)-&gt;timer_resolution / 100;		// 10ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[9] =	((Grunt *) grunt)-&gt;timer_resolution / 67;		// 15ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[10] =	((Grunt *) grunt)-&gt;timer_resolution / 50;		// 20ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[11] =	((Grunt *) grunt)-&gt;timer_resolution / 33;		// 30ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[12] =	((Grunt *) grunt)-&gt;timer_resolution / 20;		// 50ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[13] =	((Grunt *) grunt)-&gt;timer_resolution / 10;		// 100ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[14] =	((Grunt *) grunt)-&gt;timer_resolution / 5;		// 200ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[15] =	((Grunt *) grunt)-&gt;timer_resolution / 2;		// 500ms
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[16] =	((Grunt *) grunt)-&gt;timer_resolution;			// 1s
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[17] =	((Grunt *) grunt)-&gt;timer_resolution * 2;		// 2s
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[18] =	((Grunt *) grunt)-&gt;timer_resolution * 4;		// 4.7s
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[19] =	((Grunt *) grunt)-&gt;timer_resolution * 5;		// 5s
+	((Grunt *) grunt)-&gt;access_spec.latency_bin_values[20] =	((Grunt *) grunt)-&gt;timer_resolution * 10;		// 10s
+
+	// open targets
+<span style = "background-color:#dfd">	((Grunt *) grunt)-&gt;Open_Targets();</span>
+
+	// If open failed, abort.
+<span style = "background-color:#dfd">	if (((Grunt *) grunt)-&gt;critical_error)</span>
+		return;
+
+	// run the tests
+<span style = "background-color:#dfd">	((Grunt *) grunt)-&gt;Do_IOs();</span>
+
+	// close targets
+<span style = "background-color:#fdd">	((Grunt *) grunt)-&gt;Close_Targets();
+}</span>
+
+//
+// Opens all targets before Do_IOs() runs - returns FALSE if any opens failed
+// (In case of failure, this function will behave as if it is running the IO tests.)
+//
+// called by the Grunt_Thread_Wrapper function
+//
+void Grunt::Open_Targets()
+<span style = "background-color:#dfd">{</span>
+	int i;
+
+	// Opening all targets for access.
+<span style = "background-color:#dfd">	cout &lt;&lt; "   Opening targets." &lt;&lt; endl;
+	for (i = 0; i &lt; target_count; i++) {</span>
+		// All targets are opened to ensure that they can connect.
+<span style = "background-color:#dfd">		if (!targets[i]-&gt;Open(&amp;grunt_state)) {</span>
+			// An error occurred opening a target.  Do not go any further.
+<span style = "background-color:#fdd">			cout &lt;&lt; "*** Error opening " &lt;&lt; targets[i]-&gt;spec.name &lt;&lt; endl;</span>
+			break;
+		}
+#if _DETAILS
+		cout &lt;&lt; "Opened " &lt;&lt; targets[i]-&gt;spec.name &lt;&lt; endl;
+#endif
+
+		// If the target is testing connection rate, it will be opened when
+		// we first begin doing I/O.  Close these targets.
+<span style = "background-color:#dfd">		if (targets[i]-&gt;spec.test_connection_rate) {</span>
+<span style = "background-color:#fdd">			targets[i]-&gt;trans_left_in_conn = 0;</span>
+#ifdef _DEBUG
+			cout &lt;&lt; "Defering open for " &lt;&lt; targets[i]-&gt;spec.name &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">			if (!targets[i]-&gt;Close(&amp;grunt_state)) {
+				cout &lt;&lt; "*** Error re-closing target " &lt;&lt; targets[i]-&gt;spec.name &lt;&lt; endl;</span>
+				break;
+			}
+		}
+	}
+
+	// See if an error occurred.  If so, close any that are open and stop.
+<span style = "background-color:#fdd">	if (i &lt; target_count) {</span>
+		critical_error = TRUE;
+<span style = "background-color:#fdd">		Close_Targets();</span>
+	}
+	// Signalling that thread is done (successfully or not) opening its targets.
+<span style = "background-color:#dfd">	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(long) &amp; not_ready, 0);
+}</span>
+
+//
+// Closes all targets after Do_IOs() runs
+//
+// called by the Grunt_Thread_Wrapper() function
+//
+void Grunt::Close_Targets()
+<span style = "background-color:#fdd">{</span>
+	// Closing disks.
+<span style = "background-color:#fdd">	for (int i = 0; i &lt; target_count; i++) {
+		if (!(targets[i]-&gt;Close(&amp;grunt_state)))
+			cout &lt;&lt; "*** Error closing " &lt;&lt; targets[i]-&gt;spec.name &lt;&lt; endl;</span>
+	}
+	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(long) &amp; not_ready, 0);
+<span style = "background-color:#fdd">}</span>
+
+//
+// Performing accesses based on specifications to targets.
+// The following function initiates I/O, recording performance information only when the
+// grunt is in the TestRecording state.  The function needs to be as efficient as possible
+// while still being readable and maintainable.
+//
+// "data" is the location of data to use for transfers.
+//
+void Grunt::Do_IOs()
+<span style = "background-color:#dfd">{</span>
+	////////////////////////////////////////////////////////////////////////////
+	// these are working variables for the IO loop - they aren't referenced
+	// outside of it and their values don't span more than one burst of data.
+	//
+	int remaining_transactions_in_burst = 0;	// how's that for a name?
+	int access_percent = 0;	// Determines the access spec.
+	int target_id;		// Index into target array of target to access.
+	DWORD size;		// Size of transfer request to target.
+	int transfer_delay;	// Milliseconds to wait before accessing.
+	ReturnVal transfer_result;	// Success/failure result of read or write operation.
+	Transaction *transaction = NULL;	// Pointer to the transaction being processed.
+	DWORD user_alignment;
+	DWORDLONG user_align_mask;
+	DWORD reply;		// Size of reply, or 0 for no reply
+	DWORDLONG conn_time;	// Used to calculate average and max connection times.
+	Target *target;
+	Raw_Result *target_results;	// Pointer to results for selected target.
+	Raw_Result *prev_target_results;
+
+<span style = "background-color:#dfd">	while (grunt_state != TestIdle) {</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+		pthread_yield();	// NetWare is non-preemptive
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+		// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+		// If we can't queue another request, wait for a completion.
+		// If we CAN queue another request, get only one completion and do 
+		// so immediately (with a time out of 0).
+<span style = "background-color:#dfd">		Complete_IO((available_head == available_tail ||</span>
+			     target_count == targets_closing_count) ? TIMEOUT_TIME : 0);
+
+		// Now check to see if there really are any completed requests.
+		// Complete_IO may not have freed a slot in the available queue.
+<span style = "background-color:#dfd">		if (available_head == available_tail)</span>
+			continue;	// repeat the outermost while loop
+
+		// Getting an index into the target array of the next target to access.
+<span style = "background-color:#dfd">		target_id = trans_slots[available_trans_queue[available_head]].target_id;
+		target = targets[target_id];</span>
+
+		// Checking the next target to access to see if it is closing.
+		// This if statement is separated from the one below for performance.
+<span style = "background-color:#dfd">		if (target-&gt;spec.test_connection_rate &amp;&amp; target-&gt;is_closing) {</span>
+			// Target is closing.  Move it to the tail of the available queue.
+<span style = "background-color:#fdd">			available_trans_queue[available_tail++] = available_trans_queue[available_head++];
+			if (available_head &gt; cur_trans_slots) {
+				available_head = 0;</span>
+			}
+<span style = "background-color:#fdd">			if (available_tail &gt; cur_trans_slots) {
+				available_tail = 0;</span>
+			}
+			// Check to see if we can close the target.  Targets are not closed
+			// until all outstanding I/Os have completed.
+<span style = "background-color:#fdd">			if (target-&gt;outstanding_ios == 0) {</span>
+#ifdef _DEBUG
+				cout &lt;&lt; "Testing connection rate: Closing " &lt;&lt; targets[target_id]-&gt;spec.name &lt;&lt; endl;
+#endif
+
+				// Close target and record connection time.
+<span style = "background-color:#fdd">				target-&gt;Close(&amp;grunt_state);</span>
+
+<span style = "background-color:#fdd">				conn_time = timer_value() - target-&gt;conn_start_time;</span>
+
+				// Since target is closed, it is no longer closing.
+<span style = "background-color:#fdd">				target-&gt;is_closing = FALSE;</span>
+
+				// Record connection latencies.
+<span style = "background-color:#fdd">				if (ramp_up_ios_pending &lt;= 0 &amp;&amp; grunt_state == TestRecording) {
+					target_results = &amp;(worker_performance.target_results.result[target_id]);
+					target_results-&gt;connection_count++;
+					target_results-&gt;connection_latency_sum += conn_time;
+					if (conn_time &gt; target_results-&gt;max_raw_connection_latency)
+						target_results-&gt;max_raw_connection_latency = conn_time;</span>
+
+					prev_target_results =
+					    &amp;(prev_worker_performance.target_results.result[target_id]);
+<span style = "background-color:#fdd">					if (conn_time &gt; prev_target_results-&gt;max_raw_connection_latency)
+						prev_target_results-&gt;max_raw_connection_latency = conn_time;</span>
+				}
+			}
+<span style = "background-color:#fdd">			continue;</span>
+		}
+		// Check to see if we need to open the target.
+<span style = "background-color:#fdd">		if (target-&gt;spec.test_connection_rate &amp;&amp; target-&gt;trans_left_in_conn &lt;= 0) {</span>
+#ifdef _DEBUG
+			cout &lt;&lt; "Testing connection rate: Opening " &lt;&lt; target-&gt;spec.name &lt;&lt; endl;
+#endif
+			// Set the number of transactions to do before closing.
+<span style = "background-color:#fdd">			target-&gt;trans_left_in_conn = target-&gt;spec.trans_per_conn;</span>
+			
+			// Record the start time for the transaction.
+<span style = "background-color:#fdd">			target-&gt;conn_start_time = timer_value();</span>
+
+			// Open the target.
+<span style = "background-color:#fdd">			target-&gt;Open(&amp;grunt_state);</span>
+
+			// If not doing any transactions, set the target to close.
+<span style = "background-color:#fdd">			if ((target-&gt;is_closing = !target-&gt;spec.trans_per_conn))</span>
+				continue;
+		}
+		// "transaction" will now point to the next available
+		// transaction slot
+<span style = "background-color:#dfd">		transaction = &amp;(trans_slots[available_trans_queue[available_head]]);</span>
+
+		// See if this is the start of a new transaction
+<span style = "background-color:#dfd">		if (!(transaction-&gt;remaining_requests || transaction-&gt;remaining_replies)) {</span>
+			// No requests or replies remain, start a new transaction.
+
+			// Check to see if this transaction will be the last one
+			// before closing the target.
+<span style = "background-color:#dfd">			target-&gt;is_closing = (target-&gt;spec.test_connection_rate &amp;&amp; --target-&gt;trans_left_in_conn &lt;= 0);</span>
+
+			// See if we need to get a new access spec line.  All transactions
+			// for the current burst have been sent.
+<span style = "background-color:#dfd">			if (--remaining_transactions_in_burst &lt;= 0) {
+				access_spec.GetNextBurst(access_percent = (unsigned int)Rand(100),</span>
+							 &amp;remaining_transactions_in_burst, &amp;size, &amp;transfer_delay,
+							 &amp;user_alignment, &amp;user_align_mask, &amp;reply);
+				// Possibly waiting some delay before sending next burst of transfers.
+<span style = "background-color:#dfd">				if (transfer_delay)</span>
+<span style = "background-color:#fdd">					Asynchronous_Delay(transfer_delay);</span>
+			}
+			// Fill in the information for a new transaction
+
+			// Set number and size of requests.  (Currently always one request; we can support 
+			// any number, but this is not yet implemented in Iometer.)
+<span style = "background-color:#dfd">			transaction-&gt;request_size = size;</span>
+			transaction-&gt;remaining_requests = 1;
+
+			// Set number and size of replies.  (Currently reply size = 0 means no reply, 
+			// reply size != 0 means one reply; we can support any number, but this is not
+			// yet implemented in Iometer.)
+			transaction-&gt;reply_size = reply;
+			transaction-&gt;remaining_replies = (reply ? 1 : 0);
+
+			// Determine if the first I/O will be a read or write.
+			// (is_read will change when replies are sent)
+<span style = "background-color:#dfd">			transaction-&gt;is_read = access_spec.Read(access_percent, (unsigned int)target-&gt;Rand(100));</span>
+
+			// Set flag to record transaction start time when the transaction actually begins.
+<span style = "background-color:#dfd">			transaction-&gt;start_transaction = 0;</span>
+		}
+		// Prepare the next I/O of the transaction...
+
+		// Set the transaction's size.
+		if (transaction-&gt;remaining_requests)
+			transaction-&gt;size = transaction-&gt;request_size;
+		else
+			transaction-&gt;size = transaction-&gt;reply_size;
+
+<span style = "background-color:#dfd">		if (IsType(target-&gt;spec.type, GenericDiskType)) {
+			((TargetDisk *) targets[target_id])-&gt;Seek(access_spec.Random(access_percent,</span>
+										     (unsigned int)targets[target_id]-&gt;
+										     Rand(100)), size,
+								  user_alignment, user_align_mask);
+		}
+
+<span style = "background-color:#dfd">		transaction-&gt;start_IO = (grunt_state == TestRecording) ? timer_value() : 0;</span>
+
+		// If the transaction start time hasn't been set,
+		// this is the first I/O of this transaction.  Set the start time.
+<span style = "background-color:#dfd">		if (!transaction-&gt;start_transaction)
+			transaction-&gt;start_transaction = transaction-&gt;start_IO;</span>
+
+		//
+		// Finally doing the actual I/O request - whew!  Continue to try to do
+		// the I/O while it should be retried.  A retry indicates that there
+		// currently aren't enough reources to fulfill the request.
+		//
+		do {
+#if defined(IOMTR_OSFAMILY_NETWARE)
+			pthread_yield();	// NetWare is Non-preemptive
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+			// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">			if (transaction-&gt;is_read) {
+				transfer_result = target-&gt;Read(read_data, transaction);
+			} else {</span>
+
+				// Depending on the data pattern selected, set the write_data appropriately
+<span style = "background-color:#dfd">				switch (((TargetDisk *) targets[target_id])-&gt;spec.DataPattern){</span>
+					case DATA_PATTERN_REPEATING_BYTES:
+<span style = "background-color:#dfd">						write_data = saved_write_data_pointer;
+						memset(write_data, rand(), transaction-&gt;size);</span>
+						break;
+					case DATA_PATTERN_PSEUDO_RANDOM:
+						// Do nothing...pattern set by the "Set_Access" routine
+						break;
+					case DATA_PATTERN_FULL_RANDOM:
+						//Buffer offset must be DWORD-aligned in memory, otherwise the transfer fails
+						//Choose a pointer into the buffer
+<span style = "background-color:#fdd">						long long offset = (long long)Rand(RANDOM_BUFFER_SIZE - transaction-&gt;size);</span>
+
+						//See how far it is from being DWORD-aligned
+<span style = "background-color:#fdd">						long long remainder = offset &amp; (sizeof(DWORD) - 1);</span>
+
+						//Align the pointer using the remainder
+						offset = offset - remainder;
+
+<span style = "background-color:#fdd">						write_data = &amp;random_data_buffer[offset];</span>
+						break;
+				}
+
+<span style = "background-color:#dfd">				transfer_result = target-&gt;Write(write_data, transaction);</span>
+			}
+
+			// Continue to process completions.  This may free up the resource
+			// that is needed.
+<span style = "background-color:#dfd">			if (transfer_result == ReturnRetry)</span>
+<span style = "background-color:#fdd">				Complete_IO(TIMEOUT_TIME);</span>
+		}
+<span style = "background-color:#fdd">		while (transfer_result == ReturnRetry &amp;&amp; grunt_state != TestIdle);</span>
+
+		// The request finished.  See what the result was and process it
+		// accordingly.
+<span style = "background-color:#fdd">		switch (transfer_result) {</span>
+		case ReturnPending:
+			// An I/O was successfully started, and its completion will be
+			// posted to the completion queue.
+
+			// Increment the number of outstanding I/Os to the target.
+<span style = "background-color:#fdd">			target-&gt;outstanding_ios++;</span>
+
+			// Increment the number of outstanding I/Os on this grunt
+<span style = "background-color:#fdd">			outstanding_ios++;</span>
+
+			// See if the I/O occurred during the ramp up period.
+<span style = "background-color:#fdd">			if (!transaction-&gt;start_IO)
+				++ramp_up_ios_pending;
+			break;</span>
+		case ReturnSuccess:
+			// The request completed successfully, and its completion will not
+			// go to the completion queue.
+			// We need to treat its full completion as "pending" to ensure that 
+			// Record_IO can properly handle it.
+
+			// Increment the number of outstanding I/Os to the target.
+<span style = "background-color:#dfd">			target-&gt;outstanding_ios++;</span>
+
+			// Increment the number of outstanding I/Os on this grunt
+<span style = "background-color:#dfd">			outstanding_ios++;</span>
+
+			// See if the I/O occurred during the ramp up period.
+<span style = "background-color:#dfd">			if (!transaction-&gt;start_IO)
+				++ramp_up_ios_pending;</span>
+
+			// An I/O completed successfully and will not go to the completion 
+			// queue.  Record the request as done.
+<span style = "background-color:#dfd">			Record_IO(transaction, timer_value());</span>
+			break;
+		default:
+			// see whether it should record the error
+<span style = "background-color:#fdd">			if (grunt_state == TestRecording) {</span>
+				// ERROR: The I/O was not queued successfully.
+<span style = "background-color:#fdd">				cout &lt;&lt; "*** Error performing I/O to " &lt;&lt; target-&gt;spec.name &lt;&lt; endl;</span>
+
+<span style = "background-color:#fdd">				if (transaction-&gt;is_read)
+					worker_performance.target_results.result[target_id].read_errors++;</span>
+				else
+<span style = "background-color:#fdd">					worker_performance.target_results.result[target_id].write_errors++;</span>
+			}
+			// Move the failed transaction to the end of the available queue to
+			// allow other requests, if any, to have a chance of going.
+<span style = "background-color:#fdd">			available_trans_queue[available_tail++] = available_trans_queue[available_head];
+			if (available_tail &gt; cur_trans_slots) {
+				available_tail = 0;</span>
+			}
+		}
+
+		// Move the head of the available queue to reflect the last request.
+<span style = "background-color:#dfd">		if ((++available_head) &gt; cur_trans_slots) {
+			available_head = 0;</span>
+		}
+	}			// while grunt_state is not TestIdle
+
+	// Drain any outstanding I/Os from the completion queue
+<span style = "background-color:#fdd">	while (outstanding_ios &gt; 0) {</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+		pthread_yield();	// NetWare is non-preemptive
+#elif defined(IOMTR_OSFAMILY_UNIX) || defined(IOMTR_OSFAMILY_WINDOWS)
+		// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+<span style = "background-color:#fdd">		switch (Complete_IO(TIMEOUT_TIME)) {</span>
+		case ReturnTimeout:
+<span style = "background-color:#fdd">			cout &lt;&lt; "*** Grunt thread exiting with " &lt;&lt; outstanding_ios &lt;&lt; " still active" &lt;&lt; endl;</span>
+			break;
+		default:
+			break;
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Checking for a completed I/O and processing the completion.
+//
+ReturnVal Grunt::Complete_IO(int timeout)
+<span style = "background-color:#dfd">{</span>
+	int bytes, trans_id;
+
+	// See if any I/Os completed.
+<span style = "background-color:#dfd">	switch (io_cq-&gt;GetStatus(&amp;bytes, &amp;trans_id, timeout)) {</span>
+	case ReturnSuccess:
+		// I/O completed.  Make sure we received everything we requested.
+<span style = "background-color:#fdd">		if (bytes &lt; (int)trans_slots[trans_id].size)
+			Do_Partial_IO(&amp;trans_slots[trans_id], bytes);</span>
+		else
+<span style = "background-color:#fdd">			Record_IO(&amp;trans_slots[trans_id], timer_value());</span>
+		return ReturnSuccess;
+
+	case ReturnAbort:
+<span style = "background-color:#fdd">		Record_IO(&amp;trans_slots[trans_id], 0);</span>
+		return ReturnSuccess;
+
+	case ReturnTimeout:
+<span style = "background-color:#dfd">		return ReturnTimeout;</span>
+
+	case ReturnRetry:
+<span style = "background-color:#fdd">		return ReturnRetry;</span>
+
+	default:
+<span style = "background-color:#fdd">		return ReturnError;</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Issues an additional I/O request for one that partially completed.  Note
+// that currently only TCP target types will complete partial I/Os.
+//
+void Grunt::Do_Partial_IO(Transaction * transaction, int bytes_done)
+<span style = "background-color:#fdd">{</span>
+	ReturnVal result;
+
+	// Queue another request for the rest of the bytes.
+<span style = "background-color:#fdd">	transaction-&gt;size -= bytes_done;</span>
+
+#if _DETAILS
+	cout &lt;&lt; "Doing another " &lt;&lt; (transaction-&gt;is_read ? "read" : "write")
+	    &lt;&lt; " for the remaining " &lt;&lt; transaction-&gt;size &lt;&lt; " bytes." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#fdd">	if (transaction-&gt;is_read) {
+		result = targets[transaction-&gt;target_id]-&gt;Read(read_data, transaction);
+	} else {
+		result = targets[transaction-&gt;target_id]-&gt;Write((unsigned char* )write_data, transaction);</span>
+	}
+
+<span style = "background-color:#fdd">	if ((result != ReturnSuccess) &amp;&amp; (result != ReturnPending) &amp;&amp; (grunt_state == TestRecording)) {</span>
+		// The I/O was not started successfully.
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** ERROR performing read or write to " &lt;&lt; targets[transaction-&gt;target_id]-&gt;spec.name &lt;&lt; endl;</span>
+
+<span style = "background-color:#fdd">		if (transaction-&gt;is_read)
+			worker_performance.target_results.result[transaction-&gt;target_id].read_errors++;</span>
+		else
+<span style = "background-color:#fdd">			worker_performance.target_results.result[transaction-&gt;target_id].write_errors++;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Start threads to access targets.
+//
+void Grunt::Start_Test(int index)
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	pthread_t newThread;
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+	// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	char *write_ptr = NULL;
+
+	// Clear the results.
+<span style = "background-color:#dfd">	Initialize_Results();
+	critical_error = FALSE;</span>
+
+	// If no drives are selected, or the access spec is the idle spec, 
+	// do not create the thread.
+<span style = "background-color:#dfd">	if (!target_count || idle)</span>
+		return;
+
+	ramp_up_ios_pending = 0;
+
+	worker_index = index; // save off our index
+
+<span style = "background-color:#dfd">	Initialize_Transaction_Arrays();</span>
+
+	/* If we are doing pseudo random, fill the write buffer with a pseudo random pattern now as
+	   we don't want to be doing this during IO submission */
+<span style = "background-color:#dfd">	int target_id = trans_slots[available_trans_queue[available_head]].target_id;
+	if (((TargetDisk *) targets[target_id])-&gt;spec.DataPattern==DATA_PATTERN_PSEUDO_RANDOM)</span>
+	{
+<span style = "background-color:#fdd">		write_ptr = (char *)write_data;
+		while ((ULONG_PTR)write_ptr &lt; ((ULONG_PTR)write_data + data_size)) {
+			*write_ptr++ = (char)Rand(0xff);</span>
+		}
+	}
+
+	// The grunt thread will become ready after opening its targets.
+<span style = "background-color:#dfd">	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(long)&amp;not_ready, 1);</span>
+	// Tell the grunt to begin opening its devices, but not to perform I/O yet.
+	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(int) &amp; grunt_state, (int)TestOpening);
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	pthread_create(&amp;newThread, NULL, (void *(*)(void *))Grunt_Thread_Wrapper, (void *)this);
+	pthread_detach(newThread);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#dfd">	_beginthread(Grunt_Thread_Wrapper, 0, (void *)this);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">}</span>
+
+//
+// Start performing I/O.
+//
+void Grunt::Begin_IO()
+<span style = "background-color:#dfd">{
+	if (!target_count || idle)</span>
+		return;
+
+	// Wait for all threads to finish opening their devices.
+<span style = "background-color:#dfd">	while (not_ready) {</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+		pthread_yield();
+#elif defined(IOMTR_OSFAMILY_UNIX)
+#if defined(IOMTR_OS_SOLARIS)
+		thr_yield();
+#elif defined(IOMTR_OS_LINUX)
+		sleep(0);
+#elif defined(IOMTR_OS_OSX)
+		pthread_yield_np();
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">		Sleep(0);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	}
+
+<span style = "background-color:#dfd">	InterlockedExchange(IOMTR_MACRO_INTERLOCK_CAST(int) &amp; grunt_state, (int)TestRampingUp);
+}</span>
+
+//
+// Return a 64-bit random number, using the following random function and conditions.
+//
+// X(n+1)   = ( A * Xn  + B ) mod m  
+//
+// m = 2^65 (so the mod operation is not needed in this case)
+// a = 4c + 1 (c user defined)
+// b is odd
+//
+
+//
+// When we use gcc, we add "LL" to take out a warning about integer overflow.
+//
+#if defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+#define A 136204069LL		// 3x7x11x13x17x23x   29x4 + 1
+#define B 28500701229LL		// 3x7x11x13x17x23x27x29x31
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#define A 136204069		// 3x7x11x13x17x23x   29x4 + 1
+#define B 28500701229		// 3x7x11x13x17x23x27x29x31
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+void Grunt::Srand(DWORDLONG seed)
+<span style = "background-color:#dfd">{
+	holdrand = seed;
+}</span>
+
+DWORDLONG Grunt::Rand(DWORDLONG limit)
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_OSFAMILY_UNIX) &amp;&amp; defined(WORKAROUND_MOD_BUG)
+	return ((DWORDLONG)fmodl(holdrand = A * holdrand + B, limit));
+#else
+<span style = "background-color:#dfd">	return (holdrand = A * holdrand + B) % limit;</span>
+#endif
+<span style = "background-color:#dfd">}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

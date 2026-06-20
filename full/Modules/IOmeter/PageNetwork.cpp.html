@@ -1,0 +1,1470 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>PageNetwork.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Iometer / PageNetwork.cpp                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CPageNetwork class, which is    ## */
+/* ##               responsible for the "Network Targets" tab in          ## */
+/* ##               Iometer's main window.                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - changes so VC++ 7 (.NET) will compile correctly.    ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - added new header info.                              ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "PageNetwork.h"
+#include "GalileoView.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CPageNetwork property page
+
+<span style = "background-color:#dfd">IMPLEMENT_DYNCREATE(CPageNetwork, CPropertyPage)</span>
+
+<span style = "background-color:#dfd">CPageNetwork::CPageNetwork():CPropertyPage(CPageNetwork::IDD)
+{</span>
+	//{{AFX_DATA_INIT(CPageNetwork)
+	// NOTE: the ClassWizard will add member initialization here
+	//}}AFX_DATA_INIT
+<span style = "background-color:#dfd">}</span>
+
+CPageNetwork::~CPageNetwork()
+<span style = "background-color:#dfd">{
+}</span>
+
+void CPageNetwork::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CPropertyPage::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CPageNetwork)
+<span style = "background-color:#dfd">	DDX_Control(pDX, EMaxSends, m_EMaxSends);
+	DDX_Control(pDX, CConnectionRate, m_CConnectionRate);
+	DDX_Control(pDX, DInterface, m_DInterface);
+	DDX_Control(pDX, EConnectionRate, m_EConnectionRate);
+	DDX_Control(pDX, SConnectionRate, m_SConnectionRate);
+	DDX_Control(pDX, TTargets, m_TTargets);</span>
+	//}}AFX_DATA_MAP
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CPageNetwork, CPropertyPage)</span>
+    //{{AFX_MSG_MAP(CPageNetwork)
+    ON_NOTIFY(NM_CLICK, TTargets, OnClickTTargets)
+    ON_BN_CLICKED(CConnectionRate, OnCConnectionRate)
+    ON_NOTIFY(UDN_DELTAPOS, SConnectionRate, OnDeltaposSConnectionRate)
+    ON_EN_SETFOCUS(EConnectionRate, OnSetfocusEConnectionRate)
+    ON_NOTIFY(TVN_SELCHANGING, TTargets, OnSelchangingTTargets)
+    ON_CBN_SELCHANGE(DInterface, OnSelchangeDInterface)
+    ON_EN_KILLFOCUS(EConnectionRate, OnKillfocusEConnectionRate)
+    ON_NOTIFY(TVN_KEYDOWN, TTargets, OnKeydownTTargets)
+    ON_NOTIFY(NM_DBLCLK, TTargets, OnDblclkTTargets)
+    ON_NOTIFY(NM_SETFOCUS, TTargets, OnSetfocusTTargets)
+    ON_EN_KILLFOCUS(EMaxSends, OnKillfocusEMaxSends)
+ON_EN_SETFOCUS(EMaxSends, OnSetfocusEMaxSends)
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+/////////////////////////////////////////////////////////////////////////////
+// CPageNetwork message handlers
+BOOL CPageNetwork::OnInitDialog()
+<span style = "background-color:#dfd">{
+	CPropertyPage::OnInitDialog();</span>
+
+	// Associate the image list with the TTargets tree control
+<span style = "background-color:#dfd">	m_ImageList.Create(IDB_TARGET_ICONS, TARGET_ICON_SIZE, TARGET_ICON_EXPAND, TARGET_ICON_BGCOLOR);
+	m_TTargets.SetImageList(&amp;m_ImageList, TVSIL_NORMAL);
+	m_TTargets.SetImageList(&amp;m_ImageList, TVSIL_STATE);	// Use the same image list for state images</span>
+
+	// Set the spin control to translate an up click into a positive movement.
+<span style = "background-color:#dfd">	m_SConnectionRate.SetRange(0, UD_MAXVAL);</span>
+
+<span style = "background-color:#dfd">	Reset();</span>
+	return TRUE;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Grays out the check boxes in the target list, clears the interface
+// selection, sets the conneciton rate check box to it's 3rd state,
+// and hides the content of the connection rate edit box.
+//
+void CPageNetwork::Reset()
+<span style = "background-color:#dfd">{</span>
+	// Clear the target list.
+<span style = "background-color:#dfd">	m_TTargets.DeleteAllItems();</span>
+
+	// Clear the interface selection.
+<span style = "background-color:#dfd">	ShowInterface();</span>
+
+	// Set the connection rate check box to it's ambiguous state.
+<span style = "background-color:#dfd">	ShowConnectionRate();
+	ShowSettings();</span>
+
+<span style = "background-color:#dfd">	selected = NULL;</span>
+	highlighted = NULL;
+
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+//
+// Enable or disable the tab's windows, if apropriate.
+//
+void CPageNetwork::EnableWindow(BOOL enable)
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+	int selected_type;
+	CWnd *last_focused;
+	BOOL enable_max_sends = false;
+
+	// Only enable thingies if a test is not running.
+<span style = "background-color:#dfd">	if (theApp.test_state != TestIdle)</span>
+		return;
+
+<span style = "background-color:#dfd">	selected_type = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType();
+	switch (selected_type) {</span>
+	case WORKER:
+		// Get the current worker selection.
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+<span style = "background-color:#dfd">		enable = enable &amp;&amp; IsType(worker-&gt;Type(), GenericServerType);</span>
+<span style = "background-color:#fdd">		enable_max_sends = enable &amp;&amp; IsType(worker-&gt;Type(), VIServerType);</span>
+
+		// If the selected worker is a disk worker,
+		// switch to the disk targets page.
+<span style = "background-color:#dfd">		if (IsType(worker-&gt;Type(), GenericDiskType) &amp;&amp;</span>
+		    theApp.pView-&gt;m_pPropSheet-&gt;GetActiveIndex() == NETWORK_PAGE) {
+<span style = "background-color:#fdd">			last_focused = GetFocus();
+			theApp.pView-&gt;m_pPropSheet-&gt;SetActivePage(DISK_PAGE);
+			if (last_focused)
+				last_focused-&gt;SetFocus();</span>
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case MANAGER:
+		// Get the current manager selection.
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();</span>
+
+<span style = "background-color:#dfd">		enable = enable &amp;&amp; manager-&gt;WorkerCount(GenericServerType);
+		enable_max_sends = enable &amp;&amp; manager-&gt;WorkerCount(VIServerType);</span>
+
+		// If the selected manager has no network servers but has disk workers,
+		// switch to the disk targets page.
+		if (!manager-&gt;WorkerCount(GenericServerType) &amp;&amp;
+<span style = "background-color:#dfd">		    manager-&gt;WorkerCount(GenericDiskType) &amp;&amp;</span>
+		    theApp.pView-&gt;m_pPropSheet-&gt;GetActiveIndex() == NETWORK_PAGE) {
+<span style = "background-color:#fdd">			enable = FALSE;
+			last_focused = GetFocus();
+			theApp.pView-&gt;m_pPropSheet-&gt;SetActivePage(DISK_PAGE);
+			if (last_focused)
+				last_focused-&gt;SetFocus();</span>
+		}
+		break;
+	case ALL_MANAGERS:
+		// Only enable the connection rate controls if there exists a
+		// server worker.
+<span style = "background-color:#dfd">		enable = enable &amp;&amp; theApp.manager_list.WorkerCount(GenericServerType);
+		enable_max_sends = enable &amp;&amp; (theApp.manager_list.WorkerCount(VIServerType));</span>
+	}
+
+	// Do not enable the target list for all managers.
+<span style = "background-color:#dfd">	m_TTargets.EnableWindow(enable &amp;&amp; selected_type != ALL_MANAGERS);
+	m_DInterface.EnableWindow(enable &amp;&amp; selected_type != ALL_MANAGERS);</span>
+
+<span style = "background-color:#dfd">	m_EMaxSends.EnableWindow(enable_max_sends);</span>
+
+	// Enable the connection rate check box.
+<span style = "background-color:#dfd">	m_CConnectionRate.EnableWindow(enable);</span>
+
+	// Enable the connection rate edit box and spin control if the connection 
+	// rate check box is checked.
+<span style = "background-color:#dfd">	m_EConnectionRate.EnableWindow(enable &amp;&amp; m_CConnectionRate.GetCheck() == 1);
+	m_SConnectionRate.EnableWindow(enable &amp;&amp; m_CConnectionRate.GetCheck() == 1);</span>
+
+	// The spin button sometimes needs to be redrawn even if it didn't change
+	// when the edit box was partially redrawn.
+<span style = "background-color:#dfd">	m_SConnectionRate.Invalidate(TRUE);</span>
+
+	// Redraw the page.  Note that all the child windows will be redrawn too.
+	// Also note that only windows that have already been invalidated will get
+	// redrawn, avoiding much flicker.
+<span style = "background-color:#dfd">	RedrawWindow(NULL, NULL, RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_ERASE);
+}</span>
+
+//
+// Adds a manager and it's interfaces to the tree view.
+//
+void CPageNetwork::AddManager(Manager * manager)
+<span style = "background-color:#dfd">{</span>
+	TV_INSERTSTRUCT tvstruct;
+	HTREEITEM hmgr, hifc;
+	Manager *sel_mgr;
+	int n;
+
+	// Do not add the manager if it doesn't have any interfaces that are
+	// accessible from the selected manager.
+<span style = "background-color:#dfd">	if (!(sel_mgr = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager()))</span>
+		return;
+
+	// First see if it has any interfaces, if not, don't add it.
+	if ((!sel_mgr-&gt;InterfaceCount(GenericNetType)) ||
+	    // Next see if the selected manager only has TCP interfaces, but the
+	    // manager to add has none.
+	    ((sel_mgr-&gt;InterfaceCount(GenericTCPType) ==
+<span style = "background-color:#dfd">	      sel_mgr-&gt;InterfaceCount(GenericNetType)) &amp;&amp; !manager-&gt;InterfaceCount(GenericTCPType)) ||</span>
+	    // Next see if the selected manager only has VI interfaces, but the
+	    // manager to add has none.
+	    ((sel_mgr-&gt;InterfaceCount(GenericVIType) ==
+	      sel_mgr-&gt;InterfaceCount(GenericNetType)) &amp;&amp; !manager-&gt;InterfaceCount(GenericVIType))) {
+		return;
+	}
+	// At least one of the manager's interfaces are accessible.
+
+	// Set the flags to indicate that the image, selected image, text and 
+	// parameter are to be set.
+	tvstruct.item.mask = TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_TEXT | TVIF_PARAM;
+	// Position the manager in the tree.
+<span style = "background-color:#dfd">	tvstruct.hParent = TVI_ROOT;</span>
+	tvstruct.hInsertAfter = TVI_SORT;
+	// Set the item's text to the manager's name.
+<span style = "background-color:#dfd">	tvstruct.item.pszText = manager-&gt;name;</span>
+	// Set the icon associated with the manager.
+<span style = "background-color:#dfd">	tvstruct.item.iImage = TARGET_ICON_MANAGER;
+	tvstruct.item.iSelectedImage = TARGET_ICON_MANAGER;</span>
+	// Set the item data associated with the manager (pointer to Manager object).
+<span style = "background-color:#dfd">	tvstruct.item.lParam = (LPARAM) manager;</span>
+	// note: manager has no state (check box) icon!
+
+	// Insert the manager into the tree control.
+<span style = "background-color:#dfd">	hmgr = m_TTargets.InsertItem(&amp;tvstruct);
+	if (hmgr == NULL) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("InsertItem() for target manager failed in CPageNetwork::AddManager()");
+		return;</span>
+	}
+	// Set the interface item properties here.  The only property that changes
+	// is the name.
+	// Set the mask to indicate that the image, selected image, text, and state
+	// are valid and should be set.
+	tvstruct.item.mask = TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_TEXT | TVIF_STATE;
+	// Set the state mask to indicate that the state parameter refers to the
+	// index of the state image in the state image list.
+	tvstruct.item.stateMask = TVIS_STATEIMAGEMASK;
+	// Set the parent of this item to be the manager item we just inserted.
+	tvstruct.hParent = hmgr;
+	// Insert the interface after all its siblings.
+	tvstruct.hInsertAfter = TVI_LAST;
+	// Set the normal and selected icons associated with the interface.
+	tvstruct.item.iImage = TARGET_ICON_NETWORK;
+	tvstruct.item.iSelectedImage = TARGET_ICON_NETWORK;
+
+	// Set the interface's state (check box) depending on whether the
+	// existing interfaces are grayed (it should also be grayed) or
+	// either checked or cleared (it should be cleared).  Default to cleared
+	// if this is the first manager.  This needs to be done in case a manager
+	// logs in while we are already displaying a selection.
+	tvstruct.item.state = INDEXTOSTATEIMAGEMASK(TARGET_STATE_UNCHECKED);
+
+	// insert the manager's network interfaces as its children in the tree
+<span style = "background-color:#dfd">	for (n = 0; n &lt; manager-&gt;InterfaceCount(GenericNetType); n++) {</span>
+		// Only add interfaces that are accessible.
+<span style = "background-color:#dfd">		if (!sel_mgr-&gt;InterfaceCount(manager-&gt;GetInterface(n, GenericNetType)-&gt;type)) {</span>
+			continue;
+		}
+		// name the interface
+<span style = "background-color:#dfd">		tvstruct.item.pszText = manager-&gt;GetInterface(n, GenericNetType)-&gt;name;</span>
+
+		// insert the interface into the tree control
+<span style = "background-color:#dfd">		hifc = m_TTargets.InsertItem(&amp;tvstruct);
+		if (hifc == NULL) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("InsertItem() for interface failed in CPageNetwork::AddManager()");
+			return;</span>
+		}
+	}
+
+	// make the manager's child icons visible
+<span style = "background-color:#dfd">	if (n &amp;&amp; !m_TTargets.Expand(tvstruct.hParent, TVE_EXPAND)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Expand() for target manager failed in CPageNetwork::AddManager()");</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Takes a given manager and its interfaces out of the tree.
+//
+void CPageNetwork::RemoveManager(Manager * manager)
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hmgr;
+
+	// Walk the tree until we find the given manager.
+<span style = "background-color:#fdd">	for (hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {
+		if (m_TTargets.GetItemData(hmgr) == (DWORD_PTR) manager) {
+			m_TTargets.DeleteItem(hmgr);</span>
+			break;
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Fill in the target list.
+//
+void CPageNetwork::ShowTargets()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	int mgr_no = 0;
+
+<span style = "background-color:#dfd">	m_TTargets.DeleteAllItems();</span>
+
+	// Determine what interfaces are visible to the selected item.
+<span style = "background-color:#dfd">	if (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType() == ALL_MANAGERS)</span>
+		return;
+
+	// Loop through the managers and add them to the tree view.
+<span style = "background-color:#dfd">	while (manager = theApp.manager_list.GetManager(mgr_no++)) {</span>
+		// Add all accessible interfaces to the target list.
+<span style = "background-color:#dfd">		AddManager(manager);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+void CPageNetwork::ShowTargetSelection()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager, *partner_manager;
+	Worker *worker, *partner_worker;
+<span style = "background-color:#fdd">	char *remote_address = NULL;</span>
+	HTREEITEM hmgr;
+	HTREEITEM hifc;
+	int i, expected_worker;
+	TargetSelType state;
+
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#fdd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+		// Get the interface to check.
+<span style = "background-color:#fdd">		if (IsType(worker-&gt;Type(), GenericServerType)) {
+			if (!worker-&gt;net_partner) {</span>
+				partner_manager = NULL;
+<span style = "background-color:#fdd">			} else {
+				partner_manager = worker-&gt;net_partner-&gt;manager;
+				if (IsType(worker-&gt;GetTarget(0)-&gt;spec.type, TCPClientType))
+					remote_address = worker-&gt;GetTarget(0)-&gt;spec.tcp_info.remote_address;
+				else if (IsType(worker-&gt;GetTarget(0)-&gt;spec.type, VIClientType))
+					remote_address = worker-&gt;GetTarget(0)-&gt;spec.vi_info.remote_nic_name;</span>
+				else {
+<span style = "background-color:#fdd">					ErrorMessage("Invalid client target type in CPageNetwork::"</span>
+						     "ShowTargetSelection().");
+					return;
+				}
+<span style = "background-color:#fdd">			}
+		} else if (IsType(worker-&gt;Type(), GenericClientType)) {
+			partner_manager = worker-&gt;net_partner-&gt;manager;
+			remote_address = worker-&gt;net_partner-&gt;spec.name;</span>
+		} else {
+			return;
+		}
+
+		// Walk the target tree to find the correct partner manager.
+<span style = "background-color:#fdd">		for (hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {
+			if (m_TTargets.GetItemData(hmgr) == (DWORD_PTR) partner_manager) {</span>
+				// Check the appropriate interface on the partner manager.
+				CheckInterface(hmgr, remote_address);
+			} else {
+				// Clear all check marks for this manager's interfaces.
+				CheckInterface(hmgr, NULL);
+			}
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case MANAGER:
+		// Get the selected manager.
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		expected_worker = 0;</span>
+
+		// Loop through all the target tree items.
+<span style = "background-color:#dfd">		for (hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {</span>
+			// Get the possible partner manager from the tree.
+<span style = "background-color:#dfd">			partner_manager = (Manager *) m_TTargets.GetItemData(hmgr);</span>
+
+			// Loop through that manager item's interfaces.
+<span style = "background-color:#dfd">			for (hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {</span>
+				// Initialize the state.  It may or may not be changed, 
+				// depending on whether we find it selected by a worker.
+<span style = "background-color:#dfd">				state = TargetUnChecked;</span>
+
+				// Check the interface for selection by any of the manager's
+				// workers
+<span style = "background-color:#dfd">				for (i = 0; i &lt; manager-&gt;WorkerCount(GenericServerType); i++) {</span>
+					// Get the net partner of the expected worker.
+<span style = "background-color:#dfd">					partner_worker = manager-&gt;GetWorker(i, GenericServerType)-&gt;net_partner;</span>
+
+					// If the partner worker exists and it's manager is the
+					// same as the manager in the target tree that we are
+					// currently looking at and..
+<span style = "background-color:#dfd">					if (partner_worker &amp;&amp; partner_worker-&gt;manager == partner_manager) {</span>
+						// if the net addresses match but..
+<span style = "background-color:#dfd">						if (m_TTargets.GetItemText(hifc) ==</span>
+						    partner_worker-&gt;GetLocalNetworkInterface()) {
+							// the worker is not the expected worker..
+<span style = "background-color:#fdd">							if (i != expected_worker || state != TargetUnChecked) {</span>
+								// gray the selection
+<span style = "background-color:#fdd">								SetAllCheck(TargetGrayed);</span>
+								return;
+							}
+<span style = "background-color:#fdd">							state = TargetChecked;
+							expected_worker++;</span>
+						}
+					}
+				}
+<span style = "background-color:#dfd">				SetSelectionCheck(hifc, state);</span>
+			}
+		}
+		break;
+	default:
+		SetAllCheck(TargetGrayed);
+		break;
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Used to select one or more targets.  May or may not clear any previous
+// selection depending on the replace parameter.
+//
+void CPageNetwork::SelectRange(HTREEITEM hstart, HTREEITEM hend, BOOL replace, TargetSelType state)
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hmgr, hifc;
+	BOOL in_range;
+
+<span style = "background-color:#fdd">	if (!hstart || !hend) {
+		ErrorMessage("Unexpectedly found start or end point of selection"</span>
+			     " range equal NULL in CPageNetwork::SelectRange().");
+		return;
+	}
+	// Clear all the check boxes if forced to or if a multiple selection occurs.
+<span style = "background-color:#fdd">	if (replace)
+		SetAllCheck(TargetUnChecked);</span>
+
+	// The last selection is the start point.
+<span style = "background-color:#fdd">	selected = hstart;
+	highlighted = hend;</span>
+
+	// Note that if both endpoints are the same, other selections will be 
+	// unchecked depending on the value of the 'replace' variable.
+<span style = "background-color:#fdd">	if (hstart == hend) {
+		SetSelectionCheck(hstart, state);</span>
+		return;
+	}
+	// Since we don't know the relationship between the clicked item
+	// and the last selection (up or down), we do not know what
+	// direction to select targets in.  Do a linear seach of the target tree
+	// until we find either the start or end point.  From there, mark
+	// all the targets the specified selection type until we reach the end or
+	// start (whichever we didn't get before).
+<span style = "background-color:#fdd">	in_range = FALSE;
+	for (hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {
+		for (hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {</span>
+			// Do we have either the previously selected item or the
+			// clicked item?                        
+<span style = "background-color:#fdd">			if (hifc == hstart || hifc == hend)
+				in_range = !in_range;</span>
+
+			// If we are between the start and end point, set the state.
+<span style = "background-color:#fdd">			if (in_range || hifc == hstart || hifc == hend)
+				SetSelectionCheck(hifc, state);</span>
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Sets the specified tree item's check box to the specified state.
+//
+void CPageNetwork::SetSelectionCheck(HTREEITEM hitem, TargetSelType selection)
+<span style = "background-color:#dfd">{</span>
+	// set the interface icon's associated state icon
+<span style = "background-color:#dfd">	if (!m_TTargets.SetItemState(hitem, INDEXTOSTATEIMAGEMASK(selection), TVIS_STATEIMAGEMASK)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("SetItemState() failed in CPageNetwork::" "SetSelectionCheck()");</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Retrieves the target's check box state.
+//
+TargetSelType CPageNetwork::GetSelectionCheck(HTREEITEM hitem)
+<span style = "background-color:#fdd">{
+	return (TargetSelType) STATEIMAGEMASKTOINDEX(m_TTargets.GetItemState(hitem, TVIS_STATEIMAGEMASK));
+}</span>
+
+//
+// Uniquely selects an interface given a manager and a string representing
+// the desired interface.  
+//
+void CPageNetwork::CheckInterface(HTREEITEM hmgr, char *net_address)
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hifc;
+
+<span style = "background-color:#fdd">	if (!hmgr) {
+		ErrorMessage("invalid tree item in CPageNetwork::CheckInterface()");</span>
+		return;
+	}
+	// walk through its list of interfaces
+<span style = "background-color:#fdd">	for (hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {</span>
+		// check to see if the current interface should have a check mark
+<span style = "background-color:#fdd">		if (net_address &amp;&amp; !strcmp(m_TTargets.GetItemText(hifc), net_address)) {</span>
+			// found it!  set its check mark
+			SetSelectionCheck(hifc, TargetChecked);
+		} else {
+			// not the one.  clear its check mark
+			SetSelectionCheck(hifc, TargetUnChecked);
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Sets all the interface's check box to the specified state.
+//
+void CPageNetwork::SetAllCheck(TargetSelType selection)
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hmgr;
+	HTREEITEM hifc;
+
+	// Get the first manager item of the target tree
+<span style = "background-color:#fdd">	for (hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {</span>
+		// walk through its list of interfaces
+<span style = "background-color:#fdd">		for (hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {
+			SetSelectionCheck(hifc, selection);</span>
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Fills in the list of interfaces and displays a selection
+// if all children workers have the same interface.
+//
+void CPageNetwork::ShowInterface()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+<span style = "background-color:#dfd">	m_DInterface.ResetContent();</span>
+
+	// Check that either a manager or a worker is selected.
+<span style = "background-color:#dfd">	if (!(manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager())) {</span>
+		return;
+	}
+	// Put the manager's network interfaces into the DInterface combo box
+<span style = "background-color:#dfd">	for (int i = 0; i &lt; manager-&gt;InterfaceCount(GenericNetType); i++) {
+		if (m_DInterface.AddString(manager-&gt;GetInterface(i, GenericNetType)-&gt;name) != i) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("AddString() for interface failed in CPageNetwork::SetTargetSelection()");</span>
+			return;
+		}
+	}
+
+	// Select (in the combo box) the worker's or manager's selected interface.
+<span style = "background-color:#dfd">	if (worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker()) {</span>
+		// select the current interface (if any) in the combo box
+<span style = "background-color:#dfd">		m_DInterface.SelectString(-1, worker-&gt;GetLocalNetworkInterface());
+	} else {</span>
+		// select the current interface (if any) in the combo box
+<span style = "background-color:#dfd">		m_DInterface.SelectString(-1, manager-&gt;GetLocalNetworkInterface());</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Displays the connection rate settings for the current selection in the
+// worker view.  If the selection is a manager or all managers, displays
+// a value if all the children's values are the same.
+//
+void CPageNetwork::ShowConnectionRate()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+<span style = "background-color:#dfd">	int trans_per_conn = 0;
+	int test_connection_rate = 0;</span>
+
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+		// update controls with worker's data
+<span style = "background-color:#dfd">		if (IsType(worker-&gt;Type(), GenericNetType)) {</span>
+<span style = "background-color:#fdd">			trans_per_conn = worker-&gt;GetTransPerConn(GenericNetType);
+			test_connection_rate = worker-&gt;GetConnectionRate(GenericNetType);</span>
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case MANAGER:
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		trans_per_conn = manager-&gt;GetTransPerConn(GenericServerType);
+		test_connection_rate = manager-&gt;GetConnectionRate(GenericServerType);</span>
+		break;
+	default:
+<span style = "background-color:#dfd">		trans_per_conn = theApp.manager_list.GetTransPerConn(GenericServerType);
+		test_connection_rate = theApp.manager_list.GetConnectionRate(GenericServerType);</span>
+		break;
+	}
+	// If the test connection rate settings are different between a manager's
+	// workers, set the state of the check box to AUTO3STATE and disable the
+	// edit box and spin control.
+<span style = "background-color:#dfd">	SetDlgItemInt(EConnectionRate, trans_per_conn);
+	if (test_connection_rate == AMBIGUOUS_VALUE) {
+		m_CConnectionRate.SetButtonStyle(BS_AUTO3STATE);
+		m_EConnectionRate.SetPasswordChar(32);
+		m_EConnectionRate.Invalidate(TRUE);</span>
+
+		// Set check box to undetermined state.
+<span style = "background-color:#dfd">		CheckDlgButton(CConnectionRate, 2);</span>
+	} else {
+<span style = "background-color:#dfd">		m_CConnectionRate.SetButtonStyle(BS_AUTOCHECKBOX);
+		CheckDlgButton(CConnectionRate, test_connection_rate);</span>
+
+<span style = "background-color:#dfd">		if (test_connection_rate == ENABLED_VALUE &amp;&amp; trans_per_conn != AMBIGUOUS_VALUE) {</span>
+<span style = "background-color:#fdd">			m_EConnectionRate.SetPasswordChar(0);</span>
+		} else {
+<span style = "background-color:#dfd">			m_EConnectionRate.SetPasswordChar(32);
+			m_EConnectionRate.Invalidate();</span>
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Sets the focus to the list item specified by cursor movement or mouse event.
+//
+void CPageNetwork::ShowFocus()
+<span style = "background-color:#dfd">{
+	for (HTREEITEM hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {
+		for (HTREEITEM hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {</span>
+			if (hifc == highlighted) {
+				m_TTargets.SetItemState(hifc, TVIS_SELECTED, TVIS_SELECTED);
+			} else {
+				m_TTargets.SetItemState(hifc, NULL, TVIS_SELECTED);
+			}
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Displays the values from memory in the GUI.
+//
+void CPageNetwork::ShowData()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// Only enable the display if a network worker or a manager with a 
+	// network worker is selected.
+<span style = "background-color:#dfd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+	if ((theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType() == ALL_MANAGERS) ||
+<span style = "background-color:#dfd">	    (manager &amp;&amp; !manager-&gt;InterfaceCount(GenericNetType)) ||</span>
+	    (worker &amp;&amp; !IsType(worker-&gt;Type(), GenericNetType))) {
+<span style = "background-color:#dfd">		Reset();</span>
+		return;
+	}
+	// This is a new view of the target assignment.  
+	// It has not been modified.
+<span style = "background-color:#dfd">	selected = NULL;</span>
+	highlighted = NULL;
+	// Show the target list.
+<span style = "background-color:#dfd">	ShowTargets();</span>
+	// Set the target selection check boxes.
+<span style = "background-color:#dfd">	ShowTargetSelection();</span>
+	// Bold the last selected item.
+<span style = "background-color:#dfd">	ShowFocus();</span>
+	// Show the connection rate settings.
+<span style = "background-color:#dfd">	ShowConnectionRate();</span>
+	// Show the selected interface.
+<span style = "background-color:#dfd">	ShowInterface();
+	ShowSettings();</span>
+	// Enable the apropriate windows and redraw the page.
+
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+//
+// Process mouse click in the target list.  For a worker, assign the selected
+// target.  For a manager, distribute the assigned targets among its net servers.
+//
+void CPageNetwork::OnClickTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	CPoint point;</span>
+	TV_HITTESTINFO test_info;
+	TargetSelType state;
+
+	// Get the cursor position.
+<span style = "background-color:#fdd">	GetCursorPos(&amp;point);
+	test_info.pt = point;
+	m_TTargets.ScreenToClient(&amp;(test_info.pt));</span>
+
+	// Check to see whether the cursor is on an item.
+<span style = "background-color:#fdd">	m_TTargets.HitTest(&amp;test_info);</span>
+
+	// Check that we have an interface item.
+<span style = "background-color:#fdd">	if (!test_info.hItem || !m_TTargets.GetParentItem(test_info.hItem))</span>
+		return;
+
+	// A new target assignment is being made.  Clear the results since they are
+	// for a configuration we no longer have.
+<span style = "background-color:#fdd">	theApp.pView-&gt;ResetDisplayforNewTest();</span>
+
+	// Toggle the selection if the control key is pressed.
+<span style = "background-color:#fdd">	if (GetKeyState(VK_CONTROL) &amp; 0x8000 &amp;&amp; GetSelectionCheck(test_info.hItem) == TargetChecked) {
+		state = TargetUnChecked;</span>
+	} else {
+<span style = "background-color:#fdd">		state = TargetChecked;</span>
+	}
+
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+		// All clicks work the same for the worker.
+		SelectRange(test_info.hItem, test_info.hItem, TRUE, state);
+		break;
+	case MANAGER:
+		// A shift click extends the selection from the last selected item
+		// to the currently focused item.  When the control key is also
+		// pressed, any previous selection is not cleared.
+<span style = "background-color:#fdd">		if ((GetKeyState(VK_SHIFT) &amp; 0x8000) &amp;&amp; selected) {</span>
+			// We have a previous item (not the first click) and the shift
+			// key is down.
+<span style = "background-color:#fdd">			SelectRange(selected, test_info.hItem, !(GetKeyState(VK_CONTROL) &amp; 0x8000));
+		} else if (GetKeyState(VK_CONTROL) &amp; 0x8000) {</span>
+			// The control key is down.
+<span style = "background-color:#fdd">			SelectRange(test_info.hItem, test_info.hItem, FALSE, state);
+		} else {</span>
+			SelectRange(test_info.hItem, test_info.hItem, TRUE, state);
+		}
+		break;
+	default:
+<span style = "background-color:#fdd">		ErrorMessage("Unexpected selection type in CPageNetwork::" "OnClickTTargets().");</span>
+		return;
+	}
+
+	// immediately refresh the display (create/delete NetClients as needed)
+<span style = "background-color:#fdd">	StoreTargetSelection();
+	ShowSettings();
+	EnableWindow();</span>
+
+<span style = "background-color:#fdd">	*pResult = 0;
+}</span>
+
+void CPageNetwork::StoreTargetSelection()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hmgr, hifc;
+	Manager *manager;
+	Worker *worker;
+	Target_Spec new_target;
+	int local_interface_no;
+	int interface_no;
+<span style = "background-color:#fdd">	int target_count = 0;</span>
+	int expected_worker = 0;
+
+	// Make sure we have a selected manager (or worker).
+<span style = "background-color:#fdd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	if (!manager) {
+		ErrorMessage("Unexpectedly found no selected manager in " "CPageNetwork::StoreTargetSelection.");
+		return;</span>
+	}
+	// Count the number of assigned targets.
+<span style = "background-color:#fdd">	for (hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {
+		for (hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {
+			if (GetSelectionCheck(hifc) == TargetChecked)</span>
+				target_count++;
+		}
+	}
+
+	// Make sure we are not assigning more targets than we have workers.
+<span style = "background-color:#fdd">	if (target_count &gt; manager-&gt;WorkerCount(GenericServerType)) {
+		ErrorMessage("You do not have enough network workers to assign all " "the selected targets.");</span>
+		// Restore the last selection.
+<span style = "background-color:#fdd">		ShowTargetSelection();</span>
+		// Set the focus to the target list.
+<span style = "background-color:#fdd">		::SetFocus(m_TTargets);
+		return;</span>
+	}
+	// The selection will succeed.  Remove current network clients.
+<span style = "background-color:#fdd">	if (worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker())
+		worker-&gt;RemoveTargets(GenericNetType);</span>
+	else
+<span style = "background-color:#fdd">		manager-&gt;RemoveTargets(GenericNetType);</span>
+
+	// Get the assigned local interface to use for the connection.
+<span style = "background-color:#fdd">	local_interface_no = m_DInterface.GetCurSel();</span>
+
+	// Assign the targets.
+	// Loop through all managers.
+<span style = "background-color:#fdd">	for (hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {</span>
+		// Loop through all interfaces of a manager.
+<span style = "background-color:#fdd">		interface_no = 0;
+		for (hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {
+			if (GetSelectionCheck(hifc) == TargetChecked) {</span>
+				// Are we dealing with a worker or a manager?
+<span style = "background-color:#fdd">				if (!worker) {</span>
+					// A manager is selected.  Get the next available 
+					// network server worker.
+<span style = "background-color:#fdd">					worker = manager-&gt;GetWorker(expected_worker++, GenericServerType);</span>
+
+				}
+				// Get the interface of the selected target from the manager
+				// whose interface is selected.
+<span style = "background-color:#fdd">				memcpy(&amp;new_target,</span>
+				       ((Manager *) m_TTargets.GetItemData(hmgr))-&gt;GetInterface(interface_no,
+												GenericNetType),
+				       sizeof(Target_Spec));
+
+				// Set the local and remote addresses of the connection.
+				// The remote address used by the server is stored as the local
+				// address for some manager's interface.
+<span style = "background-color:#fdd">				if (IsType(new_target.type, TCPClientType)) {
+					strcpy(new_target.tcp_info.remote_address, new_target.name);</span>
+
+					// Verify that the locally assigned interface matches the
+					// selected target's interface.
+<span style = "background-color:#fdd">					if (local_interface_no &gt;= manager-&gt;InterfaceCount(GenericTCPType)) {</span>
+						// Use the first TCP interface.
+						local_interface_no = 0;
+<span style = "background-color:#fdd">						m_DInterface.SetCurSel(local_interface_no);
+					}
+				} else if (IsType(new_target.type, VIClientType)) {
+					strcpy(new_target.vi_info.remote_nic_name, new_target.name);
+					memcpy(&amp;new_target.vi_info.remote_address,</span>
+					       &amp;new_target.vi_info.local_address, VI_ADDRESS_SIZE);
+
+					// Verify that the locally assigned interface matches the
+					// selected target's interface.
+<span style = "background-color:#fdd">					if (local_interface_no &lt;= manager-&gt;InterfaceCount(GenericTCPType)) {</span>
+						// Use the first VI interface.
+<span style = "background-color:#fdd">						local_interface_no = manager-&gt;InterfaceCount(GenericTCPType);
+						m_DInterface.SetCurSel(local_interface_no);</span>
+					}
+<span style = "background-color:#fdd">				} else {
+					ErrorMessage("Invalid target type for new target in "</span>
+						     "CPageNetwork::StoreTargetSelection().");
+				}
+<span style = "background-color:#fdd">				worker-&gt;AddTarget(&amp;new_target);</span>
+
+				// Record information about what local interface the server
+				// should use.
+<span style = "background-color:#fdd">				worker-&gt;SetLocalNetworkInterface(local_interface_no);</span>
+
+				// Create the corresponding network client.
+<span style = "background-color:#fdd">				worker-&gt;CreateNetClient((Manager *)</span>
+							m_TTargets.GetItemData(hmgr), new_target.type);
+
+				// Clear the worker pointer so that the next iteration
+				// through the loop (for a manager with multiple selected
+				// interfaces) will get the next available network server.
+<span style = "background-color:#fdd">				worker = NULL;</span>
+			}
+<span style = "background-color:#fdd">			interface_no++;</span>
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+void CPageNetwork::OnCConnectionRate()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// change the check box to true/false only (having clicked, cannot 
+	// return to intermediate state)
+<span style = "background-color:#fdd">	m_CConnectionRate.SetButtonStyle(BS_AUTOCHECKBOX);
+	if (IsDlgButtonChecked(CConnectionRate) == 1) {
+		m_EConnectionRate.SetPasswordChar(0);
+		if (GetDlgItemInt(EConnectionRate) == AMBIGUOUS_VALUE)
+			SetDlgItemInt(EConnectionRate, 0);
+	} else {
+		m_EConnectionRate.SetPasswordChar(32);</span>
+	}
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#fdd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		worker-&gt;SetConnectionRate(m_CConnectionRate.GetCheck());
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#fdd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		manager-&gt;SetConnectionRate(m_CConnectionRate.GetCheck(), GenericServerType);
+		break;</span>
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		theApp.manager_list.SetConnectionRate(m_CConnectionRate.GetCheck(), GenericServerType);</span>
+		break;
+	}
+<span style = "background-color:#fdd">	EnableWindow();
+}</span>
+
+void CPageNetwork::OnDeltaposSConnectionRate(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	int trans_per_conn = GetDlgItemInt(EConnectionRate);</span>
+	NM_UPDOWN *pNMUpDown = (NM_UPDOWN *) pNMHDR;
+
+<span style = "background-color:#fdd">	trans_per_conn += pNMUpDown-&gt;iDelta;
+	if (trans_per_conn &lt; 0) {</span>
+		trans_per_conn = 0;
+	} else {
+<span style = "background-color:#fdd">		SetDlgItemInt(EConnectionRate, trans_per_conn);</span>
+	}
+	*pResult = 0;
+<span style = "background-color:#fdd">}</span>
+
+void CPageNetwork::EditSetfocus(CEdit * edit)
+<span style = "background-color:#fdd">{
+	if (!edit-&gt;GetPasswordChar())</span>
+		return;
+
+	// Select everything in the edit box.
+<span style = "background-color:#fdd">	edit-&gt;SetSel(0, -1);</span>
+	// Clear selection.
+<span style = "background-color:#fdd">	edit-&gt;Clear();</span>
+	// Make the characters visible.
+<span style = "background-color:#fdd">	edit-&gt;SetPasswordChar(0);
+}</span>
+
+void CPageNetwork::OnSetfocusEConnectionRate()
+<span style = "background-color:#fdd">{
+	EditSetfocus(&amp;m_EConnectionRate);</span>
+}
+
+void CPageNetwork::OnSetfocusEMaxSends()
+<span style = "background-color:#fdd">{
+	EditSetfocus(&amp;m_EMaxSends);</span>
+}
+
+void CPageNetwork::OnSelchangingTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{</span>
+	NM_TREEVIEW *pNMTreeView = (NM_TREEVIEW *) pNMHDR;
+
+<span style = "background-color:#dfd">	theApp.pView-&gt;ResetDisplayforNewTest();
+	ShowFocus();</span>
+
+	// Return 1 so that the control doesn't update the selection since
+	// we are managing it.
+	*pResult = 1;
+<span style = "background-color:#dfd">}</span>
+
+void CPageNetwork::OnSelchangeDInterface()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#fdd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		worker-&gt;SetLocalNetworkInterface(m_DInterface.GetCurSel());
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#fdd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		manager-&gt;SetLocalNetworkInterface(m_DInterface.GetCurSel());</span>
+		break;
+	}
+
+<span style = "background-color:#fdd">	ShowTargets();
+	ShowTargetSelection();
+	ShowSettings();
+	EnableWindow();
+}</span>
+
+void CPageNetwork::OnKillfocusEConnectionRate()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// Restores the previous value if the edit box was left blank.
+<span style = "background-color:#fdd">	if (!m_EConnectionRate.LineLength())
+		ShowConnectionRate();</span>
+	else {
+<span style = "background-color:#fdd">		switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+		case WORKER:
+<span style = "background-color:#fdd">			worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+			worker-&gt;SetTransPerConn(GetDlgItemInt(EConnectionRate));
+			break;</span>
+		case MANAGER:
+<span style = "background-color:#fdd">			manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+			manager-&gt;SetTransPerConn(GetDlgItemInt(EConnectionRate), GenericServerType);
+			break;</span>
+		case ALL_MANAGERS:
+<span style = "background-color:#fdd">			theApp.manager_list.SetTransPerConn(GetDlgItemInt(EConnectionRate), GenericServerType);</span>
+			break;
+		}
+	}
+<span style = "background-color:#fdd">	EnableWindow();
+}</span>
+
+//
+// Keyboard handler for the target tree control:
+// 
+// Behavior:
+// The up and down arrows move the highlighted item up and down 
+// respectively.  When modified with the shift key, the items selection is
+// extended up and down, respectively.  
+//
+// Page up/page down are not handled and do nothing.
+//
+// The home and end keys move the highlight to the first/last item in the tree,
+// scrolling it into view.  The shift key extends the selection to the 
+// first/last item in the tree.
+// 
+// Unlike windows explorer, the non-modified keys do not select (set the check
+// box) the item moved to.  There are no Ctrl-modified movement handlers, as
+// Ctrl-PgUp and Ctrl-PgDn are already bound to the property sheet to change
+// tabs.
+//
+// Ctrl-A selects all items.
+// 
+// The space bar selects the highlighted item and clears all other selections.
+// When modified with the shift key, it extends the selection to the
+// highlighted item.  When modified by the control key, the highlighted item's
+// check box is toggled.
+//
+// Note that the keyboard handler function treats managers differently from
+// workers to allow selecting multiple interfaces from the manager, whereas
+// workers are currently restricted to a single selection for network targets.
+// 
+void CPageNetwork::OnKeydownTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{</span>
+	TV_KEYDOWN *pTVKeyDown = (TV_KEYDOWN *) pNMHDR;
+
+	// A new target assignment is being made.  Clear the results since they are
+	// for a configuration we no longer have.
+<span style = "background-color:#dfd">	theApp.pView-&gt;ResetDisplayforNewTest();</span>
+
+<span style = "background-color:#dfd">	if (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType() == MANAGER)
+		KeyMultiSel(pTVKeyDown-&gt;wVKey);</span>
+	else
+<span style = "background-color:#fdd">		KeySingleSel(pTVKeyDown-&gt;wVKey);</span>
+	*pResult = 0;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Single selection keyboard handler for the tree control.
+//
+void CPageNetwork::KeySingleSel(WORD wVKey)
+<span style = "background-color:#fdd">{
+	BOOL shift = GetKeyState(VK_SHIFT) &amp; 0x8000;
+	BOOL control = GetKeyState(VK_CONTROL) &amp; 0x8000;</span>
+
+	// Make sure there are interfaces.
+<span style = "background-color:#fdd">	if (!highlighted)</span>
+		return;
+
+<span style = "background-color:#fdd">	switch (wVKey) {</span>
+	case VK_UP:
+<span style = "background-color:#fdd">		SetFocusUp();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(highlighted, highlighted, TRUE, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_DOWN:
+<span style = "background-color:#fdd">		SetFocusDown();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(highlighted, highlighted, TRUE, TargetChecked);
+			StoreTargetSelection();
+		}
+		break;
+	case VK_HOME:
+<span style = "background-color:#fdd">		SetFocusHome();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(highlighted, highlighted, TRUE, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_END:
+<span style = "background-color:#fdd">		SetFocusEnd();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(highlighted, highlighted, TRUE, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_SPACE:
+<span style = "background-color:#fdd">		if (control)	// toggle.</span>
+		{
+			// Toggle the selection, but do not clear any other items.
+<span style = "background-color:#fdd">			if (GetSelectionCheck(highlighted) == TargetChecked) {</span>
+				SelectRange(highlighted, highlighted, FALSE, TargetUnChecked);
+			} else {
+				SelectRange(highlighted, highlighted, FALSE, TargetChecked);
+			}
+<span style = "background-color:#fdd">		} else		// normal selection.</span>
+		{
+			// Extend the selection and clear any other items.
+<span style = "background-color:#fdd">			SelectRange(highlighted, highlighted, TRUE, TargetChecked);</span>
+		}
+
+<span style = "background-color:#fdd">		ShowFocus();</span>
+		StoreTargetSelection();
+		break;
+	}
+<span style = "background-color:#fdd">	ShowSettings();
+	EnableWindow();
+}</span>
+
+//
+// Multi selection keyboard handler for the tree control.
+//
+void CPageNetwork::KeyMultiSel(WORD wVKey)
+<span style = "background-color:#dfd">{
+	BOOL shift = GetKeyState(VK_SHIFT) &amp; 0x8000;
+	BOOL control = GetKeyState(VK_CONTROL) &amp; 0x8000;</span>
+
+	// Make sure there are interfaces.
+<span style = "background-color:#dfd">	if (!highlighted)</span>
+		return;
+
+<span style = "background-color:#dfd">	switch (wVKey) {</span>
+	case VK_UP:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;
+		SetFocusUp();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+		break;
+	case VK_DOWN:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;</span>
+
+<span style = "background-color:#fdd">		SetFocusDown();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_HOME:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;</span>
+
+<span style = "background-color:#fdd">		SetFocusHome();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_END:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;</span>
+
+<span style = "background-color:#fdd">		SetFocusEnd();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_SPACE:
+<span style = "background-color:#fdd">		if (shift) {</span>
+			// Extend the selection. Clear any other items if the control
+			// key is not pressed.
+<span style = "background-color:#fdd">			SelectRange(selected, highlighted, !control, TargetChecked);
+		} else if (control) {	// toggle.</span>
+			// Toggle the selection, but do not clear any other items.
+<span style = "background-color:#fdd">			if (GetSelectionCheck(highlighted) == TargetChecked) {</span>
+				SelectRange(highlighted, highlighted, FALSE, TargetUnChecked);
+			} else {
+				SelectRange(highlighted, highlighted, FALSE, TargetChecked);
+			}
+<span style = "background-color:#fdd">		} else {	// normal</span>
+			// Uniquely select the item with the focus.
+<span style = "background-color:#fdd">			SelectRange(highlighted, highlighted, TRUE, TargetChecked);</span>
+		}
+
+<span style = "background-color:#fdd">		ShowFocus();</span>
+		StoreTargetSelection();
+<span style = "background-color:#fdd">		break;</span>
+	case 'A':
+<span style = "background-color:#fdd">		if (control) {
+			SetAllCheck(TargetChecked);</span>
+			StoreTargetSelection();
+		}
+	}
+<span style = "background-color:#fdd">	ShowSettings();</span>
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+// 
+// The SetFocusUp, Down, Home, and End functions handle keyboard input for
+// the target tree.
+//
+void CPageNetwork::SetFocusUp()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hmgr, hifc;
+
+<span style = "background-color:#fdd">	hifc = m_TTargets.GetPrevSiblingItem(highlighted);</span>
+	// Does the currently selected interface have a previous sibling?
+<span style = "background-color:#fdd">	if (hifc) {</span>
+		// Yes. Set the focus to the sibling.
+<span style = "background-color:#fdd">		highlighted = hifc;
+	} else {</span>
+		// No.  Set the focus to the last interface on the first manager with 
+		// interfaces in the tree before the currently focused interface's 
+		// manager.
+<span style = "background-color:#fdd">		hmgr = m_TTargets.GetParentItem(highlighted);
+		while (hmgr = m_TTargets.GetPrevSiblingItem(hmgr)) {
+			if (hifc = m_TTargets.GetChildItem(hmgr))</span>
+				break;
+		}
+<span style = "background-color:#fdd">		while (hifc) {
+			highlighted = hifc;
+			hifc = m_TTargets.GetNextSiblingItem(hifc);</span>
+		}
+	}
+
+	// Make sure the focused interface is visible, and if possible,
+	// also its manager.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(m_TTargets.GetParentItem(highlighted));
+	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+void CPageNetwork::SetFocusDown()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hmgr, hifc;
+
+<span style = "background-color:#fdd">	hifc = m_TTargets.GetNextSiblingItem(highlighted);</span>
+	// Does the currently focused interface have a next sibling?
+<span style = "background-color:#fdd">	if (hifc) {</span>
+		// Yes. Set the focus to the sibling.
+<span style = "background-color:#fdd">		highlighted = hifc;
+	} else {</span>
+		// No.  Set the focus to the first interface on the first manager with 
+		// interfaces in the tree after the currently focused interface's 
+		// manager.
+<span style = "background-color:#fdd">		hmgr = m_TTargets.GetParentItem(highlighted);
+		while (hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {
+			if (hifc = m_TTargets.GetChildItem(hmgr)) {
+				highlighted = hifc;</span>
+				break;
+			}
+		}
+	}
+
+	// Make the focused interface visible, and if possible,
+	// also its manager.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(m_TTargets.GetParentItem(highlighted));
+	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+//
+// Highlight the first interface of the first manager;
+//
+void CPageNetwork::SetFocusHome()
+<span style = "background-color:#fdd">{
+	highlighted = m_TTargets.GetChildItem(m_TTargets.GetRootItem());</span>
+
+	// Make sure the first manager item is visible.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(m_TTargets.GetRootItem());
+	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+//
+// Highlight the last interface of the last manager with an interface.
+//
+void CPageNetwork::SetFocusEnd()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hmgr, hifc;
+
+	// Get the last manager.
+<span style = "background-color:#fdd">	hmgr = m_TTargets.GetRootItem();
+	while (m_TTargets.GetNextSiblingItem(hmgr))
+		hmgr = m_TTargets.GetNextSiblingItem(hmgr);</span>
+
+	// Loop through it's interfaces.
+<span style = "background-color:#fdd">	for (hifc = m_TTargets.GetChildItem(hmgr); hifc; hifc = m_TTargets.GetNextSiblingItem(hifc)) {</span>
+		// Set the highlighted item to the last non-null interface.
+<span style = "background-color:#fdd">		highlighted = hifc;</span>
+	}
+
+	// Make sure the last item is visible.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+// 
+// Disable collapsing the tree item when double clicking.
+//
+void CPageNetwork::OnDblclkTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	*pResult = 1;
+}</span>
+
+//
+// Sets the highlighted item to the first interface.
+//
+void CPageNetwork::OnSetfocusTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{
+	if (!highlighted) {</span>
+		//Find the first interface.
+<span style = "background-color:#dfd">		for (HTREEITEM hmgr = m_TTargets.GetRootItem(); hmgr; hmgr = m_TTargets.GetNextSiblingItem(hmgr)) {
+			highlighted = m_TTargets.GetChildItem(hmgr);
+			if (highlighted) {
+				ShowFocus();</span>
+				break;
+			}
+		}
+	}
+<span style = "background-color:#dfd">	*pResult = 0;
+}</span>
+
+//
+// Shows the selected item's network settings.
+//
+void CPageNetwork::ShowSettings()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+	int max_sends;
+
+	// Get the values for the network settings from memory.
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		max_sends = worker-&gt;GetMaxSends(VIServerType);
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		max_sends = manager-&gt;GetMaxSends(VIServerType);</span>
+		break;
+	default:
+<span style = "background-color:#dfd">		max_sends = theApp.manager_list.GetMaxSends(VIServerType);</span>
+	}
+
+	// If there is a displayable value, display it.  Otherwise, hide the content
+	// of the edit box.
+<span style = "background-color:#dfd">	if (max_sends == AMBIGUOUS_VALUE) {
+		m_EMaxSends.SetPasswordChar(32);
+		m_EMaxSends.Invalidate();</span>
+	} else {
+<span style = "background-color:#fdd">		m_EMaxSends.SetPasswordChar(0);
+		SetDlgItemInt(EMaxSends, max_sends);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Updates the maximum number of sends if necessary that can be outstanding.
+// Currently this only applies to VI network servers.
+//
+void CPageNetwork::OnKillfocusEMaxSends()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// If max sends was left blank, use the previous value
+<span style = "background-color:#fdd">	if (!m_EMaxSends.LineLength()) {
+		ShowSettings();
+	}</span>
+	// Verify that the max sends is &gt; 0.
+<span style = "background-color:#fdd">	else if (GetDlgItemInt(EMaxSends) &lt;= 0) {
+		ErrorMessage("Maximum # of Outstanding Sends cannot be 0.");
+		ShowSettings();</span>
+		return;
+	} else {
+		// Seeing what kind of item is selected.
+<span style = "background-color:#fdd">		switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+		case WORKER:
+<span style = "background-color:#fdd">			worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+			worker-&gt;SetMaxSends(GetDlgItemInt(EMaxSends));
+			break;</span>
+		case MANAGER:
+<span style = "background-color:#fdd">			manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+			manager-&gt;SetMaxSends(GetDlgItemInt(EMaxSends));
+			break;</span>
+		case ALL_MANAGERS:
+<span style = "background-color:#fdd">			theApp.manager_list.SetMaxSends(GetDlgItemInt(EMaxSends));</span>
+			break;
+		}
+	}
+
+<span style = "background-color:#fdd">	EnableWindow();
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

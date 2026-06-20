@@ -1,0 +1,202 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>MainFrm.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / MainFrm.cpp                                            ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CMainFrame class for Iometer.   ## */
+/* ##               This class contains almost nothing but AppWizard-     ## */
+/* ##               generated code.                                       ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "GalileoApp.h"
+#include "GalileoView.h"
+#include "MainFrm.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CMainFrame
+
+<span style = "background-color:#dfd">IMPLEMENT_DYNCREATE(CMainFrame, CFrameWnd)</span>
+
+<span style = "background-color:#dfd">    BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)</span>
+    //{{AFX_MSG_MAP(CMainFrame)
+    ON_WM_CREATE()
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">    END_MESSAGE_MAP()</span>
+/////////////////////////////////////////////////////////////////////////////
+// CMainFrame construction/destruction
+    CMainFrame::CMainFrame()
+<span style = "background-color:#dfd">{</span>
+	// CG: The following block was inserted by 'Status Bar' component.
+	{
+<span style = "background-color:#dfd">		m_nStatusPane1Width = -1;</span>
+		m_bMenuSelect = FALSE;
+	}
+<span style = "background-color:#dfd">}</span>
+
+CMainFrame::~CMainFrame()
+<span style = "background-color:#dfd">{
+}</span>
+
+int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
+<span style = "background-color:#dfd">{
+	if (CFrameWnd::OnCreate(lpCreateStruct) == -1)</span>
+		return -1;
+
+	// Disable the maximize button.
+<span style = "background-color:#dfd">	ModifyStyle(WS_MAXIMIZEBOX, NULL);</span>
+	// Remove the document title from before the application title.
+<span style = "background-color:#dfd">	ModifyStyle(FWS_ADDTOTITLE, NULL);</span>
+
+	// Create a toolbar.
+<span style = "background-color:#dfd">	if (!(theApp.m_wndToolBar.Create(this)) || !(theApp.m_wndToolBar.LoadToolBar(IDR_MAINFRAME))) {</span>
+		TRACE0("Failed to create toolbar\n");
+<span style = "background-color:#fdd">		return -1;	// fail to create</span>
+	}
+	// Create a stus bar at the bottom of the window.
+<span style = "background-color:#dfd">	if (!(theApp.m_wndStatusBar.Create(this))) {</span>
+		TRACE0("Failed to create statusbar\n");
+		return -1;	// fail to create
+	}
+	// TODO: Remove this if you don't want tool tips or a resizeable toolbar
+<span style = "background-color:#dfd">	theApp.m_wndToolBar.SetBarStyle(theApp.m_wndToolBar.GetBarStyle() |</span>
+					CBRS_TOOLTIPS | CBRS_FLYBY | CBRS_SIZE_DYNAMIC);
+
+	// TODO: Delete these three lines if you don't want the toolbar to
+	//  be dockable
+//      theApp.m_wndToolBar.EnableDocking(CBRS_ALIGN_ANY);
+//      EnableDocking(CBRS_ALIGN_ANY);
+//      DockControlBar(&amp;(theApp.m_wndToolBar));
+
+<span style = "background-color:#dfd">	return 0;
+}</span>
+
+BOOL CMainFrame::PreCreateWindow(CREATESTRUCT &amp; cs)
+<span style = "background-color:#dfd">{</span>
+	// TODO: Modify the Window class or styles here by modifying
+	//  the CREATESTRUCT cs
+<span style = "background-color:#dfd">	cs.hMenu = NULL;
+	return CFrameWnd::PreCreateWindow(cs);</span>
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// CMainFrame diagnostics
+
+#ifdef _DEBUG
+void CMainFrame::AssertValid() const
+{
+	CFrameWnd::AssertValid();
+}
+
+void CMainFrame::Dump(CDumpContext &amp; dc) const
+{
+	CFrameWnd::Dump(dc);
+}
+
+#endif				//_DEBUG
+
+LRESULT CMainFrame::DefWindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+<span style = "background-color:#dfd">{
+	if (message == WM_EXITMENULOOP) {</span>
+		// Popup is being destroyed.  Uncheck any checked buttons on the
+		// display page.
+<span style = "background-color:#dfd">		theApp.pView-&gt;m_pPageDisplay-&gt;ClearCheckButton();</span>
+	}
+<span style = "background-color:#dfd">	return CFrameWnd::DefWindowProc(message, wParam, lParam);
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

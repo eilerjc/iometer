@@ -1,0 +1,1002 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta charset="utf-8"/>
+        <title>IOmeter.exe</title>
+        <link rel="stylesheet" type="text/css" href="../third-party/css/style.css"/>
+        <script src="../third-party/RGraph/libraries/RGraph.common.core.js" type="text/javascript"></script>
+        <script src="../third-party/RGraph/libraries/RGraph.common.dynamic.js" type="text/javascript"></script>
+        <script src="../third-party/RGraph/libraries/RGraph.common.tooltips.js" type="text/javascript"></script>
+        <script src="../third-party/RGraph/libraries/RGraph.pie.js" type="text/javascript"></script>
+        <script src="../third-party/JQuery/jquery-3.4.1.min.js"></script>
+    </head>
+    <body>
+    <script type="text/javascript">
+        $(document).ready(function ()
+        {
+            
+            new RGraph.Pie('pi_b196324f-140d-4d60-8c96-73f4031fcc63', [6674, 3169])
+                .set('labels', ['Cover 67%','Uncover 33%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 6674 lines (67%)', 'uncover 3169 lines (33%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_602405a1-eebb-4fb5-a614-211be17c59be', [1, 6])
+                .set('labels', ['Cover 14%','Uncover 86%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 1 lines (14%)', 'uncover 6 lines (86%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_e56a8b49-9d46-466e-b206-6097e58b9b2d', [8, 28])
+                .set('labels', ['Cover 22%','Uncover 78%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 8 lines (22%)', 'uncover 28 lines (78%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_0a09f58a-98fc-4d6b-bef0-b2c9d56bc0c7', [15, 35])
+                .set('labels', ['Cover 30%','Uncover 70%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 15 lines (30%)', 'uncover 35 lines (70%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_3eecfe43-a75f-4391-bda5-6592f8a79096', [181, 318])
+                .set('labels', ['Cover 36%','Uncover 64%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 181 lines (36%)', 'uncover 318 lines (64%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_04273b0a-ba27-4b52-b9bc-8201db6330d4', [48, 83])
+                .set('labels', ['Cover 36%','Uncover 64%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 48 lines (36%)', 'uncover 83 lines (64%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_bbd17332-db95-4976-9a90-126fe011a36a', [8, 8])
+                .set('labels', ['Cover 50%','Uncover 50%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 8 lines (50%)', 'uncover 8 lines (50%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_c101d554-3c8e-41bf-a1b0-e4f4c7e42910', [309, 300])
+                .set('labels', ['Cover 50%','Uncover 50%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 309 lines (50%)', 'uncover 300 lines (50%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_8fda4c72-ce88-469a-9aec-f066494cb822', [113, 105])
+                .set('labels', ['Cover 51%','Uncover 49%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 113 lines (51%)', 'uncover 105 lines (49%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_0eba4c7a-df25-448b-9b28-6ce733f2d019', [81, 70])
+                .set('labels', ['Cover 53%','Uncover 47%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 81 lines (53%)', 'uncover 70 lines (47%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_35e90021-e3d3-463a-a0c4-14b76122832b', [602, 474])
+                .set('labels', ['Cover 55%','Uncover 45%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 602 lines (55%)', 'uncover 474 lines (45%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_45644813-7921-4f7a-8551-9b0925c806ec', [272, 200])
+                .set('labels', ['Cover 57%','Uncover 43%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 272 lines (57%)', 'uncover 200 lines (43%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_43887be6-2527-4164-9c88-9a6773c917a0', [140, 77])
+                .set('labels', ['Cover 64%','Uncover 36%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 140 lines (64%)', 'uncover 77 lines (36%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_fd026d55-183f-49b2-adb8-25ac5a6c9b30', [573, 298])
+                .set('labels', ['Cover 65%','Uncover 35%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 573 lines (65%)', 'uncover 298 lines (35%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_0995eec3-040a-4b91-9fd8-3b0e27f0e5ad', [174, 88])
+                .set('labels', ['Cover 66%','Uncover 34%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 174 lines (66%)', 'uncover 88 lines (34%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_0d6f365c-c494-4abc-99af-e48d0c0234a0', [415, 185])
+                .set('labels', ['Cover 69%','Uncover 31%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 415 lines (69%)', 'uncover 185 lines (31%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_65240900-e079-4ee2-9d39-2581e0e97515', [404, 171])
+                .set('labels', ['Cover 70%','Uncover 30%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 404 lines (70%)', 'uncover 171 lines (30%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_34b75a5d-c677-47c8-9c00-b084875fa27e', [453, 193])
+                .set('labels', ['Cover 70%','Uncover 30%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 453 lines (70%)', 'uncover 193 lines (30%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_2b525ad3-80cb-4023-abea-a7c0c71cf3bf', [108, 44])
+                .set('labels', ['Cover 71%','Uncover 29%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 108 lines (71%)', 'uncover 44 lines (29%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_40173a51-d418-4253-b028-33c8e2d7f524', [35, 14])
+                .set('labels', ['Cover 71%','Uncover 29%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 35 lines (71%)', 'uncover 14 lines (29%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_cf8c74a7-3200-4a7b-9160-b046d6af42a8', [331, 119])
+                .set('labels', ['Cover 73%','Uncover 27%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 331 lines (73%)', 'uncover 119 lines (27%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_06b5cf2a-895a-4da5-b788-962104b6c73d', [72, 24])
+                .set('labels', ['Cover 75%','Uncover 25%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 72 lines (75%)', 'uncover 24 lines (25%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_3cd5d2a5-da36-4a62-a109-b7deebce9c1f', [158, 43])
+                .set('labels', ['Cover 78%','Uncover 22%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 158 lines (78%)', 'uncover 43 lines (22%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_1ecb4425-17e2-4e76-8d9b-70b0b602bb8a', [524, 146])
+                .set('labels', ['Cover 78%','Uncover 22%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 524 lines (78%)', 'uncover 146 lines (22%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_ec8d5355-9e98-4474-9c6c-25860e04d159', [81, 19])
+                .set('labels', ['Cover 81%','Uncover 19%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 81 lines (81%)', 'uncover 19 lines (19%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_5812dc42-4b96-4286-862b-deadb8ad6be9', [292, 53])
+                .set('labels', ['Cover 84%','Uncover 16%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 292 lines (84%)', 'uncover 53 lines (16%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_9651b713-7844-4103-ac92-c785ea9703cc', [91, 16])
+                .set('labels', ['Cover 85%','Uncover 15%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 91 lines (85%)', 'uncover 16 lines (15%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_8735a8f7-2542-4fff-82ba-bea5259c1adc', [41, 7])
+                .set('labels', ['Cover 85%','Uncover 15%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 41 lines (85%)', 'uncover 7 lines (15%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_fa9889b6-c858-4cd7-8fb1-cbacab16b832', [57, 6])
+                .set('labels', ['Cover 90%','Uncover 10%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 57 lines (90%)', 'uncover 6 lines (10%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_c281eb7f-1e1a-4f63-8bc0-827e3597606e', [41, 4])
+                .set('labels', ['Cover 91%','Uncover 9%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 41 lines (91%)', 'uncover 4 lines (9%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_acd47c1b-9bd4-4d74-bfb8-1562b509cba2', [81, 7])
+                .set('labels', ['Cover 92%','Uncover 8%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 81 lines (92%)', 'uncover 7 lines (8%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_2ca8b69f-fb05-4533-8d25-6b7646cf49a3', [48, 4])
+                .set('labels', ['Cover 92%','Uncover 8%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 48 lines (92%)', 'uncover 4 lines (8%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_8ef4b183-699a-4e8a-b6b7-8f568adbaf07', [25, 1])
+                .set('labels', ['Cover 96%','Uncover 4%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 25 lines (96%)', 'uncover 1 lines (4%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_22ef4c2b-5dc1-4445-82fd-ecc082e2a19e', [490, 18])
+                .set('labels', ['Cover 96%','Uncover 4%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 490 lines (96%)', 'uncover 18 lines (4%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_cfcfabd9-3ab5-40d8-b458-a110d6ba8e55', [27, 1])
+                .set('labels', ['Cover 96%','Uncover 4%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 27 lines (96%)', 'uncover 1 lines (4%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_15c3d17d-5c73-45fc-8fd2-ea51322e54d0', [141, 4])
+                .set('labels', ['Cover 97%','Uncover 3%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 141 lines (97%)', 'uncover 4 lines (3%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_1bf9c8f5-3a5a-4dd2-bce6-5a745cf4c8c3', [33, 0])
+                .set('labels', ['Cover 100%','Uncover 0%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 33 lines (100%)', 'uncover 0 lines (0%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_eca81d65-3be3-43b5-915d-0a9779d6b6d3', [7, 0])
+                .set('labels', ['Cover 100%','Uncover 0%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 7 lines (100%)', 'uncover 0 lines (0%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_13f05301-6382-4642-9c02-3518ff20225c', [14, 0])
+                .set('labels', ['Cover 100%','Uncover 0%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 14 lines (100%)', 'uncover 0 lines (0%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_20e9ded9-b6a9-4ad5-8d14-62670d890b44', [113, 0])
+                .set('labels', ['Cover 100%','Uncover 0%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 113 lines (100%)', 'uncover 0 lines (0%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+            new RGraph.Pie('pi_0eb4b2b4-b2a4-461d-91c6-133cda92bfb1', [67, 0])
+                .set('labels', ['Cover 100%','Uncover 0%'])
+                .set('colors', ['rgb(0,255,0)','rgb(255,0,0)'])
+                .set('linewidth', 1)
+                .set('shadow', true)
+                .set('tooltips', ['cover 67 lines (100%)', 'uncover 0 lines (0%)'])
+                .set('tooltips.event', 'onmousemove')
+                .set('labels.sticks', true)
+                .set('labels.sticks.length', 10)
+                .draw();
+            
+
+      })
+    </script>    
+        <h1>
+        IOmeter.exe
+        </h1>
+        <h4>
+        
+        </h4>
+        <table id="rounded-corner">
+            <thead>
+                <tr>
+                    <th scope="col" class="rounded-left">Coverage</th>
+                    <th scope="col">Total lines</th>
+                    <th scope="col" class="rounded-right">Items</th>
+                </tr>
+            </thead> 
+            <tbody>
+                
+                <tr>
+                    <td>
+            <canvas id="pi_b196324f-140d-4d60-8c96-73f4031fcc63" width="280" height="100">Cover 67%</canvas>
+                    </td>            
+                    <td>9843</td>
+                    <td>            
+                      
+                      C:\Users\jeiler.000\iometer\github\iometer\src\msvs11\Release\x64\IOmeter.exe
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_602405a1-eebb-4fb5-a614-211be17c59be" width="280" height="100">Cover 14%</canvas>
+                    </td>            
+                    <td>7</td>
+                    <td>            
+                       <a href="IOmeter/IcfStream.h.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\IcfStream.h</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_e56a8b49-9d46-466e-b206-6097e58b9b2d" width="280" height="100">Cover 22%</canvas>
+                    </td>            
+                    <td>36</td>
+                    <td>            
+                       <a href="IOmeter/PageDisplay.h.html">C:\Users\jeiler.000\iometer\github\iometer\src\PageDisplay.h</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_0a09f58a-98fc-4d6b-bef0-b2c9d56bc0c7" width="280" height="100">Cover 30%</canvas>
+                    </td>            
+                    <td>50</td>
+                    <td>            
+                       <a href="IOmeter/IOTime.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\IOTime.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_3eecfe43-a75f-4391-bda5-6592f8a79096" width="280" height="100">Cover 36%</canvas>
+                    </td>            
+                    <td>499</td>
+                    <td>            
+                       <a href="IOmeter/PageNetwork.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\PageNetwork.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_04273b0a-ba27-4b52-b9bc-8201db6330d4" width="280" height="100">Cover 36%</canvas>
+                    </td>            
+                    <td>131</td>
+                    <td>            
+                       <a href="IOmeter/ICF_ifstream.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\ICF_ifstream.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_bbd17332-db95-4976-9a90-126fe011a36a" width="280" height="100">Cover 50%</canvas>
+                    </td>            
+                    <td>16</td>
+                    <td>            
+                       <a href="IOmeter/GalileoGlobals.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\GalileoGlobals.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_c101d554-3c8e-41bf-a1b0-e4f4c7e42910" width="280" height="100">Cover 50%</canvas>
+                    </td>            
+                    <td>609</td>
+                    <td>            
+                       <a href="IOmeter/PageDisk.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\PageDisk.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_8fda4c72-ce88-469a-9aec-f066494cb822" width="280" height="100">Cover 51%</canvas>
+                    </td>            
+                    <td>218</td>
+                    <td>            
+                       <a href="IOmeter/WorkerView.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\WorkerView.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_0eba4c7a-df25-448b-9b28-6ce733f2d019" width="280" height="100">Cover 53%</canvas>
+                    </td>            
+                    <td>151</td>
+                    <td>            
+                       <a href="IOmeter/GalileoCmdLine.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\GalileoCmdLine.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_35e90021-e3d3-463a-a0c4-14b76122832b" width="280" height="100">Cover 55%</canvas>
+                    </td>            
+                    <td>1076</td>
+                    <td>            
+                       <a href="IOmeter/GalileoView.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\GalileoView.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_45644813-7921-4f7a-8551-9b0925c806ec" width="280" height="100">Cover 57%</canvas>
+                    </td>            
+                    <td>472</td>
+                    <td>            
+                       <a href="IOmeter/PageDisplay.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\PageDisplay.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_43887be6-2527-4164-9c88-9a6773c917a0" width="280" height="100">Cover 64%</canvas>
+                    </td>            
+                    <td>217</td>
+                    <td>            
+                       <a href="IOmeter/IOPortTCP.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\IOPortTCP.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_fd026d55-183f-49b2-adb8-25ac5a6c9b30" width="280" height="100">Cover 65%</canvas>
+                    </td>            
+                    <td>871</td>
+                    <td>            
+                       <a href="IOmeter/Worker.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\Worker.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_0995eec3-040a-4b91-9fd8-3b0e27f0e5ad" width="280" height="100">Cover 66%</canvas>
+                    </td>            
+                    <td>262</td>
+                    <td>            
+                       <a href="IOmeter/GalileoApp.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\GalileoApp.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_0d6f365c-c494-4abc-99af-e48d0c0234a0" width="280" height="100">Cover 69%</canvas>
+                    </td>            
+                    <td>600</td>
+                    <td>            
+                       <a href="IOmeter/ManagerList.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\ManagerList.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_65240900-e079-4ee2-9d39-2581e0e97515" width="280" height="100">Cover 70%</canvas>
+                    </td>            
+                    <td>575</td>
+                    <td>            
+                       <a href="IOmeter/AccessDialog.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\AccessDialog.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_34b75a5d-c677-47c8-9c00-b084875fa27e" width="280" height="100">Cover 70%</canvas>
+                    </td>            
+                    <td>646</td>
+                    <td>            
+                       <a href="IOmeter/Manager.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\Manager.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_2b525ad3-80cb-4023-abea-a7c0c71cf3bf" width="280" height="100">Cover 71%</canvas>
+                    </td>            
+                    <td>152</td>
+                    <td>            
+                       <a href="IOmeter/BigMeter.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\BigMeter.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_40173a51-d418-4253-b028-33c8e2d7f524" width="280" height="100">Cover 71%</canvas>
+                    </td>            
+                    <td>49</td>
+                    <td>            
+                       <a href="IOmeter/IOPort.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\IOPort.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_cf8c74a7-3200-4a7b-9160-b046d6af42a8" width="280" height="100">Cover 73%</canvas>
+                    </td>            
+                    <td>450</td>
+                    <td>            
+                       <a href="IOmeter/PageAccess.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\PageAccess.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_06b5cf2a-895a-4da5-b788-962104b6c73d" width="280" height="100">Cover 75%</canvas>
+                    </td>            
+                    <td>96</td>
+                    <td>            
+                       <a href="IOmeter/ICFSaveDialog.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\ICFSaveDialog.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_3cd5d2a5-da36-4a62-a109-b7deebce9c1f" width="280" height="100">Cover 78%</canvas>
+                    </td>            
+                    <td>201</td>
+                    <td>            
+                       <a href="IOmeter/MeterCtrl.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\MeterCtrl.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_1ecb4425-17e2-4e76-8d9b-70b0b602bb8a" width="280" height="100">Cover 78%</canvas>
+                    </td>            
+                    <td>670</td>
+                    <td>            
+                       <a href="IOmeter/IcfDocument.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\IcfDocument.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_ec8d5355-9e98-4474-9c6c-25860e04d159" width="280" height="100">Cover 81%</canvas>
+                    </td>            
+                    <td>100</td>
+                    <td>            
+                       <a href="IOmeter/WaitingForManagers.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\WaitingForManagers.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_5812dc42-4b96-4286-862b-deadb8ad6be9" width="280" height="100">Cover 84%</canvas>
+                    </td>            
+                    <td>345</td>
+                    <td>            
+                       <a href="IOmeter/PageSetup.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\PageSetup.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_9651b713-7844-4103-ac92-c785ea9703cc" width="280" height="100">Cover 85%</canvas>
+                    </td>            
+                    <td>107</td>
+                    <td>            
+                       <a href="IOmeter/ICFOpenDialog.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\ICFOpenDialog.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_8735a8f7-2542-4fff-82ba-bea5259c1adc" width="280" height="100">Cover 85%</canvas>
+                    </td>            
+                    <td>48</td>
+                    <td>            
+                       <a href="IOmeter/ManagerMap.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\ManagerMap.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_fa9889b6-c858-4cd7-8fb1-cbacab16b832" width="280" height="100">Cover 90%</canvas>
+                    </td>            
+                    <td>63</td>
+                    <td>            
+                       <a href="IOmeter/AccessSpecCatalog.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\AccessSpecCatalog.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_c281eb7f-1e1a-4f63-8bc0-827e3597606e" width="280" height="100">Cover 91%</canvas>
+                    </td>            
+                    <td>45</td>
+                    <td>            
+                       <a href="IOmeter/IOAccess.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\IOAccess.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_acd47c1b-9bd4-4d74-bfb8-1562b509cba2" width="280" height="100">Cover 92%</canvas>
+                    </td>            
+                    <td>88</td>
+                    <td>            
+                       <a href="IOmeter/TextDisplay.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\TextDisplay.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_2ca8b69f-fb05-4533-8d25-6b7646cf49a3" width="280" height="100">Cover 92%</canvas>
+                    </td>            
+                    <td>52</td>
+                    <td>            
+                       <a href="IOmeter/ResultsCsv.h.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\ResultsCsv.h</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_8ef4b183-699a-4e8a-b6b7-8f568adbaf07" width="280" height="100">Cover 96%</canvas>
+                    </td>            
+                    <td>26</td>
+                    <td>            
+                       <a href="IOmeter/MainFrm.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\MainFrm.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_22ef4c2b-5dc1-4445-82fd-ecc082e2a19e" width="280" height="100">Cover 96%</canvas>
+                    </td>            
+                    <td>508</td>
+                    <td>            
+                       <a href="IOmeter/AccessSpecList.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\AccessSpecList.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_cfcfabd9-3ab5-40d8-b458-a110d6ba8e55" width="280" height="100">Cover 96%</canvas>
+                    </td>            
+                    <td>28</td>
+                    <td>            
+                       <a href="IOmeter/ResultDecode.h.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\ResultDecode.h</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_15c3d17d-5c73-45fc-8fd2-ea51322e54d0" width="280" height="100">Cover 97%</canvas>
+                    </td>            
+                    <td>145</td>
+                    <td>            
+                       <a href="IOmeter/IcfStream.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\IcfStream.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_1bf9c8f5-3a5a-4dd2-bce6-5a745cf4c8c3" width="280" height="100">Cover 100%</canvas>
+                    </td>            
+                    <td>33</td>
+                    <td>            
+                       <a href="IOmeter/LegalBox.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\LegalBox.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_eca81d65-3be3-43b5-915d-0a9779d6b6d3" width="280" height="100">Cover 100%</canvas>
+                    </td>            
+                    <td>7</td>
+                    <td>            
+                       <a href="IOmeter/IOGlobals.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\IOGlobals.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_13f05301-6382-4642-9c02-3518ff20225c" width="280" height="100">Cover 100%</canvas>
+                    </td>            
+                    <td>14</td>
+                    <td>            
+                       <a href="IOmeter/GalileoDoc.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\GalileoDoc.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_20e9ded9-b6a9-4ad5-8d14-62670d890b44" width="280" height="100">Cover 100%</canvas>
+                    </td>            
+                    <td>113</td>
+                    <td>            
+                       <a href="IOmeter/IcfWriter.cpp.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\IcfWriter.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+                <tr>
+                    <td>
+            <canvas id="pi_0eb4b2b4-b2a4-461d-91c6-133cda92bfb1" width="280" height="100">Cover 100%</canvas>
+                    </td>            
+                    <td>67</td>
+                    <td>            
+                       <a href="IOmeter/ManagerMap.cpp2.html">C:\Users\jeiler.000\iometer\github\iometer\src\core\ManagerMap.cpp</a> 
+                      
+                      
+                    </td>
+                </tr>        
+                
+            </tbody>
+            <tfoot>
+                <tr>
+                <td colspan="2" class="rounded-foot-left"></td>
+                <td class="rounded-foot-right"></td>
+                </tr>
+            </tfoot>            
+        </table>
+        <hr/>
+        <table width="100%" >
+         <thead>
+            <tr>
+               <th align="center">
+                  <small>Generated by</small>
+                  <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                     <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                  </a>
+               </th>
+            </tr>
+         </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,276 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>main.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// main.cpp - Iometer Qt entry point
+//
+// GUI mode (default):
+//   IometerQt.exe            â QtDynamoEngine, full GUI
+//   IometerQt.exe --demo     â QtDemoEngine, simulated data, no Dynamo
+//
+// Batch mode (backwards compatible with original IOmeter.exe /c /r /t flags):
+//   IometerQt.exe /c config.icf /r results.csv /t 60
+//   IometerQt.exe --icf config.icf --results results.csv --timeout 60
+//
+//   Loads config, waits up to &lt;timeout&gt; seconds for Dynamo to connect,
+//   runs the test for the duration specified in the ICF, writes results.csv
+//   in the original format, then exits 0 on success or 1 on failure.
+//
+#include "QtMainWindow.h"
+#include "QtDemoEngine.h"
+#include "QtDynamoEngine.h"
+#include &lt;QApplication&gt;
+#include &lt;QCoreApplication&gt;
+#include &lt;QFont&gt;
+#include &lt;QCommandLineParser&gt;
+#include &lt;QTimer&gt;
+#include &lt;QFileInfo&gt;
+#include &lt;QDebug&gt;
+
+// ---------------------------------------------------------------------------
+// Pre-scan argv for /c /r /t (original-style flags) and translate them to
+// --icf --results --timeout so QCommandLineParser can handle them uniformly.
+// ---------------------------------------------------------------------------
+static void translateOriginalFlags(int argc, char *argv[],
+                                   QString &amp;icf, QString &amp;results, int &amp;timeout)
+<span style = "background-color:#dfd">{
+    for (int i = 1; i &lt; argc; ++i) {
+        const QString a = QString::fromLocal8Bit(argv[i]);
+        if ((a == "/c" || a == "--icf") &amp;&amp; i + 1 &lt; argc)
+            icf = QString::fromLocal8Bit(argv[++i]);
+        else if ((a == "/r" || a == "--results") &amp;&amp; i + 1 &lt; argc)
+            results = QString::fromLocal8Bit(argv[++i]);
+        else if ((a == "/t" || a == "--timeout") &amp;&amp; i + 1 &lt; argc)
+            timeout = QString::fromLocal8Bit(argv[++i]).toInt();
+    }
+}</span>
+
+// ---------------------------------------------------------------------------
+// Batch mode - no window, QCoreApplication only.
+// Mirrors the original IOmeter.exe /c /r /t behaviour exactly.
+// ---------------------------------------------------------------------------
+static int batchMain(const QString &amp;icfFile,
+                     const QString &amp;resultsFile,
+                     int loginTimeoutSec)
+<span style = "background-color:#dfd">{</span>
+    // QCoreApplication is already set up by the caller.
+<span style = "background-color:#dfd">    QtDynamoEngine engine;</span>
+
+<span style = "background-color:#dfd">    if (!engine.loadConfig(icfFile)) {</span>
+<span style = "background-color:#fdd">        qCritical("Batch: cannot open ICF file: %s", qPrintable(icfFile));</span>
+        return 1;
+    }
+
+<span style = "background-color:#dfd">    const TestConfig cfg = engine.testConfig();
+    const int runMs = ((cfg.runHours * 60 + cfg.runMinutes) * 60 + cfg.runSeconds) * 1000;
+    if (runMs &lt;= 0) {</span>
+<span style = "background-color:#fdd">        qCritical("Batch: ICF run time is 0 seconds - nothing to do.");</span>
+        return 1;
+    }
+
+<span style = "background-color:#dfd">    qInfo("Batch: ICF loaded. Run time: %dh %dm %ds. Login timeout: %ds.",</span>
+          cfg.runHours, cfg.runMinutes, cfg.runSeconds, loginTimeoutSec);
+<span style = "background-color:#dfd">    qInfo("Batch: Waiting for Dynamo on port 1066...");</span>
+
+    // State machine driven by signals:
+    //   Idle â Connected â Running â Done
+<span style = "background-color:#dfd">    bool success = false;</span>
+
+<span style = "background-color:#dfd">    QObject::connect(</span>
+        &amp;engine, &amp;QtIometerEngine::managerConnected,
+<span style = "background-color:#dfd">        [&amp;](ManagerInfo) {
+            qInfo("Batch: Dynamo connected. Configuring test...");</span>
+
+            // Configure workers to match the ICF exactly:
+            //   - Workers 0..N-1  get per-worker targets+spec from ICF
+            //   - Workers N..end  get empty targets (no I/O - matches original)
+<span style = "background-color:#dfd">            const auto batchWorkers = engine.batchWorkers();
+            qInfo("Batch: ICF defines %d worker(s); Dynamo reported %d.",</span>
+                  batchWorkers.size(),
+                  engine.managers().isEmpty() ? 0 : engine.managers().first().workers.size());
+
+<span style = "background-color:#dfd">            int wi = 0;
+            for (const auto &amp;mgr : engine.managers()) {
+                for (auto w : mgr.workers) {
+                    if (wi &lt; batchWorkers.size()) {
+                        w.targets.clear();
+                        for (const auto &amp;t : batchWorkers[wi].targets)
+                            w.targets.push_back(t.toStdString());
+                        qInfo("Batch:   Worker %d ('%s'): targets=[%s] spec='%s'",</span>
+                              wi, w.name.c_str(),
+                              qPrintable(batchWorkers[wi].targets.join(", ")),
+                              qPrintable(batchWorkers[wi].assignedSpecs.value(0)));
+<span style = "background-color:#dfd">                    } else {
+                        w.targets.clear();   // no targets â Dynamo skips this worker</span>
+                    }
+<span style = "background-color:#dfd">                    engine.updateWorker(w);
+                    ++wi;</span>
+                }
+            }
+
+            // Apply the first ICF worker's spec globally (all active workers share it)
+<span style = "background-color:#dfd">            const QString specName = engine.batchAssignedSpec();
+            if (!specName.isEmpty()) {
+                for (const auto &amp;s : engine.accessSpecs()) {
+                    if (s.name == specName.toStdString()) {
+                        engine.setCurrentTestSpec(s);
+                        qInfo("Batch: Using spec '%s'", s.name.c_str());</span>
+                        break;
+                    }
+                }
+            }
+
+<span style = "background-color:#dfd">            qInfo("Batch: Starting test (%d ms)...", runMs);
+            engine.startTest();
+            QTimer::singleShot(runMs, &amp;engine, &amp;QtIometerEngine::stopTest);
+        });</span>
+
+<span style = "background-color:#dfd">    QObject::connect(</span>
+        &amp;engine, &amp;QtIometerEngine::testStopped,
+<span style = "background-color:#fdd">        [&amp;]() {
+            qInfo("Batch: Test complete. Writing results to %s", qPrintable(resultsFile));
+            success = engine.saveBatchResults(resultsFile);
+            if (!success)
+                qCritical("Batch: Failed to write results file.");
+            QCoreApplication::instance()-&gt;exit(success ? 0 : 1);
+        });</span>
+
+    // Overall login timeout
+<span style = "background-color:#dfd">    QTimer::singleShot(loginTimeoutSec * 1000, [&amp;]() {</span>
+<span style = "background-color:#fdd">        if (!engine.isRunning() &amp;&amp; engine.managers().isEmpty()) {
+            qCritical("Batch: Dynamo did not connect within %d seconds.", loginTimeoutSec);
+            QCoreApplication::instance()-&gt;exit(1);</span>
+        }
+<span style = "background-color:#fdd">    });</span>
+
+<span style = "background-color:#dfd">    return QCoreApplication::instance()-&gt;exec();
+}</span>
+
+// ---------------------------------------------------------------------------
+// GUI mode
+// ---------------------------------------------------------------------------
+static int guiMain(int argc, char *argv[])
+<span style = "background-color:#fdd">{
+    QApplication app(argc, argv);
+    app.setApplicationName("Iometer");
+    app.setApplicationDisplayName("Iometer Qt GUI");
+    app.setOrganizationName("Iometer Project");
+    app.setOrganizationDomain("github.com/eilerjc/iometer");
+    app.setApplicationVersion("1.1.0");</span>
+
+<span style = "background-color:#fdd">    QFont defaultFont("Segoe UI", 10);
+    app.setFont(defaultFont);</span>
+
+<span style = "background-color:#fdd">    QCommandLineParser parser;
+    parser.setApplicationDescription("Iometer Qt GUI - I/O benchmark controller");
+    parser.addHelpOption();
+    parser.addVersionOption();</span>
+
+<span style = "background-color:#fdd">    QCommandLineOption demoOpt("demo",</span>
+        "Use simulated QtDemoEngine instead of connecting to Dynamo.exe");
+<span style = "background-color:#fdd">    parser.addOption(demoOpt);
+    parser.process(app);</span>
+
+    QtIometerEngine *engine = nullptr;
+<span style = "background-color:#fdd">    if (parser.isSet(demoOpt)) {
+        engine = new QtDemoEngine;
+    } else {
+        engine = new QtDynamoEngine;</span>
+    }
+
+<span style = "background-color:#fdd">    QtMainWindow win(engine);
+    win.show();</span>
+
+<span style = "background-color:#fdd">    const int ret = app.exec();
+    delete engine;
+    return ret;
+}</span>
+
+// ---------------------------------------------------------------------------
+// ICF validation mode (--validate-icf &lt;file&gt;)
+//
+// Loads an ICF through the QtDemoEngine (the synthetic "test" engine â no real
+// Dynamo, no elevation, deterministic) and checks the parsed configuration is
+// sane: a positive run time and at least one access spec. Used by the smoke
+// test to exercise the full set of fixture ICFs end-to-end through the shipped
+// executable without needing real disk I/O. Exits 0 on success, 1 on failure.
+// ---------------------------------------------------------------------------
+static int validateIcfMain(const QString &amp;icfFile)
+<span style = "background-color:#dfd">{
+    QtDemoEngine engine;   // test-data engine: parses ICF, no socket / no elevation
+    if (!engine.loadConfig(icfFile)) {</span>
+<span style = "background-color:#fdd">        qCritical("validate-icf: FAILED to load '%s'", qPrintable(icfFile));</span>
+        return 1;
+    }
+
+<span style = "background-color:#dfd">    const TestConfig cfg = engine.testConfig();
+    const int runSecs = (cfg.runHours * 60 + cfg.runMinutes) * 60 + cfg.runSeconds;
+    const int specCount = engine.accessSpecs().size();</span>
+
+<span style = "background-color:#dfd">    if (runSecs &lt;= 0) {</span>
+<span style = "background-color:#fdd">        qCritical("validate-icf: '%s' has zero run time", qPrintable(icfFile));</span>
+        return 1;
+    }
+<span style = "background-color:#dfd">    if (specCount &lt;= 0) {</span>
+<span style = "background-color:#fdd">        qCritical("validate-icf: '%s' has no access specs", qPrintable(icfFile));</span>
+        return 1;
+    }
+
+<span style = "background-color:#dfd">    qInfo("validate-icf: OK  %-28s  runtime=%ds  specs=%d  ramp=%ds",</span>
+          qPrintable(QFileInfo(icfFile).fileName()),
+          runSecs, specCount, cfg.rampSeconds);
+<span style = "background-color:#dfd">    return 0;
+}</span>
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+int main(int argc, char *argv[])
+<span style = "background-color:#dfd">{</span>
+    // --validate-icf &lt;file&gt;: parse-and-check a config via the test engine.
+<span style = "background-color:#dfd">    for (int i = 1; i &lt; argc; ++i) {
+        const QString a = QString::fromLocal8Bit(argv[i]);
+        if ((a == "--validate-icf" || a == "/validate") &amp;&amp; i + 1 &lt; argc) {
+            QCoreApplication app(argc, argv);
+            app.setApplicationName("Iometer");
+            app.setApplicationVersion("1.1.0");
+            return validateIcfMain(QString::fromLocal8Bit(argv[i + 1]));</span>
+        }
+<span style = "background-color:#dfd">    }</span>
+
+<span style = "background-color:#dfd">    QString icf, results;
+    int timeout = 60;
+    translateOriginalFlags(argc, argv, icf, results, timeout);</span>
+
+<span style = "background-color:#dfd">    if (!icf.isEmpty()) {</span>
+        // Batch mode: no GUI needed, QCoreApplication suffices
+<span style = "background-color:#dfd">        QCoreApplication app(argc, argv);
+        app.setApplicationName("Iometer");
+        app.setApplicationVersion("1.1.0");
+        return batchMain(icf, results, timeout);</span>
+    }
+
+<span style = "background-color:#fdd">    return guiMain(argc, argv);</span>
+<span style = "background-color:#dfd">}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,222 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>WorkerPool.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "WorkerPool.h"
+
+WorkerPool::WorkerPool()
+<span style = "background-color:#dfd">{
+}</span>
+
+WorkerPool::~WorkerPool()
+<span style = "background-color:#dfd">{
+    clear();
+}</span>
+
+bool WorkerPool::addManager(const ManagerInfo &amp;info)
+<span style = "background-color:#dfd">{
+    if (hasManager(info.name)) {
+        m_lastError = "Manager '" + info.name + "' already exists";
+        return false;</span>
+    }
+
+<span style = "background-color:#dfd">    ManagerEntry entry;
+    entry.info = info;
+    m_managers.push_back(entry);
+    return true;
+}</span>
+
+bool WorkerPool::removeManager(const std::string &amp;managerName)
+<span style = "background-color:#dfd">{
+    for (size_t i = 0; i &lt; m_managers.size(); ++i) {
+        if (m_managers[i].info.name == managerName) {
+            m_managers.erase(m_managers.begin() + i);
+            return true;</span>
+        }
+    }
+
+<span style = "background-color:#dfd">    m_lastError = "Manager '" + managerName + "' not found";
+    return false;
+}</span>
+
+bool WorkerPool::hasManager(const std::string &amp;managerName) const
+<span style = "background-color:#dfd">{
+    return findManagerConst(managerName) != nullptr;
+}</span>
+
+int WorkerPool::managerCount() const
+<span style = "background-color:#dfd">{
+    return m_managers.size();
+}</span>
+
+bool WorkerPool::addWorker(const std::string &amp;managerName, const WorkerInfo &amp;info)
+<span style = "background-color:#dfd">{
+    ManagerEntry *mgr = findManager(managerName);
+    if (!mgr) {
+        m_lastError = "Manager '" + managerName + "' not found";</span>
+        return false;
+    }
+
+    // Check for duplicate worker ID
+<span style = "background-color:#dfd">    for (const auto &amp;w : mgr-&gt;workers) {
+        if (w.id == info.id) {
+            m_lastError = "Worker '" + info.id + "' already exists in manager '" + managerName + "'";</span>
+<span style = "background-color:#fdd">            return false;</span>
+        }
+    }
+
+<span style = "background-color:#dfd">    mgr-&gt;workers.push_back(info);
+    return true;
+}</span>
+
+bool WorkerPool::removeWorker(const std::string &amp;managerName, const std::string &amp;workerId)
+<span style = "background-color:#dfd">{
+    ManagerEntry *mgr = findManager(managerName);
+    if (!mgr) {
+        m_lastError = "Manager '" + managerName + "' not found";</span>
+        return false;
+    }
+
+<span style = "background-color:#dfd">    for (size_t i = 0; i &lt; mgr-&gt;workers.size(); ++i) {
+        if (mgr-&gt;workers[i].id == workerId) {
+            mgr-&gt;workers.erase(mgr-&gt;workers.begin() + i);
+            return true;</span>
+        }
+    }
+
+<span style = "background-color:#dfd">    m_lastError = "Worker '" + workerId + "' not found in manager '" + managerName + "'";</span>
+<span style = "background-color:#fdd">    return false;</span>
+<span style = "background-color:#dfd">}</span>
+
+bool WorkerPool::updateWorker(const WorkerInfo &amp;info)
+<span style = "background-color:#dfd">{
+    ManagerEntry *mgr = findManager(info.managerName);
+    if (!mgr) {
+        m_lastError = "Manager '" + info.managerName + "' not found";</span>
+        return false;
+    }
+
+<span style = "background-color:#dfd">    for (auto &amp;w : mgr-&gt;workers) {
+        if (w.id == info.id) {
+            w = info;
+            return true;</span>
+        }
+    }
+
+<span style = "background-color:#dfd">    m_lastError = "Worker '" + info.id + "' not found";
+    return false;
+}</span>
+
+bool WorkerPool::hasWorker(const std::string &amp;managerName, const std::string &amp;workerId) const
+<span style = "background-color:#dfd">{
+    const ManagerEntry *mgr = findManagerConst(managerName);
+    if (!mgr) return false;</span>
+
+<span style = "background-color:#dfd">    for (const auto &amp;w : mgr-&gt;workers) {
+        if (w.id == workerId) return true;</span>
+    }
+<span style = "background-color:#dfd">    return false;
+}</span>
+
+int WorkerPool::workerCount(const std::string &amp;managerName) const
+<span style = "background-color:#dfd">{
+    if (managerName.empty()) {
+        return totalWorkerCount();</span>
+    }
+
+<span style = "background-color:#dfd">    const ManagerEntry *mgr = findManagerConst(managerName);
+    return mgr ? mgr-&gt;workers.size() : 0;
+}</span>
+
+int WorkerPool::totalWorkerCount() const
+<span style = "background-color:#dfd">{</span>
+    int count = 0;
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : m_managers) {
+        count += mgr.workers.size();</span>
+    }
+    return count;
+<span style = "background-color:#dfd">}</span>
+
+const std::vector&lt;WorkerInfo&gt;&amp; WorkerPool::workers(const std::string &amp;managerName) const
+<span style = "background-color:#dfd">{
+    static const std::vector&lt;WorkerInfo&gt; emptyList;
+    const ManagerEntry *mgr = findManagerConst(managerName);
+    return mgr ? mgr-&gt;workers : emptyList;
+}</span>
+
+std::vector&lt;ManagerInfo&gt; WorkerPool::managerInfos() const
+<span style = "background-color:#dfd">{
+    std::vector&lt;ManagerInfo&gt; infos;
+    for (const auto &amp;mgr : m_managers) {
+        infos.push_back(mgr.info);</span>
+    }
+    return infos;
+<span style = "background-color:#dfd">}</span>
+
+bool WorkerPool::isValid() const
+<span style = "background-color:#dfd">{
+    if (m_managers.empty()) {</span>
+        return false;  // Need at least one manager
+    }
+
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : m_managers) {
+        if (mgr.workers.empty()) {
+            return false;  // Each manager needs at least one worker</span>
+        }
+    }
+
+<span style = "background-color:#dfd">    return true;
+}</span>
+
+std::string WorkerPool::lastError() const
+<span style = "background-color:#dfd">{
+    return m_lastError;
+}</span>
+
+void WorkerPool::clear()
+<span style = "background-color:#dfd">{
+    m_managers.clear();
+    m_lastError.clear();
+}</span>
+
+WorkerPool::ManagerEntry* WorkerPool::findManager(const std::string &amp;managerName)
+<span style = "background-color:#dfd">{
+    for (auto &amp;mgr : m_managers) {
+        if (mgr.info.name == managerName) {
+            return &amp;mgr;</span>
+        }
+    }
+<span style = "background-color:#dfd">    return nullptr;
+}</span>
+
+const WorkerPool::ManagerEntry* WorkerPool::findManagerConst(const std::string &amp;managerName) const
+<span style = "background-color:#dfd">{
+    for (const auto &amp;mgr : m_managers) {
+        if (mgr.info.name == managerName) {
+            return &amp;mgr;</span>
+        }
+    }
+<span style = "background-color:#dfd">    return nullptr;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

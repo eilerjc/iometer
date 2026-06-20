@@ -1,0 +1,344 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtPageNetwork.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtPageNetwork.cpp -- "Network Targets" tab
+#include "QtPageNetwork.h"
+#include "QtIometerEngine.h"
+#include &lt;QHBoxLayout&gt;
+#include &lt;QVBoxLayout&gt;
+#include &lt;QGroupBox&gt;
+#include &lt;QTreeWidget&gt;
+#include &lt;QTreeWidgetItem&gt;
+#include &lt;QComboBox&gt;
+#include &lt;QSpinBox&gt;
+#include &lt;QCheckBox&gt;
+#include &lt;QLabel&gt;
+#include &lt;QApplication&gt;
+#include &lt;QStyle&gt;
+
+// =============================================================================
+
+QtPageNetwork::QtPageNetwork(QtIometerEngine *engine, QWidget *parent)
+<span style = "background-color:#dfd">    : QWidget(parent), m_engine(engine)
+{
+    setupUi();
+    connect(engine, &amp;QtIometerEngine::configChanged,       this, &amp;QtPageNetwork::refreshForEngine);
+    connect(engine, &amp;QtIometerEngine::managerConnected,    this, &amp;QtPageNetwork::onManagerConnected);
+    connect(engine, &amp;QtIometerEngine::managerDisconnected, this, &amp;QtPageNetwork::onManagerDisconnected);
+}</span>
+
+// =============================================================================
+// UI construction -- matches the original Network Targets tab layout
+// =============================================================================
+
+void QtPageNetwork::setupUi()
+<span style = "background-color:#dfd">{
+    auto *root = new QHBoxLayout(this);
+    root-&gt;setContentsMargins(6, 6, 6, 6);
+    root-&gt;setSpacing(6);</span>
+
+    // ---- Left: Targets group box --------------------------------------------
+<span style = "background-color:#dfd">    auto *targGroup = new QGroupBox("Targets");
+    auto *targLay   = new QVBoxLayout(targGroup);
+    targLay-&gt;setContentsMargins(4, 8, 4, 4);
+    m_targetTree = new QTreeWidget;
+    m_targetTree-&gt;setHeaderHidden(true);
+    m_targetTree-&gt;setRootIsDecorated(true);
+    m_targetTree-&gt;setUniformRowHeights(true);
+    targLay-&gt;addWidget(m_targetTree);
+    root-&gt;addWidget(targGroup, 1);</span>
+
+    // ---- Right: network parameters (stacked group boxes) --------------------
+<span style = "background-color:#dfd">    auto *rightLay = new QVBoxLayout;
+    rightLay-&gt;setSpacing(4);</span>
+
+    // Network Interface to Use for Connection
+<span style = "background-color:#dfd">    auto *nicGroup = new QGroupBox("Network Interface to Use for Connection");
+    auto *nicLay   = new QHBoxLayout(nicGroup);
+    nicLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_nicCombo = new QComboBox;
+    m_nicCombo-&gt;setMinimumWidth(160);
+    nicLay-&gt;addWidget(m_nicCombo);
+    nicLay-&gt;addStretch();
+    rightLay-&gt;addWidget(nicGroup);</span>
+
+    // Max # Outstanding Sends
+<span style = "background-color:#dfd">    auto *sendsGroup = new QGroupBox("Max # Outstanding Sends");
+    auto *sendsLay   = new QHBoxLayout(sendsGroup);
+    sendsLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_maxSends = new QSpinBox;
+    m_maxSends-&gt;setRange(1, 256);
+    m_maxSends-&gt;setValue(1);
+    m_maxSends-&gt;setFixedWidth(60);
+    sendsLay-&gt;addWidget(m_maxSends);
+    sendsLay-&gt;addWidget(new QLabel("per VI target"));
+    sendsLay-&gt;addStretch();
+    rightLay-&gt;addWidget(sendsGroup);</span>
+
+<span style = "background-color:#dfd">    rightLay-&gt;addStretch(1);</span>
+
+    // Test Connection Rate
+<span style = "background-color:#dfd">    auto *connGroup = new QGroupBox("Test Connection Rate");
+    auto *connLay   = new QHBoxLayout(connGroup);
+    connLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_testConnRateChk = new QCheckBox;
+    m_transPerConn    = new QSpinBox;
+    m_transPerConn-&gt;setRange(1, 100000);
+    m_transPerConn-&gt;setValue(1);
+    m_transPerConn-&gt;setFixedWidth(60);
+    m_transPerConn-&gt;setEnabled(false);
+    connLay-&gt;addWidget(m_testConnRateChk);
+    connLay-&gt;addWidget(m_transPerConn);
+    connLay-&gt;addWidget(new QLabel("Transactions per connection"));
+    connLay-&gt;addStretch();
+    rightLay-&gt;addWidget(connGroup);</span>
+
+<span style = "background-color:#dfd">    root-&gt;addLayout(rightLay, 1);</span>
+
+    // ---- Connections --------------------------------------------------------
+<span style = "background-color:#dfd">    connect(m_targetTree, &amp;QTreeWidget::itemChanged,</span>
+            this, &amp;QtPageNetwork::onTargetItemChanged);
+<span style = "background-color:#dfd">    connect(m_nicCombo, QOverload&lt;int&gt;::of(&amp;QComboBox::currentIndexChanged),</span>
+            this, &amp;QtPageNetwork::onNicComboChanged);
+<span style = "background-color:#dfd">    connect(m_maxSends, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged),</span>
+            this, &amp;QtPageNetwork::onMaxSendsChanged);
+<span style = "background-color:#dfd">    connect(m_testConnRateChk, &amp;QCheckBox::toggled,</span>
+            this, &amp;QtPageNetwork::onTestConnRateToggled);
+<span style = "background-color:#dfd">    connect(m_transPerConn, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged),</span>
+            this, &amp;QtPageNetwork::onTransPerConnChanged);
+
+<span style = "background-color:#dfd">    setParamsEnabled(false);
+}</span>
+
+// =============================================================================
+// Selection control (called by QtMainWindow::onWorkerTreeSelectionChanged)
+// =============================================================================
+
+void QtPageNetwork::clearSelection()
+<span style = "background-color:#dfd">{
+    m_selManagerName.clear();
+    m_selWorkerId.clear();
+    m_targetTree-&gt;clear();
+    setParamsEnabled(false);
+}</span>
+
+void QtPageNetwork::setSelectedManager(const QString &amp;mgrName)
+<span style = "background-color:#dfd">{
+    m_selManagerName = mgrName;
+    m_selWorkerId.clear();
+    populateTargetTree();
+    rebuildNicCombo();
+    setParamsEnabled(false);
+}</span>
+
+void QtPageNetwork::setSelectedWorker(const QString &amp;mgrName, const QString &amp;workerId)
+<span style = "background-color:#dfd">{
+    m_selManagerName = mgrName;
+    m_selWorkerId    = workerId;
+    populateTargetTree();
+    rebuildNicCombo();
+    loadWorkerParams();
+    setParamsEnabled(true);
+}</span>
+
+void QtPageNetwork::refreshForEngine()
+<span style = "background-color:#dfd">{</span>
+<span style = "background-color:#fdd">    // Ignore the configChanged our own edit just caused (we already hold the
+    // correct state); rebuilding here would delete the tree item / combo entry
+    // whose signal is still being processed.</span>
+<span style = "background-color:#dfd">    if (m_applyingEdit) return;
+    if (!m_selManagerName.isEmpty() &amp;&amp; !m_selWorkerId.isEmpty())
+        setSelectedWorker(m_selManagerName, m_selWorkerId);
+    else if (!m_selManagerName.isEmpty())
+        setSelectedManager(m_selManagerName);</span>
+<span style = "background-color:#fdd">    else</span>
+<span style = "background-color:#dfd">        clearSelection();
+}</span>
+
+<span style = "background-color:#dfd">void QtPageNetwork::onManagerConnected(const ManagerInfo &amp;)    { refreshForEngine(); }
+void QtPageNetwork::onManagerDisconnected(const QString &amp;)     { refreshForEngine(); }</span>
+
+// =============================================================================
+<span style = "background-color:#fdd">// Internal helpers
+// =============================================================================
+</span>
+void QtPageNetwork::populateTargetTree()
+<span style = "background-color:#dfd">{
+    m_updating = true;
+    m_targetTree-&gt;clear();</span>
+<span style = "background-color:#fdd">
+    // Build the set of network targets assigned to the selected worker</span>
+<span style = "background-color:#dfd">    QStringList assigned;
+    if (!m_selManagerName.isEmpty() &amp;&amp; !m_selWorkerId.isEmpty()) {
+        for (const auto &amp;mgr : m_engine-&gt;managers()) {
+            if (mgr.name != m_selManagerName.toStdString()) continue;
+            for (const auto &amp;w : mgr.workers) {
+                if (w.id == m_selWorkerId.toStdString() &amp;&amp; w.type == "Network") {
+                    for (const auto &amp;t : w.targets) assigned &lt;&lt; QString::fromStdString(t);</span>
+                    break;
+                }
+            }
+<span style = "background-color:#fdd">            break;
+        }</span>
+    }
+
+<span style = "background-color:#dfd">    const QIcon mgrIcon = QApplication::style()-&gt;standardIcon(QStyle::SP_ComputerIcon);
+    const QIcon nicIcon = QApplication::style()-&gt;standardIcon(QStyle::SP_DriveNetIcon);</span>
+
+<span style = "background-color:#fdd">    // Populate tree: one top-level item per manager, NIC children with checkboxes</span>
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (!mgr.connected) continue;</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">        auto *mgrItem = new QTreeWidgetItem(m_targetTree);
+        mgrItem-&gt;setText(0, QString::fromStdString(mgr.name));
+        mgrItem-&gt;setIcon(0, mgrIcon);
+        mgrItem-&gt;setFlags(mgrItem-&gt;flags() &amp; ~Qt::ItemIsUserCheckable);</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">        for (const auto &amp;nic : mgr.availableNetInterfaces) {
+            auto *nicItem = new QTreeWidgetItem(mgrItem);
+            nicItem-&gt;setText(0, QString::fromStdString(nic));
+            nicItem-&gt;setIcon(0, nicIcon);
+            nicItem-&gt;setFlags(nicItem-&gt;flags() | Qt::ItemIsUserCheckable);</span>
+<span style = "background-color:#fdd">            // Key: "managerName/nic"</span>
+<span style = "background-color:#dfd">            const QString key = QString::fromStdString(mgr.name + "/" + nic);
+            nicItem-&gt;setCheckState(0, assigned.contains(key) ? Qt::Checked : Qt::Unchecked);
+            nicItem-&gt;setData(0, Qt::UserRole, key);
+        }</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">        mgrItem-&gt;setExpanded(true);</span>
+    }
+<span style = "background-color:#dfd">    m_updating = false;
+}</span>
+<span style = "background-color:#fdd"></span>
+void QtPageNetwork::rebuildNicCombo()
+<span style = "background-color:#dfd">{
+    m_updating = true;
+    m_nicCombo-&gt;clear();</span>
+<span style = "background-color:#fdd">
+    // Show NICs on the selected manager as candidates for outgoing connections</span>
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName.toStdString()) continue;
+        for (const auto &amp;nic : mgr.availableNetInterfaces)
+            m_nicCombo-&gt;addItem(QString::fromStdString(nic));</span>
+        break;
+    }
+<span style = "background-color:#dfd">    m_updating = false;
+}</span>
+<span style = "background-color:#fdd">
+void QtPageNetwork::loadWorkerParams()</span>
+<span style = "background-color:#dfd">{
+    if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    m_updating = true;
+    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName.toStdString()) continue;
+        for (const auto &amp;w : mgr.workers) {
+            if (w.id != m_selWorkerId.toStdString()) continue;</span>
+<span style = "background-color:#fdd">            // Set NIC combo to match worker's networkInterface</span>
+<span style = "background-color:#dfd">            const int idx = m_nicCombo-&gt;findText(QString::fromStdString(w.networkInterface));
+            if (idx &gt;= 0) m_nicCombo-&gt;setCurrentIndex(idx);</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            m_maxSends-&gt;setValue(w.maxOutstandingSends);
+            m_testConnRateChk-&gt;setChecked(w.testConnRate);
+            m_transPerConn-&gt;setValue(w.transPerConn);
+            m_transPerConn-&gt;setEnabled(w.testConnRate);</span>
+<span style = "background-color:#fdd">            break;
+        }</span>
+        break;
+    }
+<span style = "background-color:#dfd">    m_updating = false;
+}</span>
+<span style = "background-color:#fdd">
+void QtPageNetwork::saveWorkerParams()</span>
+<span style = "background-color:#dfd">{
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName.toStdString()) continue;
+        for (auto w : mgr.workers) {
+            if (w.id != m_selWorkerId.toStdString()) continue;
+            w.networkInterface    = m_nicCombo-&gt;currentText().toStdString();
+            w.maxOutstandingSends = m_maxSends-&gt;value();
+            w.testConnRate        = m_testConnRateChk-&gt;isChecked();
+            w.transPerConn        = m_transPerConn-&gt;value();
+            m_applyingEdit = true;
+            m_engine-&gt;updateWorker(w);
+            m_applyingEdit = false;
+            return;</span>
+<span style = "background-color:#fdd">        }
+    }</span>
+<span style = "background-color:#dfd">}</span>
+<span style = "background-color:#fdd">
+void QtPageNetwork::setParamsEnabled(bool enabled)</span>
+<span style = "background-color:#dfd">{
+    m_nicCombo-&gt;setEnabled(enabled);
+    m_maxSends-&gt;setEnabled(enabled);
+    m_testConnRateChk-&gt;setEnabled(enabled);
+    m_transPerConn-&gt;setEnabled(enabled &amp;&amp; m_testConnRateChk-&gt;isChecked());
+}</span>
+<span style = "background-color:#fdd">
+// =============================================================================
+// Slots</span>
+// =============================================================================
+
+<span style = "background-color:#fdd">void QtPageNetwork::onTargetItemChanged(QTreeWidgetItem *item, int /*column*/)</span>
+<span style = "background-color:#dfd">{
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    if (!item || !(item-&gt;flags() &amp; Qt::ItemIsUserCheckable)) return;</span>
+
+<span style = "background-color:#fdd">    // Rebuild the assigned network targets from all check states</span>
+<span style = "background-color:#dfd">    QStringList assigned;
+    QTreeWidgetItemIterator it(m_targetTree);
+    while (*it) {
+        if (((*it)-&gt;flags() &amp; Qt::ItemIsUserCheckable) &amp;&amp;</span>
+<span style = "background-color:#fdd">            (*it)-&gt;checkState(0) == Qt::Checked) {</span>
+<span style = "background-color:#dfd">            assigned.append((*it)-&gt;data(0, Qt::UserRole).toString());</span>
+<span style = "background-color:#fdd">        }</span>
+<span style = "background-color:#dfd">        ++it;</span>
+<span style = "background-color:#fdd">    }
+</span>
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName.toStdString()) continue;
+        for (auto w : mgr.workers) {
+            if (w.id != m_selWorkerId.toStdString()) continue;
+            w.targets.clear();
+            for (const auto &amp;s : assigned) w.targets.push_back(s.toStdString());
+            m_applyingEdit = true;
+            m_engine-&gt;updateWorker(w);
+            m_applyingEdit = false;
+            return;</span>
+<span style = "background-color:#fdd">        }
+    }</span>
+<span style = "background-color:#dfd">}</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">void QtPageNetwork::onNicComboChanged(int)       { saveWorkerParams(); }
+void QtPageNetwork::onMaxSendsChanged(int)       { saveWorkerParams(); }</span>
+
+void QtPageNetwork::onTestConnRateToggled(bool checked)
+<span style = "background-color:#dfd">{
+    m_transPerConn-&gt;setEnabled(checked);
+    saveWorkerParams();
+}</span>
+
+<span style = "background-color:#dfd">void QtPageNetwork::onTransPerConnChanged(int)   { saveWorkerParams(); }</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

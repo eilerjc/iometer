@@ -1,0 +1,1114 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>AccessSpecList.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / AccessSpecList.cpp                                     ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the AccessSpecList class that       ## */
+/* ##               is in charge of keeping track of all the access       ## */
+/* ##               specifications available to the user.                 ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: - Each access spec is defined by a Test_Spec          ## */
+/* ##                 structure. There is always exactly one              ## */
+/* ##                 AccessSpecList object in an instance of Iometer     ## */
+/* ##                 (CGalileoApp::access_spec_list).                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2004-04-24 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Added a large set of Global Access Specifications   ## */
+/* ##                 that can be used as a starting point. The values    ## */
+/* ##                 was taken from the same ICF's provided by           ## */
+/* ##                 Richard Riggs.                                      ## */
+/* ##               2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "AccessSpecList.h"
+#include "GalileoApp.h"
+#include "GalileoView.h"
+#include "core/AccessSpecCatalog.h"	// shared smart-name formatting (iocore)
+#include "core/IcfDocument.h"	// shared ICF access-spec loader (iocore)
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+//
+// Initializing the pointer list.
+//
+AccessSpecList::AccessSpecList()
+<span style = "background-color:#dfd">{</span>
+	// Initialize the pointer array.
+<span style = "background-color:#dfd">	spec_list.SetSize(INITIAL_ARRAY_SIZE, ARRAY_GROW_STEP);</span>
+
+	// Insert the idle spec as the first in the row
+<span style = "background-color:#dfd">	InsertIdleSpec();</span>
+
+	// Insert a default spec that will be assigned
+	// (in former days, this one was assigned to all workers that log in)
+<span style = "background-color:#dfd">	Test_Spec *spec = New();</span>
+
+<span style = "background-color:#dfd">	strcpy(spec-&gt;name, "Default");
+	spec-&gt;default_assignment = FALSE;	// [AssignAll|AssignDisk|...]</span>
+
+	// Insert the default specifications
+	// (based on the file provided by Richard Riggs)
+<span style = "background-color:#dfd">	InsertDefaultSpecs();
+}</span>
+
+//
+// Inserts the idle spec.
+//
+void AccessSpecList::InsertIdleSpec()
+<span style = "background-color:#dfd">{</span>
+	// Set idle spec.
+<span style = "background-color:#dfd">	Test_Spec *spec = New();</span>
+
+<span style = "background-color:#dfd">	_snprintf(spec-&gt;name, MAX_NAME, IDLE_NAME);
+	spec-&gt;access[0].of_size = IOERROR;	// indicates the end of the spec.</span>
+	// Note that the end is the first
+	// line of the spec, making it
+	// empty.
+<span style = "background-color:#dfd">}</span>
+
+//
+// Inserts the different default specifications.
+//
+void AccessSpecList::InsertDefaultSpecs()
+<span style = "background-color:#dfd">{</span>
+	enum {ITER_ONE=0, ITER_ALL=1, ITER_MAX=2};
+	Test_Spec *spec;
+	int index = 0;
+<span style = "background-color:#dfd">	int iterations = 0;</span>
+
+	// Runs through 2 iterations, one for individual access specs, and one for the all-in-one
+<span style = "background-color:#dfd">	while (iterations &lt; ITER_MAX)</span>
+	{
+<span style = "background-color:#dfd">		spec = New(); </span>
+		index = 0;
+
+		if (iterations == ITER_ONE) _snprintf(spec-&gt;name, MAX_NAME, "512 B; 100%% Read; 0%% random");
+		else 	_snprintf(spec-&gt;name, MAX_NAME, "All in one");
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 512;
+		spec-&gt;access[index].reads = 100;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#ifndef IOMTR_SETTING_NO_OLD_ACCESS_SPEC
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "512 B; 75%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;</span>
+		spec-&gt;access[index].size = 512;
+		spec-&gt;access[index].reads = 75;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;
+		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;
+		spec-&gt;access[index].align = 0;
+		spec-&gt;access[index].reply = 0;</span>
+#endif
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "512 B; 50%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;</span>
+		spec-&gt;access[index].size = 512;
+		spec-&gt;access[index].reads = 50;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;
+		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#ifndef IOMTR_SETTING_NO_OLD_ACCESS_SPEC
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "512 B; 25%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 512;
+		spec-&gt;access[index].reads = 25;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+#endif
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "512 B; 0%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 512;</span>
+		spec-&gt;access[index].reads = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+	// 4096 Bytes / 4 Kilo Bytes
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB; 100%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;
+		spec-&gt;access[index].reads = 100;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#ifndef IOMTR_SETTING_NO_OLD_ACCESS_SPEC
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB; 75%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;
+		spec-&gt;access[index].reads = 75;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+#endif
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB; 50%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;
+		spec-&gt;access[index].reads = 50;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#ifndef IOMTR_SETTING_NO_OLD_ACCESS_SPEC
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB; 25%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;
+		spec-&gt;access[index].reads = 25;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+#endif
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB; 0%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;</span>
+		spec-&gt;access[index].reads = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#ifdef IOMTR_SETTING_USE_NEW_ACCESS_SPEC
+	// 4096 Bytes / 4 Kilo Bytes
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB aligned; 100%% Read; 100%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;
+		spec-&gt;access[index].reads = 100;
+		spec-&gt;access[index].random = 100;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;
+		spec-&gt;access[index].align = 4096;</span>
+		spec-&gt;access[index].reply = 0;
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB aligned; 50%% Read; 100%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;
+		spec-&gt;access[index].reads = 50;
+		spec-&gt;access[index].random = 100;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;
+		spec-&gt;access[index].align = 4096;</span>
+		spec-&gt;access[index].reply = 0;
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "4 KiB aligned; 0%% Read; 100%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 4096;</span>
+		spec-&gt;access[index].reads = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 100;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;
+		spec-&gt;access[index].align = 4096;</span>
+		spec-&gt;access[index].reply = 0;
+#endif
+	
+		// 16384 Bytes / 16 Kilo Bytes
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "16 KiB; 100%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 16384;
+		spec-&gt;access[index].reads = 100;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#ifndef IOMTR_SETTING_NO_OLD_ACCESS_SPEC
+		
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "16 KiB; 75%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 16384;
+		spec-&gt;access[index].reads = 75;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+#endif
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "16 KiB; 50%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 16384;
+		spec-&gt;access[index].reads = 50;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#ifndef IOMTR_SETTING_NO_OLD_ACCESS_SPEC
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "16 KiB; 25%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 16384;
+		spec-&gt;access[index].reads = 25;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+#endif
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "16 KiB; 0%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 16384;</span>
+		spec-&gt;access[index].reads = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+	// 32768 Bytes / 32 Kilo Bytes
+#ifndef IOMTR_SETTING_NO_OLD_ACCESS_SPEC
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "32 KiB; 100%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 32768;
+		spec-&gt;access[index].reads = 100;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "32 KiB; 75%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 32768;
+		spec-&gt;access[index].reads = 75;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "32 KiB; 50%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 32768;
+		spec-&gt;access[index].reads = 50;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "32 KiB; 25%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 32768;
+		spec-&gt;access[index].reads = 25;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "32 KiB; 0%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 32768;</span>
+		spec-&gt;access[index].reads = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+#endif
+
+#ifdef IOMTR_SETTING_USE_NEW_ACCESS_SPEC
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "64 KiB; 100%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 65536;
+		spec-&gt;access[index].reads = 100;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "64 KiB; 50%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 65536;
+		spec-&gt;access[index].reads = 50;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "64 KiB; 0%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 65536;</span>
+		spec-&gt;access[index].reads = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "256 KiB; 100%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 262144;
+		spec-&gt;access[index].reads = 100;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "256 KiB; 50%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 262144;
+		spec-&gt;access[index].reads = 50;</span>
+		spec-&gt;access[index].random = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].delay = 0;
+		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ONE) </span>
+		{ 
+<span style = "background-color:#dfd">			spec = New(); 
+			_snprintf(spec-&gt;name, MAX_NAME, "256 KiB; 0%% Read; 0%% random");
+		}
+		else index++;</span>
+
+<span style = "background-color:#dfd">		spec-&gt;access[index].of_size = 100;
+		spec-&gt;access[index].size = 262144;</span>
+		spec-&gt;access[index].reads = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].random = 0;</span>
+		spec-&gt;access[index].delay = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].burst = 1;</span>
+		spec-&gt;access[index].align = 0;
+<span style = "background-color:#dfd">		spec-&gt;access[index].reply = 0;</span>
+
+#endif  // #ifdef IOMTR_SETTING_USE_NEW_ACCESS_SPEC
+
+<span style = "background-color:#dfd">		if (iterations == ITER_ALL) </span>
+		{
+			// Terminate the spec for the all_in_one case
+<span style = "background-color:#dfd">			spec-&gt;access[++index].of_size = IOERROR;</span>
+
+			// Fix up the percent access for each entry based on the total
+			// as evenly as possible.
+<span style = "background-color:#dfd">			for (int i=0; i&lt;index; i++)</span>
+			{
+<span style = "background-color:#dfd">				if (100%index &amp;&amp; (i &lt; 100%index))
+					spec-&gt;access[i].of_size = 100/index + 1;</span>
+				else
+<span style = "background-color:#dfd">					spec-&gt;access[i].of_size = 100/index;</span>
+			}
+		}
+	
+<span style = "background-color:#dfd">		iterations++;</span>
+	} // while
+<span style = "background-color:#dfd">}</span>
+
+//
+// Removes all AccessSpecObjects form memory and removes all references 
+// from the pointer array.
+//
+AccessSpecList::~AccessSpecList()
+<span style = "background-color:#dfd">{
+	DeleteAll();
+}</span>
+
+//
+// Creates a new AccessSpecObject and adds a pointer to it to the end of
+// the pointer array.
+//
+Test_Spec *AccessSpecList::New()
+<span style = "background-color:#dfd">{
+	Test_Spec *spec = new Test_Spec;</span>
+
+<span style = "background-color:#dfd">	if (!spec)</span>
+		return NULL;
+	// Make the default new access spec
+<span style = "background-color:#dfd">	InitAccessSpecLine(&amp;(spec-&gt;access[0]));</span>
+	spec-&gt;access[1].of_size = IOERROR;
+
+	// Set the access spec to not load by default.
+	spec-&gt;default_assignment = FALSE;
+
+	// Name the new access spec.
+<span style = "background-color:#dfd">	NextUntitled(spec-&gt;name);</span>
+
+	// Add the new access spec to the end of the array.
+<span style = "background-color:#dfd">	spec_list.Add(spec);</span>
+
+	// Return the index in the pointer array of the newly added object's pointer.
+<span style = "background-color:#dfd">	return spec;
+}</span>
+
+//
+// Creates a copy of the specified access spec, and returns a copy.
+//
+Test_Spec *AccessSpecList::Copy(Test_Spec * source_spec)
+<span style = "background-color:#dfd">{</span>
+	int copy_number;
+<span style = "background-color:#dfd">	CString name;</span>
+	Test_Spec *spec;
+
+	// Create a new spec and check the validity of source_spec.
+<span style = "background-color:#dfd">	if (!(spec = New()) || IndexByRef(source_spec) == IOERROR)</span>
+		return NULL;
+
+	// Copy the source spec into the newly created one.
+<span style = "background-color:#dfd">	memcpy(spec, source_spec, sizeof Test_Spec);</span>
+
+	// Assign a unique name: Copy of 'name of source spec' ('unique copy number').
+<span style = "background-color:#dfd">	name.Format("Copy of %s", spec-&gt;name);
+	copy_number = 1;</span>
+	do {
+<span style = "background-color:#dfd">		snprintf(spec-&gt;name, MAX_NAME, "%s (%d)", (LPCTSTR)name, copy_number++);
+	} while (RefByName(spec-&gt;name) != spec);</span>
+
+<span style = "background-color:#dfd">	return spec;
+}</span>
+
+//
+// Deletes the specified Test_Spec object, as well as the related entry in 
+// the pointer array.  Also removes any reference that spec by any worker.
+//
+void AccessSpecList::Delete(Test_Spec * spec)
+<span style = "background-color:#dfd">{</span>
+	// Check for an invalid pointer.
+<span style = "background-color:#dfd">	if (IndexByRef(spec) == IOERROR)</span>
+		return;
+
+	// Remove any references to this access spec from the workers.
+<span style = "background-color:#dfd">	theApp.manager_list.RemoveAccessSpec(spec);</span>
+
+	// Remove the reference to the access spec from the array.
+<span style = "background-color:#dfd">	spec_list.RemoveAt(IndexByRef(spec));</span>
+
+	// Remove the access spec from memory.
+<span style = "background-color:#dfd">	delete spec;
+}</span>
+
+//
+// Deletes all the access spec objects and their related entries.
+//
+void AccessSpecList::DeleteAll()
+<span style = "background-color:#dfd">{
+	while (spec_list.GetSize()) {
+		delete spec_list[spec_list.GetUpperBound()];</span>
+
+<span style = "background-color:#dfd">		spec_list.RemoveAt(spec_list.GetUpperBound());</span>
+	}
+<span style = "background-color:#dfd">	theApp.manager_list.RemoveAllAccessSpecs();
+}</span>
+
+//
+// Returns the pointer to the access spec object specified by the index.
+//
+Test_Spec *AccessSpecList::Get(int index)
+<span style = "background-color:#dfd">{
+	if (index &gt;= 0 &amp;&amp; index &lt; spec_list.GetSize())
+		return spec_list[index];</span>
+	else
+<span style = "background-color:#dfd">		return NULL;
+}</span>
+
+//
+// Returns the number of entries in the array.
+//
+int AccessSpecList::Count()
+<span style = "background-color:#dfd">{
+	return (int)spec_list.GetSize();
+}</span>
+
+//
+// Returns a pointer to a spec of a given name, if it exists.
+//
+Test_Spec *AccessSpecList::RefByName(const char *check_name)
+<span style = "background-color:#dfd">{</span>
+	Test_Spec *spec;
+<span style = "background-color:#dfd">	int spec_count = (int)spec_list.GetSize();</span>
+
+<span style = "background-color:#dfd">	for (int s = 0; s &lt; spec_count; s++) {
+		spec = Get(s);
+		if (strcasecmp(spec-&gt;name, check_name) == 0)
+			return spec;</span>
+	}
+<span style = "background-color:#dfd">	return NULL;
+}</span>
+
+//
+// Returns the index of a spec given a reference to that spec.
+// This function is used to validate spec pointers.
+// Also used in Delete() to index into the array, and in 
+// Save() to determine which specs where running. 
+//
+int AccessSpecList::IndexByRef(const Test_Spec * spec)
+<span style = "background-color:#dfd">{
+	int spec_count = (int)spec_list.GetSize();</span>
+
+<span style = "background-color:#dfd">	for (int index = 0; index &lt; spec_count; index++) {
+		if (Get(index) == spec)
+			return index;</span>
+	}
+<span style = "background-color:#fdd">	return IOERROR;</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Saving the access specification list to a result file.
+// Saves only the currently active access specs.
+//
+BOOL AccessSpecList::SaveResults(ostream &amp; outfile)
+<span style = "background-color:#dfd">{</span>
+	int i, j;
+	int access_count, manager_count, worker_count, current_access_index;
+	Manager *mgr;
+	Worker *wkr;
+	BOOL *spec_active;
+	Test_Spec *spec;
+
+<span style = "background-color:#dfd">	outfile &lt;&lt; "'Access specifications" &lt;&lt; endl;</span>
+
+<span style = "background-color:#dfd">	access_count = Count();
+	spec_active = new BOOL[access_count];</span>
+
+	// Determine which access specs are active for the current test
+	// Start by marking all access specs inactive.
+<span style = "background-color:#dfd">	for (i = 1; i &lt; access_count; i++) {
+		spec_active[i] = FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	current_access_index = theApp.pView-&gt;GetCurrentAccessIndex();</span>
+	// Now go through all the workers and mark each worker's current access spec 
+	// as active, IF the worker is actually doing anything in this test.
+<span style = "background-color:#dfd">	manager_count = theApp.manager_list.ManagerCount();
+	for (i = 0; i &lt; manager_count; i++) {
+		mgr = theApp.manager_list.GetManager(i);
+		worker_count = mgr-&gt;WorkerCount();
+		for (j = 0; j &lt; worker_count; j++) {
+			wkr = mgr-&gt;GetWorker(j);
+			if (wkr-&gt;ActiveInCurrentTest()) {
+				spec_active[IndexByRef(wkr-&gt;GetAccessSpec(current_access_index))] = TRUE;</span>
+			}
+		}
+	}
+
+	// Save all the active access specs except the idle spec.
+<span style = "background-color:#dfd">	for (i = 1; i &lt; access_count; i++) {
+		if (!spec_active[i])</span>
+			continue;
+
+<span style = "background-color:#dfd">		spec = Get(i);</span>
+
+<span style = "background-color:#dfd">		outfile &lt;&lt; "'Access specification name,default assignment" &lt;&lt; endl;
+		outfile &lt;&lt; spec-&gt;name &lt;&lt; "," &lt;&lt; spec-&gt;default_assignment &lt;&lt; endl;</span>
+
+		// Write access specifications to a file, data comma separated.
+<span style = "background-color:#dfd">		outfile &lt;&lt; "'size,% of size,% reads,% random,delay,burst,align,reply" &lt;&lt; endl;</span>
+
+<span style = "background-color:#dfd">		for (int line_index = 0; line_index &lt; MAX_ACCESS_SPECS; line_index++)</span>
+		{
+<span style = "background-color:#dfd">			if (spec-&gt;access[line_index].of_size == IOERROR)</span>
+				break;
+
+<span style = "background-color:#dfd">			outfile</span>
+				&lt;&lt; spec-&gt;access[line_index].size &lt;&lt; ","
+				&lt;&lt; spec-&gt;access[line_index].of_size &lt;&lt; ","
+				&lt;&lt; spec-&gt;access[line_index].reads &lt;&lt; ","
+				&lt;&lt; spec-&gt;access[line_index].random &lt;&lt; ","
+				&lt;&lt; spec-&gt;access[line_index].delay &lt;&lt; ","
+				&lt;&lt; spec-&gt;access[line_index].burst &lt;&lt; ","
+				&lt;&lt; spec-&gt;access[line_index].align &lt;&lt; "," 
+				&lt;&lt; spec-&gt;access[line_index].reply &lt;&lt; ",";
+<span style = "background-color:#dfd">			outfile &lt;&lt; endl;</span>
+		}
+	}
+
+<span style = "background-color:#dfd">	outfile &lt;&lt; "'End access specifications" &lt;&lt; endl;</span>
+
+<span style = "background-color:#dfd">	delete [] spec_active;</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Saves the access specification list to a config file.
+// Saves ALL specs, whether they are active or not.
+// It is tempting to combine this with SaveResults, but changes to one should
+// not generally affect the other.  At one point, the output of these two
+// functions was identical, but there are differences now, and there will
+// continue to be more in the future.
+//
+BOOL AccessSpecList::SaveConfig(ostream &amp; outfile)
+<span style = "background-color:#dfd">{</span>
+	int i, line_index;
+<span style = "background-color:#dfd">	int access_count = Count();</span>
+	Test_Spec *spec;
+
+	// The 'ACCESS SPECIFICATIONS byte format is the shared writer
+	// (iocore::IcfWriter); this adapter gathers the live specs (skipping the idle
+	// spec 0) into the structs, keeping the default-assignment validation.
+<span style = "background-color:#dfd">	std::vector&lt;iocore::IcfAccessSpec&gt; specs;</span>
+
+<span style = "background-color:#dfd">	for (i = 1; i &lt; access_count; i++) {
+		spec = Get(i);</span>
+
+<span style = "background-color:#dfd">		iocore::IcfAccessSpec s;
+		s.name = spec-&gt;name;</span>
+
+<span style = "background-color:#dfd">		switch (spec-&gt;default_assignment) {
+		case AssignNone: s.defaultAssignment = 0; break;</span>
+<span style = "background-color:#fdd">		case AssignAll:  s.defaultAssignment = 1; break;
+		case AssignDisk: s.defaultAssignment = 2; break;
+		case AssignNet:  s.defaultAssignment = 3; break;</span>
+		default:
+<span style = "background-color:#fdd">			ErrorMessage("Error saving access specification list.  Access specification "</span>
+				     + (CString) spec-&gt;name + " has an illegal default assignment.");
+<span style = "background-color:#fdd">			return FALSE;</span>
+		}
+
+<span style = "background-color:#dfd">		for (line_index = 0; line_index &lt; MAX_ACCESS_SPECS; line_index++) {
+			if (spec-&gt;access[line_index].of_size == IOERROR)</span>
+				break;
+			iocore::IcfAccessSpecLine l;
+<span style = "background-color:#dfd">			l.size   = spec-&gt;access[line_index].size;</span>
+			l.ofSize = spec-&gt;access[line_index].of_size;
+<span style = "background-color:#dfd">			l.reads  = spec-&gt;access[line_index].reads;
+			l.random = spec-&gt;access[line_index].random;
+			l.delay  = spec-&gt;access[line_index].delay;
+			l.burst  = spec-&gt;access[line_index].burst;
+			l.align  = spec-&gt;access[line_index].align;
+			l.reply  = spec-&gt;access[line_index].reply;
+			s.lines.push_back(l);</span>
+		}
+
+<span style = "background-color:#dfd">		specs.push_back(s);
+	}</span>
+
+<span style = "background-color:#dfd">	iocore::IcfWriter::writeAccessSpecs(outfile, specs);</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Checks the config file version number and calls the appropriate load function.
+// Also handles the replace flag.
+//
+// If replace is TRUE, all access specs are removed before the restore,
+// otherwise, the loaded specs are merged with the preexisting specs.
+//
+BOOL AccessSpecList::LoadConfig(const CString &amp; infilename, BOOL replace)
+<span style = "background-color:#dfd">{
+	if (replace) {</span>
+		// Clear memory and display before loading accesses.
+<span style = "background-color:#dfd">		DeleteAll();
+		InsertIdleSpec();</span>
+	}
+
+	// Parsing (both the modern format and the pre-1998.05.21 numeric format,
+	// version-dispatched) is shared core logic (iocore::IcfDocument). This
+	// adapter applies the parsed specs to the live list with the same
+	// replace-by-name semantics as the old in-place parser, and replays the
+	// recorded MFC error dialogs.
+<span style = "background-color:#dfd">	iocore::IcfDocument doc((LPCTSTR) infilename);</span>
+
+<span style = "background-color:#dfd">	std::vector&lt;std::string&gt; existing;
+	for (int e = 0; e &lt; Count(); e++)
+		existing.push_back(Get(e)-&gt;name);</span>
+
+<span style = "background-color:#dfd">	std::vector&lt;iocore::IcfAccessSpec&gt; loaded;
+	const bool ok = doc.loadAccessSpecs(loaded, &amp;existing);</span>
+
+<span style = "background-color:#dfd">	for (size_t e = 0; e &lt; doc.errors().size(); e++)</span>
+<span style = "background-color:#fdd">		ErrorMessage(CString(doc.errors()[e].c_str()));</span>
+
+<span style = "background-color:#dfd">	if (!ok)</span>
+		return FALSE;
+
+	// Apply to the live list. A spec whose name matches an existing one
+	// replaces it in place (worker references stay valid), like before.
+<span style = "background-color:#dfd">	for (size_t s = 0; s &lt; loaded.size(); s++) {
+		const iocore::IcfAccessSpec &amp; ls = loaded[s];</span>
+
+<span style = "background-color:#dfd">		Test_Spec *spec = RefByName(ls.name.c_str());
+		if (!spec) {
+			spec = New();
+			if (!spec) {</span>
+<span style = "background-color:#fdd">				ErrorMessage("Error while loading file.  Out of memory.  "</span>
+					     "Error occured in AccessSpecList::LoadConfig()");
+				return FALSE;
+			}
+		}
+
+<span style = "background-color:#dfd">		_snprintf(spec-&gt;name, MAX_NAME, "%s", ls.name.c_str());
+		spec-&gt;default_assignment = ls.defaultAssignment;</span>
+
+<span style = "background-color:#dfd">		int line_index = 0;
+		for (size_t li = 0; li &lt; ls.lines.size() &amp;&amp; line_index &lt; MAX_ACCESS_SPECS; li++, line_index++) {
+			const iocore::IcfAccessSpecLine &amp; l = ls.lines[li];
+			spec-&gt;access[line_index].size    = l.size;
+			spec-&gt;access[line_index].of_size = l.ofSize;
+			spec-&gt;access[line_index].reads   = l.reads;
+			spec-&gt;access[line_index].random  = l.random;
+			spec-&gt;access[line_index].delay   = l.delay;
+			spec-&gt;access[line_index].burst   = l.burst;
+			spec-&gt;access[line_index].align   = l.align;
+			spec-&gt;access[line_index].reply   = l.reply;</span>
+		}
+		// Mark the end of the access spec.
+<span style = "background-color:#dfd">		if (line_index &lt;= MAX_ACCESS_SPECS)
+			spec-&gt;access[line_index].of_size = IOERROR;</span>
+	}
+
+	// Old-format files: if replacing, assign the default specs to workers.
+	// (New-format files don't need this - the Worker constructor assigns
+	// defaults and Manager::LoadConfig removes them when appropriate.)
+<span style = "background-color:#dfd">	if (doc.readVersion() &lt; 19980521 &amp;&amp; replace)
+		theApp.manager_list.AssignDefaultAccessSpecs();</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// This function initializes a line of an access spec to the default values.
+//
+void AccessSpecList::InitAccessSpecLine(Access_Spec * spec_line)
+<span style = "background-color:#dfd">{</span>
+	spec_line-&gt;size = 2048;
+	spec_line-&gt;of_size = 100;
+	spec_line-&gt;random = 100;
+	spec_line-&gt;reads = 67;
+<span style = "background-color:#dfd">	spec_line-&gt;delay = 0;
+	spec_line-&gt;burst = 1;
+	spec_line-&gt;align = spec_line-&gt;size;</span>
+	spec_line-&gt;reply = 0;
+<span style = "background-color:#dfd">}</span>
+
+//
+// This function will return an integer that will be the next sequential 
+// n for naming "Untitled n" access specs.
+//
+void AccessSpecList::NextUntitled(char *name)
+<span style = "background-color:#dfd">{
+	int next_number = 0;
+	CString current_name;</span>
+
+	// Counting the number of "Untitled *" specs.
+<span style = "background-color:#dfd">	for (int index = 0; index &lt; spec_list.GetSize(); index++) {
+		current_name = Get(index)-&gt;name;
+		if (current_name.Find("Untitled") == 0) {</span>
+			++next_number;
+		}
+	}
+
+	// Ensure that names are not duplicated.
+	do {
+		// We have the current number, so we add 1 for the next number.
+<span style = "background-color:#dfd">		snprintf(name, MAX_NAME, "Untitled %d", ++next_number);</span>
+	}
+<span style = "background-color:#dfd">	while (RefByName(name));
+}</span>
+
+//
+// Assigning a reasonable name to an older access spec that doesn't have one.
+//
+void AccessSpecList::SmartName(Test_Spec * spec)
+<span style = "background-color:#fdd">{
+	CString name;
+	int spec_number = 1;</span>
+	int name_size;
+
+	// Verify that smart naming is possible.
+<span style = "background-color:#fdd">	if (spec-&gt;access[1].of_size != IOERROR)</span>
+		return;		// use existing name
+
+	// Formatting is shared core logic (also used by the Qt GUI's library).
+<span style = "background-color:#fdd">	name = iocore::smartNameText((int)spec-&gt;access[0].size,</span>
+				     spec-&gt;access[0].random, spec-&gt;access[0].reads).c_str();
+
+	// Test to ensure no duplicate names
+<span style = "background-color:#fdd">	name_size = name.GetLength();
+	while (RefByName((LPCTSTR) name)) {
+		name.Format("%s %d", name.Left(name_size), ++spec_number);</span>
+	}
+<span style = "background-color:#fdd">	snprintf(spec-&gt;name, MAX_NAME, "%s", (LPCTSTR)name);
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,728 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>WorkerView.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / WorkerView.cpp                                         ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CWorkerView class, which is     ## */
+/* ##               responsible for the "Topology" pane in Iometer's      ## */
+/* ##               main window.                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "ManagerList.h"
+#include "WorkerView.h"
+#include "GalileoView.h"
+#include "resource.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CWorkerView dialog
+
+CWorkerView::CWorkerView(CWnd * pParent /*=NULL*/ )
+<span style = "background-color:#dfd">:  CDialog(CWorkerView::IDD, pParent)
+{</span>
+	//{{AFX_DATA_INIT(CWorkerView)
+	// NOTE: the ClassWizard will add member initialization here
+	//}}AFX_DATA_INIT
+<span style = "background-color:#dfd">	selected_type = IOERROR;
+	editing_label = FALSE;
+	old_label_name = NULL;
+}</span>
+
+void CWorkerView::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CWorkerView)
+<span style = "background-color:#dfd">	DDX_Control(pDX, TWorkers, m_TWorkers);</span>
+	//}}AFX_DATA_MAP
+}
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CWorkerView, CDialog)</span>
+ON_WM_CONTEXTMENU()
+    //{{AFX_MSG_MAP(CWorkerView)
+    ON_NOTIFY(TVN_SELCHANGED, TWorkers, OnSelchangedTWorkers)
+    ON_NOTIFY(TVN_SELCHANGING, TWorkers, OnSelchangingTWorkers)
+    ON_NOTIFY(TVN_ENDLABELEDIT, TWorkers, OnEndlabeleditTWorkers)
+    ON_NOTIFY(TVN_BEGINDRAG, TWorkers, OnBegindragTWorkers)
+    ON_NOTIFY(NM_RCLICK, TWorkers, OnRclickTWorkers)
+ON_NOTIFY(TVN_BEGINLABELEDIT, TWorkers, OnBeginlabeleditTWorkers)
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+/////////////////////////////////////////////////////////////////////////////
+// CWorkerView message handlers
+//
+// Retrieving a pointer to a specified manager item in the view.
+//
+HTREEITEM CWorkerView::GetManager(Manager * manager)
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM hmanager;
+
+	// Get the first manager
+<span style = "background-color:#dfd">	hmanager = m_TWorkers.GetChildItem(hall_managers);</span>
+
+	// Find the referenced manager.
+<span style = "background-color:#dfd">	while (m_TWorkers.GetItemData(hmanager) != (DWORD_PTR) manager)
+		hmanager = m_TWorkers.GetNextItem(hmanager, TVGN_NEXT);</span>
+
+	return hmanager;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Retrieving a pointer to a specified worker item in the view.
+//
+HTREEITEM CWorkerView::GetWorker(Worker * worker)
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM hworker;
+
+	// Get the first worker.
+<span style = "background-color:#dfd">	hworker = m_TWorkers.GetChildItem(GetManager(worker-&gt;manager));</span>
+
+	// Loop through manager's workers until we find the correct one.
+<span style = "background-color:#dfd">	while (m_TWorkers.GetItemData(hworker) != (DWORD_PTR) worker)</span>
+<span style = "background-color:#fdd">		hworker = m_TWorkers.GetNextSiblingItem(hworker);</span>
+
+	return hworker;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Return the type of the selected worker.
+//
+TargetType CWorkerView::GetSelectedWorkerType()
+<span style = "background-color:#dfd">{</span>
+	// Getting the type of the currently selected worker, if any.
+<span style = "background-color:#dfd">	if (selected_type != WORKER)
+		return InvalidType;</span>
+
+<span style = "background-color:#dfd">	return GetSelectedWorker()-&gt;Type();
+}</span>
+
+//
+// Select the specified item in the worker tree view and scroll it into view.
+// If both mgr and wkr params are NULL, "All Managers" will be selected.
+// If mgr points to a valid manager and wkr is NULL, the manager will be selected.
+// If mgr and wkr are both defined, the appropriate worker on the specified
+// manager will be selected.
+//
+void CWorkerView::SelectItem(Manager * mgr, Worker * wkr)
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM item;
+
+<span style = "background-color:#dfd">	if (mgr) {</span>
+<span style = "background-color:#fdd">		if (wkr) {</span>
+			// The bar is monitoring a worker on the specified manager.
+			// Find the HTREEITEM corresponding to the worker.
+<span style = "background-color:#fdd">			item = GetWorker(wkr);
+		} else {</span>
+			// The bar is monitoring a manager.
+			// Find the HTREEITEM corresponding to the manager.
+<span style = "background-color:#fdd">			item = GetManager(mgr);</span>
+		}
+<span style = "background-color:#fdd">	} else {</span>
+		// The bar is monitoring "All Managers".
+		// Find the HTREEITEM corresponding to "All Managers".
+<span style = "background-color:#dfd">		item = m_TWorkers.GetRootItem();</span>
+	}
+
+	// Select the item and scroll it into view.
+<span style = "background-color:#dfd">	m_TWorkers.Select(item, TVGN_CARET);
+	m_TWorkers.EnsureVisible(item);
+}</span>
+
+//
+// Adding a the specified manager to the display.
+//
+void CWorkerView::AddManager(Manager * manager)
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM hmanager;
+
+	// Insert a new item into the view and sort the view by name.
+<span style = "background-color:#dfd">	hmanager = m_TWorkers.InsertItem(manager-&gt;name, WORKER_ICON_MANAGER, WORKER_ICON_MANAGER,</span>
+					 hall_managers, TVI_SORT);
+	// Store the pointer to the manager in the newly inserted item's data member.
+<span style = "background-color:#dfd">	m_TWorkers.SetItemData(hmanager, (DWORD_PTR) manager);
+	m_TWorkers.RedrawWindow(NULL, NULL, RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_ERASE);</span>
+
+	// Update the network target list.
+<span style = "background-color:#dfd">	theApp.pView-&gt;m_pPageNetwork-&gt;ShowData();</span>
+
+	// Update the Assigned Access Specs listbox.
+<span style = "background-color:#dfd">	theApp.pView-&gt;m_pPageAccess-&gt;ShowAssignedAccess();
+}</span>
+
+//
+// Adding the specified worker to the display.
+//
+void CWorkerView::AddWorker(Worker * worker)
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM hmanager, hworker;
+	int icon;
+
+	// Get the handle to the tree view entry of the worker's manager.
+<span style = "background-color:#dfd">	hmanager = GetManager(worker-&gt;manager);</span>
+
+<span style = "background-color:#dfd">	if (IsType(worker-&gt;Type(), GenericDiskType))
+		icon = WORKER_ICON_DISKWORKER;
+	else if (IsType(worker-&gt;Type(), GenericServerType))
+		icon = WORKER_ICON_NETSERVER;</span>
+<span style = "background-color:#fdd">	else if (IsType(worker-&gt;Type(), GenericClientType))</span>
+		icon = WORKER_ICON_NETCLIENT;
+	else
+		icon = WORKER_ICON_MANAGER;
+
+	// Add the worker to the manager in the tree view.
+<span style = "background-color:#dfd">	hworker = m_TWorkers.InsertItem(worker-&gt;name, icon, icon, hmanager, TVI_LAST);
+	m_TWorkers.SetItemData(hworker, (DWORD_PTR) worker);
+	m_TWorkers.RedrawWindow();</span>
+
+	// Update the Assigned Access Specs listbox.
+<span style = "background-color:#dfd">	theApp.pView-&gt;m_pPageAccess-&gt;ShowAssignedAccess();
+}</span>
+
+//
+// Returning the pointer to a selected manager or selected
+// worker's manager.
+//
+Manager *CWorkerView::GetSelectedManager()
+<span style = "background-color:#dfd">{
+	switch (selected_type) {</span>
+	case MANAGER:
+<span style = "background-color:#dfd">		return (Manager *) m_TWorkers.GetItemData(m_TWorkers.GetSelectedItem());</span>
+	case WORKER:
+<span style = "background-color:#dfd">		return GetSelectedWorker()-&gt;manager;</span>
+	default:
+		// No manager or worker was selected.
+<span style = "background-color:#dfd">		return NULL;</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Returning the index of a selected manager or selected
+// worker's manager.
+//
+int CWorkerView::GetSelectedManagerIndex()
+<span style = "background-color:#fdd">{
+	switch (selected_type) {</span>
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		return ALL_MANAGERS;</span>
+	case MANAGER:
+	case WORKER:
+		// Return the index of the currently selected manager or selected
+		// worker's manager.
+<span style = "background-color:#fdd">		return GetSelectedManager()-&gt;GetIndex();</span>
+	default:
+		// No item was selected.  Returning an error.
+<span style = "background-color:#fdd">		return IOERROR;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Returning the index of a selected worker.
+//
+Worker *CWorkerView::GetSelectedWorker()
+<span style = "background-color:#dfd">{
+	if (selected_type != WORKER)
+		return NULL;</span>
+
+<span style = "background-color:#dfd">	return (Worker *) m_TWorkers.GetItemData(m_TWorkers.GetSelectedItem());
+}</span>
+
+//
+// Returning the index of a selected worker.
+//
+int CWorkerView::GetSelectedWorkerIndex()
+<span style = "background-color:#fdd">{
+	if (selected_type != WORKER)
+		return IOERROR;</span>
+
+<span style = "background-color:#fdd">	return GetSelectedWorker()-&gt;GetIndex();
+}</span>
+
+//
+// Clearing display contents.
+//
+void CWorkerView::Reset()
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM hmanager;
+
+	// Lock the window.
+
+<span style = "background-color:#dfd">	m_TWorkers.SelectItem(hall_managers);
+	while (hmanager = m_TWorkers.GetChildItem(hall_managers)) {
+		m_TWorkers.DeleteItem(hmanager);</span>
+	}
+<span style = "background-color:#dfd">	m_TWorkers.RedrawWindow();
+}</span>
+
+//
+// Removing the selected item from the GUI.
+//
+void CWorkerView::RemoveSelectedItem()
+<span style = "background-color:#dfd">{</span>
+	// Removing selected manager or worker.
+	// First make sure that a manager or worker was selected.
+<span style = "background-color:#dfd">	switch (selected_type) {</span>
+	case IOERROR:
+		break;
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		theApp.manager_list.RemoveAllManagers();</span>
+		break;
+	case MANAGER:
+<span style = "background-color:#fdd">		RemoveManager(GetSelectedManager());</span>
+		break;
+	case WORKER:
+<span style = "background-color:#dfd">		RemoveWorker(GetSelectedWorker());</span>
+		break;
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Removing manager indicated by index from the display.
+// Update managers with indexes greater than the one removed.
+// This function must be called before removing the manager from 
+// the manager list.
+//
+void CWorkerView::RemoveManager(Manager * manager)
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hworker, hmanager;
+
+<span style = "background-color:#fdd">	hmanager = GetManager(manager);</span>
+	// Remove the manager's workers and associated net clients.
+<span style = "background-color:#fdd">	while (hworker = m_TWorkers.GetChildItem(hmanager)) {
+		RemoveWorker((Worker *) m_TWorkers.GetItemData(hworker));</span>
+	}
+
+	// Remove the indicated manager from the display.
+<span style = "background-color:#fdd">	m_TWorkers.DeleteItem(hmanager);
+	m_TWorkers.RedrawWindow(NULL, NULL, RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_ERASE);
+	theApp.pView-&gt;m_pPageNetwork-&gt;RemoveManager(manager);</span>
+
+	// Remove the indicated manager from memory.
+<span style = "background-color:#fdd">	theApp.manager_list.RemoveManager(manager-&gt;GetIndex());
+}</span>
+
+//
+// Remove worker from indicated manager.  Update indexes for other
+// workers.  This function must be called before removing the worker
+// from the list of workers.
+//
+void CWorkerView::RemoveWorker(Worker * worker)
+<span style = "background-color:#dfd">{</span>
+	// Get the worker tree item.
+<span style = "background-color:#dfd">	HTREEITEM hworker = GetWorker(worker);</span>
+
+	// If removing a server with an active partner, remove partner as well.
+<span style = "background-color:#dfd">	if (IsType(worker-&gt;Type(), GenericServerType) &amp;&amp; worker-&gt;net_partner) {</span>
+		// Call RemoveWorker recursively to remove the NetClient from the GUI.
+<span style = "background-color:#fdd">		RemoveWorker(worker-&gt;net_partner);</span>
+	}
+	// Remove the indicated worker from memory.
+<span style = "background-color:#dfd">	worker-&gt;manager-&gt;RemoveWorker(worker-&gt;GetIndex());</span>
+
+	// Remove the indicated worker from the display.
+<span style = "background-color:#dfd">	m_TWorkers.DeleteItem(hworker);
+	m_TWorkers.RedrawWindow();</span>
+
+	// Reset the results display tab to its initial state.
+<span style = "background-color:#dfd">	theApp.pView-&gt;m_pPageDisplay-&gt;Reset();
+}</span>
+
+//
+// A new worker or manager is selected.  Update the display.
+//
+void CWorkerView::OnSelchangedTWorkers(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{</span>
+	NM_TREEVIEW *pNMTreeView = (NM_TREEVIEW *) pNMHDR;
+	HTREEITEM item;
+
+	// If an item is selected, finding out what it is.
+	// Peforming any needed updates after changing selection.
+<span style = "background-color:#dfd">	item = m_TWorkers.GetSelectedItem();</span>
+	// Is the item selected is all managers?
+<span style = "background-color:#dfd">	if (item == hall_managers) {
+		selected_type = ALL_MANAGERS;</span>
+		theApp.pView-&gt;ChangedSelection();
+<span style = "background-color:#dfd">	}</span>
+	// If the item's parent is all managers, the item is a manager.
+<span style = "background-color:#dfd">	else if (m_TWorkers.GetParentItem(item) == hall_managers) {
+		selected_type = MANAGER;</span>
+		theApp.pView-&gt;ChangedSelection();
+<span style = "background-color:#dfd">	} else {</span>
+		// Item is a worker.
+<span style = "background-color:#dfd">		selected_type = WORKER;</span>
+		theApp.pView-&gt;ChangedSelection();
+	}
+	*pResult = 0;
+<span style = "background-color:#dfd">}</span>
+
+void CWorkerView::OnSelchangingTWorkers(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{</span>
+	// Peforming any needed updates before changing selection.
+<span style = "background-color:#dfd">	theApp.pView-&gt;ChangingSelection();</span>
+
+<span style = "background-color:#dfd">	*pResult = 0;
+}</span>
+
+//
+// Mark that the user has started editing a label.
+//
+void CWorkerView::OnBeginlabeleditTWorkers(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+
+	TV_DISPINFO *pTVDispInfo = (TV_DISPINFO *) pNMHDR;
+
+<span style = "background-color:#fdd">	editing_label = TRUE;</span>
+
+	// Record the current label name and mark that we're editing the name.
+<span style = "background-color:#fdd">	if (!old_label_name) {
+		if (!(old_label_name = new CString)) {
+			ErrorMessage("Unable to allocate memory to store current label name."</span>
+				     "  Modifications cannot be undone.");
+			return;
+		}
+	}
+<span style = "background-color:#fdd">	*old_label_name = m_TWorkers.GetItemText(m_TWorkers.GetSelectedItem());</span>
+
+<span style = "background-color:#fdd">	*pResult = 0;
+}</span>
+
+//
+// User renamed one of the workers.  Updating the information in
+// the worker list.
+//
+void CWorkerView::OnEndlabeleditTWorkers(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	TV_DISPINFO *pTVDispInfo = (TV_DISPINFO *) pNMHDR;
+<span style = "background-color:#fdd">	CString new_name = pTVDispInfo-&gt;item.pszText;</span>
+
+	// Don't allow renaming of "All Managers" or network clients.
+	if (pTVDispInfo-&gt;item.mask &amp; TVIF_TEXT &amp;&amp; (selected_type == MANAGER || selected_type == WORKER)
+<span style = "background-color:#fdd">	    &amp;&amp; !IsType(GetSelectedWorkerType(), GenericClientType)) {</span>
+		// Don't allow any leading or trailing spaces.
+<span style = "background-color:#fdd">		new_name.TrimLeft();
+		new_name.TrimRight();</span>
+
+		// It's okay to put the string back into the array of unknown
+		// size because we know we have not lengthened the string.
+<span style = "background-color:#fdd">		strcpy(pTVDispInfo-&gt;item.pszText, (LPCTSTR) new_name);</span>
+
+<span style = "background-color:#fdd">		if (!new_name.IsEmpty()) {</span>
+			// New name is non-empty; change it.  (If new name is an empty string, 
+			// do nothing -- old name remains unchanged.)
+
+<span style = "background-color:#fdd">			if (selected_type == WORKER) {</span>
+				// Modify worker's name.
+<span style = "background-color:#fdd">				strcpy(GetSelectedWorker()-&gt;name, pTVDispInfo-&gt;item.pszText);</span>
+
+				// Assign disambiguating integer identifiers to same-named managers.
+<span style = "background-color:#fdd">				GetSelectedManager()-&gt;IndexWorkers();
+			} else {</span>
+				// Modify manager's name.
+<span style = "background-color:#fdd">				strcpy(GetSelectedManager()-&gt;name, pTVDispInfo-&gt;item.pszText);
+				theApp.pView-&gt;m_pPageNetwork-&gt;ShowData();</span>
+
+				// Assign disambiguating integer identifiers to same-named managers.
+<span style = "background-color:#fdd">				theApp.manager_list.IndexManagers();</span>
+			}
+
+			// Changing name of selected item.
+<span style = "background-color:#fdd">			m_TWorkers.SetItemText(m_TWorkers.GetSelectedItem(), pTVDispInfo-&gt;item.pszText);</span>
+
+			// See if a network server worker is selected.
+<span style = "background-color:#fdd">			if (IsType(GetSelectedWorkerType(), GenericServerType)) {
+				Worker *server = GetSelectedWorker();</span>
+
+				// See if this server has a client worker assigned to it.
+<span style = "background-color:#fdd">				if (server-&gt;net_partner) {</span>
+					// Change the worker's name.
+<span style = "background-color:#fdd">					strcpy(server-&gt;net_partner-&gt;name,</span>
+					       "[" + (CString) pTVDispInfo-&gt;item.pszText + "]");
+
+					// Update the tree control to reflect the new name.
+<span style = "background-color:#fdd">					m_TWorkers.SetItemText(GetWorker(server-&gt;net_partner),</span>
+							       server-&gt;net_partner-&gt;name);
+				}
+			}
+			// Re-sort the manager list.
+<span style = "background-color:#fdd">			m_TWorkers.SortChildren(m_TWorkers.GetRootItem());</span>
+
+			// Update the Results Display page.
+<span style = "background-color:#fdd">			theApp.pView-&gt;m_pPageDisplay-&gt;Update();</span>
+		}
+	}
+
+<span style = "background-color:#fdd">	editing_label = FALSE;
+	if (old_label_name) {
+		delete old_label_name;</span>
+
+<span style = "background-color:#fdd">		old_label_name = NULL;</span>
+	}
+<span style = "background-color:#fdd">	*pResult = 0;
+}</span>
+
+LRESULT CWorkerView::DefWindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+<span style = "background-color:#dfd">{
+	if (message == WM_WINDOWPOSCHANGING)
+		((WINDOWPOS *) lParam)-&gt;flags =</span>
+		    ((WINDOWPOS *) lParam)-&gt;flags &amp; (0xffffffff ^ SWP_NOACTIVATE) &amp; (0xffffffff ^ SWP_HIDEWINDOW);
+<span style = "background-color:#dfd">	return CDialog::DefWindowProc(message, wParam, lParam);</span>
+}
+
+BOOL CWorkerView::PreTranslateMessage(MSG * pMsg)
+<span style = "background-color:#dfd">{</span>
+	// CG: This block was added by the Pop-up Menu component
+	{
+		// Shift+F10: show pop-up menu.
+		if ((((pMsg-&gt;message == WM_KEYDOWN || pMsg-&gt;message == WM_SYSKEYDOWN) &amp;&amp;	// If we hit a key and
+<span style = "background-color:#dfd">		      (pMsg-&gt;wParam == VK_F10) &amp;&amp; (GetKeyState(VK_SHIFT) &amp; ~1)) != 0) ||	// it's Shift+F10 OR</span>
+		    (pMsg-&gt;message == WM_CONTEXTMENU))	// Natural keyboard key
+		{
+<span style = "background-color:#fdd">			CRect rect;</span>
+
+<span style = "background-color:#fdd">			GetClientRect(rect);
+			ClientToScreen(rect);</span>
+
+			CPoint point = rect.TopLeft();
+
+			point.Offset(5, 5);
+<span style = "background-color:#fdd">			OnContextMenu(NULL, point);</span>
+
+<span style = "background-color:#fdd">			return TRUE;</span>
+		}
+	}
+
+<span style = "background-color:#dfd">	return CDialog::PreTranslateMessage(pMsg);
+}</span>
+
+void CWorkerView::OnBegindragTWorkers(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	// check that input parameter is valid
+<span style = "background-color:#fdd">	if (!pNMHDR) {</span>
+		return;
+	}
+	// Select the item to drag.
+	NM_TREEVIEW *pNMTreeView = (NM_TREEVIEW *) pNMHDR;
+
+<span style = "background-color:#fdd">	m_TWorkers.SelectItem(pNMTreeView-&gt;itemNew.hItem);</span>
+
+	// Check to see if dragging is apropriate.
+<span style = "background-color:#fdd">	if (theApp.pView-&gt;m_pPropSheet-&gt;GetActiveIndex() == DISPLAY_PAGE) {</span>
+		CPoint point;
+
+<span style = "background-color:#fdd">		theApp.pView-&gt;dragging = TRUE;	// Set flag indicating that a drag operation is underway.</span>
+
+		// set hot spot to middle of 16x16 icon
+		point.x = 8;
+		point.y = 8;
+
+		// set drag icon to icon of current selection
+<span style = "background-color:#fdd">		theApp.pView-&gt;p_DragImage = m_TWorkers.CreateDragImage(pNMTreeView-&gt;itemNew.hItem);
+		theApp.pView-&gt;p_DragImage-&gt;BeginDrag(0, point);</span>
+	}
+	*pResult = 0;
+<span style = "background-color:#fdd">}</span>
+
+int CWorkerView::GetSelectedType()
+<span style = "background-color:#dfd">{
+	return selected_type;
+}</span>
+
+//
+// This function selects the manager that the user just right clicked on.
+// It removes anoying flickering when right clicking on a manager.
+// 
+void CWorkerView::OnRclickTWorkers(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	CPoint point;</span>
+	TV_HITTESTINFO test_info;
+
+	// Get the cursor position.
+<span style = "background-color:#fdd">	GetCursorPos(&amp;point);
+	test_info.pt = point;
+	m_TWorkers.ScreenToClient(&amp;(test_info.pt));</span>
+	// Check to see whether the cursor is on an item, and if the item a manager.
+<span style = "background-color:#fdd">	m_TWorkers.HitTest(&amp;test_info);
+	if (test_info.hItem) {
+		if (m_TWorkers.GetParentItem(test_info.hItem) &amp;&amp;</span>
+		    !m_TWorkers.GetParentItem(m_TWorkers.GetParentItem(test_info.hItem))) {
+			// Item is a manager, select it.
+<span style = "background-color:#fdd">			m_TWorkers.SelectItem(test_info.hItem);</span>
+			// CG: This function was added by the Pop-up Menu component
+<span style = "background-color:#fdd">			CMenu menu;</span>
+
+<span style = "background-color:#fdd">			VERIFY(menu.LoadMenu(CG_IDR_POPUP_WORKER_VIEW));</span>
+
+<span style = "background-color:#fdd">			CMenu *pPopup = menu.GetSubMenu(0);</span>
+
+			ASSERT(pPopup != NULL);
+
+			// Get the first non-child window.
+			CWnd *pWndPopupOwner = this;
+
+<span style = "background-color:#fdd">			while (pWndPopupOwner-&gt;GetStyle() &amp; WS_CHILD)
+				pWndPopupOwner = pWndPopupOwner-&gt;GetParent();</span>
+
+			// Save the item so that the user can refresh.
+<span style = "background-color:#fdd">			theApp.pView-&gt;right_clicked_item = test_info.hItem;</span>
+
+<span style = "background-color:#fdd">			pPopup-&gt;TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, point.x, point.y, pWndPopupOwner);
+		}</span>
+	}
+	*pResult = 0;
+<span style = "background-color:#fdd">}</span>
+
+void CWorkerView::Initialize()
+<span style = "background-color:#dfd">{</span>
+	// Associate the image list with the worker tree control.
+<span style = "background-color:#dfd">	m_ImageList.Create(IDB_WORKER_ICONS, WORKER_ICON_SIZE, WORKER_ICON_EXPAND, WORKER_ICON_BGCOLOR);
+	m_TWorkers.SetImageList(&amp;m_ImageList, TVSIL_NORMAL);</span>
+
+	// Insert all managers item at the root of the tree view.
+<span style = "background-color:#dfd">	hall_managers = m_TWorkers.InsertItem("All Managers",</span>
+					      WORKER_ICON_ALLMGRS, WORKER_ICON_ALLMGRS, TVI_ROOT, TVI_SORT);
+
+	// Expand the all managers item so that managers will be visible.
+<span style = "background-color:#dfd">	m_TWorkers.SetItemState(hall_managers, TVIS_EXPANDED, TVIS_EXPANDED);</span>
+
+	// Set the All Managers item's data.
+<span style = "background-color:#dfd">	m_TWorkers.SetItemData(hall_managers, (DWORD) NULL);</span>
+
+	// Select all managers by default.
+<span style = "background-color:#dfd">	m_TWorkers.SelectItem(hall_managers);
+}</span>
+
+//
+// Since CWorkerView is based on the Dialog class, the OnOK handler is called
+// whenever the user presses the &lt;Enter&gt; key.  The &lt;Enter&gt; key being pressed
+// will not cause any of the keyboard event handlers to be called.
+//
+void CWorkerView::OnOK()
+<span style = "background-color:#dfd">{</span>
+	// Only trap the enter key if we're editing a label.
+<span style = "background-color:#dfd">	if (!editing_label)</span>
+		return;
+
+	// Set the focus to the tree control to end the editing session.
+	// This will remove it from the temporary edit control.
+<span style = "background-color:#fdd">	m_TWorkers.SetFocus();</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Since CWorkerView is based on the Dialog class, the OnCancel handler is 
+// called whenever the user presses the &lt;Esc&gt; key.  The &lt;Esc&gt; key being pressed
+// will not cause any of the keyboard event handlers to be called.
+//
+void CWorkerView::OnCancel()
+<span style = "background-color:#fdd">{</span>
+	CEdit *label_edit;
+
+	// Only trap the escape key if we're editing a label and we know its
+	// original value.
+<span style = "background-color:#fdd">	if (!editing_label || !old_label_name)</span>
+		return;
+
+	// Set the label to the original text.
+<span style = "background-color:#fdd">	if (!(label_edit = m_TWorkers.GetEditControl())) {
+		ErrorMessage("Unable to retrieve edit box used to modify label in " "CWorkerView::OnCancel().");</span>
+		return;
+	}
+<span style = "background-color:#fdd">	label_edit-&gt;SetWindowText(*old_label_name);</span>
+
+	// Set the focus to the tree control to end the editing session.
+	// This will remove it from the temporary edit control.
+<span style = "background-color:#fdd">	m_TWorkers.SetFocus();
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

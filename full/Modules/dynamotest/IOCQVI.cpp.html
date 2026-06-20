@@ -1,0 +1,270 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOCQVI.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / IOCQVI.cpp                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the class CQVI, which provides a    ## */
+/* ##               Completion Queue for asynchronous access to TargetVI  ## */
+/* ##               objects. CQVI is an implementation of the abstract    ## */
+/* ##               class CQ.                                             ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOCQVI.h"
+#include "NetVI.h"
+#include "IOTargetVI.h"
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#include &lt;iostream&gt;
+using namespace std;
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+#include &lt;iostream.h&gt;
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+#define CQVI_DETAILS 0		// Set to 1 for additional debug messages.
+
+//
+// Initializing VI completion queue.
+//
+CQVI::CQVI()
+<span style = "background-color:#fdd">{
+	completion_queue = NULL;
+	vi_target = NULL;
+}</span>
+
+//
+// Creating the CQ on the given VI NIC.
+//
+BOOL CQVI::Create(VINic * vi_nic, TargetVI * target)
+<span style = "background-color:#fdd">{</span>
+	VIP_RETURN result;
+
+#if CQVI_DETAILS
+	cout &lt;&lt; "Creating VI CQ for VI NIC " &lt;&lt; vi_nic-&gt;nic_attributes.Name &lt;&lt; endl;
+#endif
+
+	// Create a completion queue for the NIC.  The completion queue must be
+	// able to handle the specified number of oustanding I/Os.
+<span style = "background-color:#fdd">	if ((result = vipl.VipCreateCQ(vi_nic-&gt;nic, target-&gt;outstanding_ios, &amp;completion_queue)) != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to create VI completion queue: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		return FALSE;</span>
+	}
+	// Record which target this completion is associated with.
+<span style = "background-color:#fdd">	vi_target = target;</span>
+
+<span style = "background-color:#fdd">	return TRUE;
+}</span>
+
+//
+// Destroying the CQ.
+// 
+BOOL CQVI::Destroy()
+<span style = "background-color:#fdd">{</span>
+	VIP_RETURN result;
+
+#if CQVI_DETAILS
+	cout &lt;&lt; "Destroying VI CQ." &lt;&lt; endl;
+#endif
+
+	// Destroy the completion queue.
+<span style = "background-color:#fdd">	result = vipl.VipDestroyCQ(completion_queue);</span>
+
+<span style = "background-color:#fdd">	if (result != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to VI completion queue: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		return FALSE;</span>
+	}
+
+<span style = "background-color:#fdd">	completion_queue = NULL;
+	vi_target = NULL;
+	return TRUE;
+}</span>
+
+//
+// Getting and returning that status of any completed I/O calls.
+//
+ReturnVal CQVI::GetStatus(int *bytes, int *data, int delay)
+<span style = "background-color:#fdd">{</span>
+	VIP_VI_HANDLE vi;
+	VIP_BOOLEAN receive_done;
+	VIP_DESCRIPTOR *descriptor;
+	VIP_RETURN result;
+
+#if CQVI_DETAILS
+	cout &lt;&lt; "Checking VI completion queue." &lt;&lt; endl;
+#endif
+
+	// Verify that completion queue exists.  If not, it needs to be created
+	// and then it can be retried.  This happens when testing connection rate.
+<span style = "background-color:#fdd">	if (!completion_queue)</span>
+		return ReturnRetry;
+
+	// Check completion queue for completed I/Os.
+<span style = "background-color:#fdd">	if (delay)
+		result = vipl.VipCQWait(completion_queue, delay, &amp;vi, &amp;receive_done);</span>
+	else
+<span style = "background-color:#fdd">		result = vipl.VipCQDone(completion_queue, &amp;vi, &amp;receive_done);</span>
+
+<span style = "background-color:#fdd">	switch (result) {</span>
+		// An I/O has completed, process it.
+	case VIP_SUCCESS:
+#if CQVI_DETAILS
+		cout &lt;&lt; "   I/O has been posted to VI completion queue." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#fdd">		if (receive_done == VIP_TRUE) {</span>
+			// Getting the completed receive.
+<span style = "background-color:#fdd">			if (vipl.VipRecvDone(vi, &amp;descriptor) != VIP_SUCCESS) {
+				cout &lt;&lt; "*** Unable to successfully complete receive." &lt;&lt; endl;</span>
+				return ReturnError;
+			}
+		} else {
+			// Getting the completed send.
+<span style = "background-color:#fdd">			if (vipl.VipSendDone(vi, &amp;descriptor) != VIP_SUCCESS) {
+				cout &lt;&lt; "*** Unable to successfully complete send." &lt;&lt; endl;
+				return ReturnError;</span>
+			}
+		}
+		break;
+
+		// No I/O is done yet.
+	case VIP_NOT_DONE:
+	case VIP_TIMEOUT:
+#if CQVI_DETAILS
+		cout &lt;&lt; "   no completions posted within the timeout period." &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		return ReturnTimeout;</span>
+
+	default:
+#if CQVI_DETAILS
+		cout &lt;&lt; "   error checking completion queue: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+#endif
+		return ReturnError;
+	}
+
+	// Record information about the completed request.
+<span style = "background-color:#fdd">	*bytes = descriptor-&gt;CS.Length;
+	*data = descriptor-&gt;CS.ImmediateData;</span>
+
+	// See if the completion was for an I/O request or control data.
+<span style = "background-color:#fdd">	if (*data != CONTROL_MESSAGE) {</span>
+		// It was for an I/O request.
+#if CQVI_DETAILS
+		cout &lt;&lt; "   completed " &lt;&lt; (receive_done ? "receive" : "send")
+		    &lt;&lt; " for transaction " &lt;&lt; *data &lt;&lt; endl;
+#endif
+
+		// Perform additional processing on completed receives.
+<span style = "background-color:#fdd">		if (receive_done == VIP_TRUE) {</span>
+			// Increment the number of available receives.
+<span style = "background-color:#fdd">			vi_target-&gt;available_receives++;</span>
+
+			// Decrement the number of outstanding receives to the VI.  If
+			// there were no receives outstanding, then this completion is for
+			// an I/O request that has not yet been made.  (This can happen
+			// because the receives are pre-posted.)  In this case, signal a
+			// retry to indicate that the I/O should not be processed as
+			// complete until after it's been requested.
+<span style = "background-color:#fdd">			if (vi_target-&gt;requested_receives-- &lt;= 0) {</span>
+#if CQVI_DETAILS
+				cout &lt;&lt; "   receive has not been requested yet." &lt;&lt; endl;
+#endif
+				return ReturnRetry;
+			}
+		}
+
+<span style = "background-color:#fdd">		return ReturnSuccess;</span>
+	}
+	//
+	// Message contains information needed to maintain pre-posting receive
+	// requirements.  Intercept these and update the VI connection management
+	// information.
+	//
+#if CQVI_DETAILS
+	cout &lt;&lt; "   completion is for maintaining flow control." &lt;&lt; endl;
+#endif
+
+	// If we received a control message, update that more sends are available.
+<span style = "background-color:#fdd">	if (receive_done != VIP_FALSE)
+		vi_target-&gt;more_sends_available = TRUE;</span>
+
+	// Return that no data messages completed, but we may not have waited
+	// the full timeout period.
+	return ReturnRetry;
+<span style = "background-color:#fdd">}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

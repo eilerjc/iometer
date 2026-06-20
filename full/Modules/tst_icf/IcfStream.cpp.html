@@ -1,0 +1,304 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IcfStream.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "IcfStream.h"
+#include &lt;cstdlib&gt;
+#include &lt;cctype&gt;
+
+namespace iocore {
+
+// ---- CString-semantics helpers ------------------------------------------------
+
+static const char *WHITESPACE = " \t\r\n";
+
+static void trimBoth(std::string &amp;s)
+<span style = "background-color:#dfd">{
+    const std::size_t b = s.find_first_not_of(WHITESPACE);
+    if (b == std::string::npos) { s.clear(); return; }
+    const std::size_t e = s.find_last_not_of(WHITESPACE);
+    s = s.substr(b, e - b + 1);
+}</span>
+
+static void trimLeft(std::string &amp;s)
+<span style = "background-color:#dfd">{
+    const std::size_t b = s.find_first_not_of(WHITESPACE);
+    s = (b == std::string::npos) ? std::string() : s.substr(b);
+}</span>
+
+// CString::CompareNoCase()==0 on the first `len` chars (Left(len) compare).
+static bool startsWithNoCase(const std::string &amp;s, const char *prefix)
+<span style = "background-color:#dfd">{
+    for (std::size_t i = 0; prefix[i]; ++i) {
+        if (i &gt;= s.size())</span>
+            return false;
+<span style = "background-color:#dfd">        if (std::tolower(static_cast&lt;unsigned char&gt;(s[i])) !=</span>
+            std::tolower(static_cast&lt;unsigned char&gt;(prefix[i])))
+<span style = "background-color:#dfd">            return false;</span>
+    }
+<span style = "background-color:#dfd">    return true;
+}</span>
+
+// CString::SpanIncluding(set): longest prefix consisting of chars in `set`.
+static std::string spanIncluding(const std::string &amp;s, const std::string &amp;set)
+<span style = "background-color:#dfd">{
+    std::size_t n = 0;
+    while (n &lt; s.size() &amp;&amp; set.find(s[n]) != std::string::npos)
+        ++n;
+    return s.substr(0, n);
+}</span>
+
+// ---- line primitives ------------------------------------------------------------
+
+std::string IcfStream::getNextLine()
+<span style = "background-color:#dfd">{
+    if (!m_file.is_open()) {</span>
+        // This should never happen.  This indicates an Iometer bug.
+<span style = "background-color:#dfd">        addError("A call was made to ICF_ifstream::GetNextLine() "</span>
+                 "with a closed file!  Please report this as an Iometer bug.");
+<span style = "background-color:#dfd">        return std::string();</span>
+    }
+
+<span style = "background-color:#dfd">    std::string line;
+    std::getline(m_file, line);</span>
+    // MFC reads getline(buf, MAX_ICF_LINE): a longer line truncates to 199
+    // chars and fails the stream (which aborts the parse in every caller).
+<span style = "background-color:#dfd">    if (line.size() &gt;= static_cast&lt;std::size_t&gt;(MaxLine)) {
+        line = line.substr(0, MaxLine - 1);
+        m_file.setstate(std::ios::failbit);</span>
+    }
+
+<span style = "background-color:#dfd">    trimBoth(line);
+    return line;
+}</span>
+
+bool IcfStream::skipTo(const std::string &amp;identifier)
+<span style = "background-color:#dfd">{
+    std::string id = identifier;
+    trimBoth(id);</span>
+
+<span style = "background-color:#dfd">    std::string curline;</span>
+    do {
+<span style = "background-color:#dfd">        if (m_file.eof())</span>
+            return false;
+<span style = "background-color:#dfd">        curline = getNextLine();   // already trimmed
+    } while (!startsWithNoCase(curline, id.c_str()));</span>
+    // Loop until the identifier is matched.  (Ignore the rest of the line.)
+
+<span style = "background-color:#dfd">    return true;
+}</span>
+
+bool IcfStream::getPair(std::string &amp;key, std::string &amp;value)
+<span style = "background-color:#dfd">{
+    if (!m_file.is_open()) {</span>
+        // This should never happen.  This indicates an Iometer bug.
+<span style = "background-color:#dfd">        addError("A call was made to ICF_ifstream::GetPair() "</span>
+                 "with a closed file!  Please report this as an Iometer bug.");
+        return false;
+    }
+    // If EOF, let the caller report an error.
+<span style = "background-color:#dfd">    if (failed())</span>
+        return false;
+
+    // If first line isn't a comment, let the caller report an error.
+<span style = "background-color:#dfd">    if (peek() != '\'')</span>
+<span style = "background-color:#fdd">        return false;</span>
+
+<span style = "background-color:#dfd">    key = getNextLine();</span>
+
+    // 'End and 'Version tags have no data on the following lines.
+<span style = "background-color:#dfd">    if (startsWithNoCase(key, "'End") || startsWithNoCase(key, "'Version")) {
+        value.clear();
+        return true;</span>
+    }
+
+    // Skip any extra comment lines before the data.
+<span style = "background-color:#dfd">    while (peek() == '\'') {
+        const std::streampos placeholder = m_file.tellg();
+        const std::string tempstring = getNextLine();</span>
+
+<span style = "background-color:#dfd">        if (startsWithNoCase(tempstring, "'End") || startsWithNoCase(tempstring, "'Version")) {</span>
+            // Empty section (e.g. 'Worker immediately followed by 'End worker):
+            // the 'End... header must be returned by the NEXT GetPair call.
+<span style = "background-color:#dfd">            m_file.seekg(placeholder);   // back up the file pointer
+            value.clear();</span>
+            return true;                 // NOT an error condition
+        }
+<span style = "background-color:#dfd">    }</span>
+
+    // If EOF, let the caller report an error.
+<span style = "background-color:#dfd">    if (failed()) {</span>
+<span style = "background-color:#fdd">        value.clear();
+        return false;</span>
+    }
+
+    // Get the data corresponding to the above key.
+<span style = "background-color:#dfd">    value = getNextLine();</span>
+    return true;
+<span style = "background-color:#dfd">}</span>
+
+// ---- version ---------------------------------------------------------------------
+
+uint64_t IcfStream::getVersion()
+<span style = "background-color:#dfd">{
+    std::string version_string = getNextLine();
+    if (version_string.empty()) {
+        addError("File is improperly formatted.  Empty line found "</span>
+                 "where file version information was expected.");
+        return BadVersion;
+    }
+
+<span style = "background-color:#dfd">    int major = 0, middle = 0, minor = 0;
+    std::string err;</span>
+    if (!extractFirstIntVersion(version_string, major, &amp;err)
+        || !extractFirstIntVersion(version_string, middle, &amp;err)
+<span style = "background-color:#dfd">        || !extractFirstIntVersion(version_string, minor, &amp;err)) {
+        if (!err.empty())
+            addError(err);   // the extractor's own MFC dialog text
+        addError("File is improperly formatted.  Error retrieving file version information.");</span>
+        return BadVersion;
+    }
+
+    // Dual scheme (see header): date versions vs the 1.1.0+ numbering scheme.
+    uint64_t version;
+<span style = "background-color:#dfd">    if (major &gt; 1900)
+        version = (uint64_t)major * 10000 + (uint64_t)middle * 100 + minor;</span>
+    else
+<span style = "background-color:#dfd">        version = (uint64_t)major * 10000000000ULL + (uint64_t)middle * 100000 + minor;</span>
+
+    // Special case test for ancient version "3.26.97" OLTP.txt file distributed
+    // with 1998.01.05. (Dead code under the current formulas - kept verbatim.)
+<span style = "background-color:#dfd">    if (version == 32697)
+        version = 19980105;</span>
+
+<span style = "background-color:#dfd">    if (version &lt; 19980105) {</span>
+        // The MFC code shows this error but still proceeds with the version.
+<span style = "background-color:#dfd">        addError("Error restoring file.  "</span>
+                 "Version number earlier than 1998.01.05 or incorrectly formatted.");
+    }
+
+<span style = "background-color:#dfd">    return version;
+}</span>
+
+// ---- static extractors -------------------------------------------------------------
+
+// Shared body of ExtractFirstInt / ExtractFirstUInt64 (identical except for the
+// final conversion).
+static bool extractSignedDigits(std::string &amp;s, std::string &amp;digits, std::string *err)
+<span style = "background-color:#dfd">{
+    const std::string backup = s;</span>
+
+<span style = "background-color:#dfd">    const std::size_t pos = s.find_first_of("-1234567890");
+    if (pos == std::string::npos) {
+        if (err) *err = "File is improperly formatted.  Expected an integer value.";</span>
+        return false;
+    }
+    // Cleave off everything before the first number.
+<span style = "background-color:#dfd">    s = s.substr(pos);</span>
+
+<span style = "background-color:#dfd">    digits = spanIncluding(s, "-1234567890");
+    s = s.substr(digits.size());</span>
+
+    // If there are any negative signs after the first character, fail.
+<span style = "background-color:#dfd">    if (digits.find('-', 1) != std::string::npos) {
+        if (err) *err = "File is improperly formatted.  An integer value "</span>
+                        "has a negative sign in the middle or on the end of it.";
+<span style = "background-color:#dfd">        s = backup;   // restore string's old value</span>
+        return false;
+    }
+
+    // Eat whitespace, one trailing comma, and any space following it.
+<span style = "background-color:#dfd">    trimLeft(s);
+    if (!s.empty() &amp;&amp; s[0] == ',')
+        s = s.substr(1);
+    trimLeft(s);
+    return true;
+}</span>
+
+bool IcfStream::extractFirstInt(std::string &amp;s, int &amp;n, std::string *err)
+<span style = "background-color:#dfd">{
+    n = 0;
+    std::string digits;
+    if (!extractSignedDigits(s, digits, err))</span>
+        return false;
+<span style = "background-color:#dfd">    n = std::atoi(digits.c_str());
+    return true;
+}</span>
+
+bool IcfStream::extractFirstUInt64(std::string &amp;s, uint64_t &amp;n, std::string *err)
+<span style = "background-color:#dfd">{
+    n = 0;
+    std::string digits;
+    if (!extractSignedDigits(s, digits, err))</span>
+        return false;
+<span style = "background-color:#dfd">    n = std::strtoull(digits.c_str(), nullptr, 10);
+    return true;
+}</span>
+
+bool IcfStream::extractFirstIntVersion(std::string &amp;s, int &amp;n, std::string *err)
+<span style = "background-color:#dfd">{
+    n = 0;</span>
+
+<span style = "background-color:#dfd">    const std::size_t pos = s.find_first_of("1234567890");
+    if (pos == std::string::npos) {
+        if (err) *err = "File is improperly formatted.  Expected an integer value.";
+        return false;</span>
+    }
+    // Cleave off everything before the first number.
+<span style = "background-color:#dfd">    s = s.substr(pos);</span>
+
+<span style = "background-color:#dfd">    const std::string digits = spanIncluding(s, "1234567890");
+    s = s.substr(digits.size());</span>
+
+<span style = "background-color:#dfd">    n = std::atoi(digits.c_str());</span>
+
+    // Eat whitespace, one trailing comma, and any space following it.
+<span style = "background-color:#dfd">    trimLeft(s);
+    if (!s.empty() &amp;&amp; s[0] == ',')</span>
+<span style = "background-color:#fdd">        s = s.substr(1);</span>
+<span style = "background-color:#dfd">    trimLeft(s);
+    return true;
+}</span>
+
+std::string IcfStream::extractFirstToken(std::string &amp;s, bool spaces)
+<span style = "background-color:#dfd">{
+    std::string token_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"</span>
+        "abcdefghijklmnopqrstuvwxyz" "1234567890" "`~!@#$%^&amp;*()-_=+[]{}\\:;\"'./&lt;&gt;?";
+<span style = "background-color:#dfd">    if (spaces)
+        token_chars += " ";</span>
+
+<span style = "background-color:#dfd">    const std::size_t pos = s.find_first_of(token_chars);
+    if (pos == std::string::npos)
+        return std::string();</span>
+
+<span style = "background-color:#dfd">    s = s.substr(pos);
+    const std::string substring = spanIncluding(s, token_chars);
+    s = s.substr(substring.size());
+    trimBoth(s);</span>
+
+<span style = "background-color:#dfd">    return substring;
+}</span>
+
+} // namespace iocore</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

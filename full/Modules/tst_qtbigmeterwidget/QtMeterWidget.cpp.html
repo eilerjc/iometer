@@ -1,0 +1,349 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtMeterWidget.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtMeterWidget.cpp
+// Qt port of CMeterCtrl - Iometer speedometer gauge.
+//
+// Geometry notes
+// --------------
+// The sweep runs 270Â° from lower-left (value=0) clockwise through 12-o'clock
+// (value=max/2) to lower-right (value=max).  The 90Â° "notch" at the bottom
+// is where the scale text lives.
+//
+// CalculatePoint(Î¸, r):   real_angle = Î¸ + 90 + PIVOT_ARC_ANGLE  (= Î¸ + 135)
+//   x = pivot.x + cos(real_angleÂ°) Â· r
+//   y = pivot.y + sin(real_angleÂ°) Â· r     (y increases downward, same as MFC)
+//
+// Qt arc angles: 0Â° = east, positive = CCW, 1/16Â° units.
+// Meter Î¸ â Qt degrees: -(Î¸ + 90 + PIVOT_ARC_ANGLE)
+// CW sweep = negative spanAngle in Qt.
+
+#include "QtMeterWidget.h"
+#include &lt;QPainter&gt;
+#include &lt;QPainterPath&gt;
+#include &lt;QResizeEvent&gt;
+#include &lt;cmath&gt;
+
+static constexpr double PI = 3.14159265358979323846;
+
+// -----------------------------------------------------------------------------
+// Construction
+// -----------------------------------------------------------------------------
+
+QtMeterWidget::QtMeterWidget(QWidget *parent)
+<span style = "background-color:#dfd">    : QWidget(parent)
+{
+    setAttribute(Qt::WA_OpaquePaintEvent);   // we fill the entire widget
+    setMinimumSize(120, 90);
+}</span>
+
+QSize QtMeterWidget::sizeHint() const
+<span style = "background-color:#dfd">{
+    return {320, 240};
+}</span>
+
+// -----------------------------------------------------------------------------
+// Geometry helpers
+// -----------------------------------------------------------------------------
+
+QPointF QtMeterWidget::calcPt(int angle, int radius) const
+<span style = "background-color:#dfd">{</span>
+    // Matches CMeterCtrl::CalculatePoint exactly.
+<span style = "background-color:#dfd">    const double a = (angle + 90 + PIVOT_ARC_ANGLE) * PI / 180.0;
+    return { m_pivot.x() + std::cos(a) * radius,</span>
+             m_pivot.y() + std::sin(a) * radius };
+<span style = "background-color:#dfd">}</span>
+
+void QtMeterWidget::recalcGeometry()
+<span style = "background-color:#dfd">{
+    const int w = width();
+    const int h = height();
+    if (w &lt; 20 || h &lt; 20) return;</span>
+
+    // Largest outer_radius that keeps the whole visible arc inside the widget.
+    // The arc bottoms out at y = outer_radius * (1 + cos(PIVOT_ARC_ANGLE)).
+<span style = "background-color:#dfd">    const double cosPA = std::cos(PIVOT_ARC_ANGLE * PI / 180.0);  // cos(45Â°) â 0.7071
+    m_outerRadius  = static_cast&lt;int&gt;(std::min(w / 2.0, h / (1.0 + cosPA)));</span>
+    m_innerRadius  = static_cast&lt;int&gt;(m_outerRadius * 0.70);
+<span style = "background-color:#dfd">    m_pivotRadius  = std::max(3, m_innerRadius / 12);</span>
+    m_labelRadius  = static_cast&lt;int&gt;(m_outerRadius * 0.8275);
+<span style = "background-color:#dfd">    m_tickRadius   = static_cast&lt;int&gt;(m_outerRadius * 0.96);
+    m_labelBoxSize = std::max(6, static_cast&lt;int&gt;(m_outerRadius * 0.10));</span>
+
+    // Pivot at horizontal centre, one outer_radius down from the top.
+    m_pivot = { w / 2.0, static_cast&lt;double&gt;(m_outerRadius) };
+
+<span style = "background-color:#dfd">    updateScaleInfo();
+    updateLabelInfo();
+    setNeedlePoints();
+}</span>
+
+// -----------------------------------------------------------------------------
+// Scale text  (e.g. "x1,000")
+// -----------------------------------------------------------------------------
+
+void QtMeterWidget::updateScaleInfo()
+<span style = "background-color:#dfd">{
+    if (m_maxRange &lt;= 10) { m_scaleText.clear(); return; }</span>
+
+<span style = "background-color:#dfd">    auto exp10 = static_cast&lt;int&gt;(std::floor(std::log10f(static_cast&lt;float&gt;(m_maxRange))));
+    int  scale = static_cast&lt;int&gt;(std::pow(10.0f, static_cast&lt;float&gt;(exp10)));</span>
+    // If max_range is exactly a power of 10, show one decade smaller (matches MFC)
+<span style = "background-color:#dfd">    if (m_maxRange == scale) scale /= 10;</span>
+
+    // Format with commas
+<span style = "background-color:#dfd">    QString num = QString::number(scale);
+    const int len = num.length();
+    for (int p = 3; p &lt; len; p += 4)
+        num.insert(len - p, ',');</span>
+
+<span style = "background-color:#dfd">    m_scaleText = "x" + num;
+}</span>
+
+// -----------------------------------------------------------------------------
+// Label / tick-mark positions (matches CMeterCtrl::UpdateLabelInfo)
+// -----------------------------------------------------------------------------
+
+void QtMeterWidget::updateLabelInfo()
+<span style = "background-color:#dfd">{
+    m_labels.clear();
+    if (m_outerRadius &lt; 10 || m_maxRange &lt;= m_minRange) return;</span>
+
+<span style = "background-color:#dfd">    const float rangeDiff    = static_cast&lt;float&gt;(m_maxRange - m_minRange);
+    const float log10rd      = std::floor(std::log10f(rangeDiff));
+    const float decade       = std::pow(10.0f, log10rd);</span>
+
+    float displayRange;
+<span style = "background-color:#dfd">    if (rangeDiff == decade &amp;&amp; rangeDiff != 1.0f)
+        displayRange = 10.0f;</span>
+    else
+<span style = "background-color:#fdd">        displayRange = rangeDiff / decade;</span>
+
+    float inc;
+<span style = "background-color:#fdd">    if      (displayRange &lt;= 1.0f)  inc = 0.1f;
+    else if (displayRange &lt;= 2.0f)  inc = 0.2f;
+    else if (displayRange &lt;= 5.0f)  inc = 0.5f;</span>
+    else                            inc = 1.0f;
+
+<span style = "background-color:#dfd">    for (float v = 0.0f; v &lt;= displayRange + 1e-5f; v += inc) {
+        const int    labelAngle = static_cast&lt;int&gt;(v / displayRange * NEEDLE_SWEEP);
+        const QPointF lp        = calcPt(labelAngle, m_labelRadius);</span>
+
+<span style = "background-color:#dfd">        LabelInfo li;
+        li.box = QRectF(lp.x() - m_labelBoxSize, lp.y() - m_labelBoxSize,</span>
+                        m_labelBoxSize * 2.0,     m_labelBoxSize * 2.0);
+
+        // Format: ".5" for 0 &lt; v â¤ 0.9, "g" notation otherwise (matches MFC %.2g)
+<span style = "background-color:#dfd">        if (v &gt; 0.0f &amp;&amp; v &lt;= 0.9f)</span>
+<span style = "background-color:#fdd">            li.text = QString(".%1").arg(qRound(v * 10.0f));</span>
+        else
+<span style = "background-color:#dfd">            li.text = QString::number(static_cast&lt;double&gt;(v), 'g', 2);</span>
+
+<span style = "background-color:#dfd">        li.tickInner = calcPt(labelAngle, m_tickRadius);
+        li.tickOuter = calcPt(labelAngle, m_outerRadius);
+        m_labels.push_back(std::move(li));</span>
+    }
+<span style = "background-color:#dfd">}</span>
+
+// -----------------------------------------------------------------------------
+// Needle geometry
+// -----------------------------------------------------------------------------
+
+void QtMeterWidget::setNeedlePoints()
+<span style = "background-color:#dfd">{</span>
+    // Matches CMeterCtrl::SetNeedlePoints
+<span style = "background-color:#dfd">    m_needle[0] = calcPt(m_actualAngle,             m_innerRadius);
+    m_needle[1] = calcPt(180 + m_actualAngle - 20,  m_pivotRadius + 5);
+    m_needle[2] = calcPt(180 + m_actualAngle + 20,  m_pivotRadius + 5);</span>
+    m_shownAngle = m_actualAngle;
+<span style = "background-color:#dfd">}</span>
+
+// -----------------------------------------------------------------------------
+// Qt events
+// -----------------------------------------------------------------------------
+
+void QtMeterWidget::resizeEvent(QResizeEvent *event)
+<span style = "background-color:#dfd">{
+    QWidget::resizeEvent(event);
+    recalcGeometry();
+    update();
+}</span>
+
+// -----------------------------------------------------------------------------
+// Public API
+// -----------------------------------------------------------------------------
+
+void QtMeterWidget::setRange(int range1, int range2, bool autoRange)
+<span style = "background-color:#dfd">{
+    m_autoRange = autoRange;
+    if (range1 == range2) return;</span>
+
+<span style = "background-color:#dfd">    m_minRange = std::min(range1, range2);
+    m_maxRange = std::max(range1, range2);</span>
+
+<span style = "background-color:#dfd">    const double span = m_maxRange - m_minRange;
+    if      (m_value &lt; m_minRange) m_actualAngle = 0;
+    else if (m_value &gt; m_maxRange) m_actualAngle = NEEDLE_SWEEP;
+    else                           m_actualAngle = static_cast&lt;int&gt;(m_value / span * NEEDLE_SWEEP);</span>
+
+<span style = "background-color:#dfd">    updateScaleInfo();
+    updateLabelInfo();
+    setNeedlePoints();
+    update();
+}</span>
+
+void QtMeterWidget::resetWatermark()
+<span style = "background-color:#dfd">{
+    m_lowValue  = -1.0;
+    m_highValue =  0.0;
+    update();</span>
+}
+
+void QtMeterWidget::setValue(double newValue)
+<span style = "background-color:#dfd">{
+    if (newValue == m_value) return;</span>
+
+    bool wmChanged = false;
+<span style = "background-color:#dfd">    if (newValue &lt; m_lowValue || m_lowValue &lt; 0.0) { m_lowValue  = newValue; wmChanged = true; }
+    if (newValue &gt; m_highValue)                     { m_highValue = newValue; wmChanged = true; }</span>
+
+    m_value = newValue;
+
+    // Auto-ranging: ratchet up/down by decades (matches CMeterCtrl::SetValue)
+<span style = "background-color:#dfd">    if (m_autoRange &amp;&amp; m_value &gt; 0.0) {
+        const int tv = static_cast&lt;int&gt;(</span>
+            std::pow(10.0f, std::floor(std::log10f(static_cast&lt;float&gt;(m_value) * 10.0f))));
+<span style = "background-color:#dfd">        if (tv &gt; m_maxRange)
+            setRange(m_minRange, tv, true);
+        else if (tv &lt;= m_maxRange / 10)
+            setRange(m_minRange, m_maxRange / 10, true);</span>
+    }
+
+<span style = "background-color:#dfd">    const double span = m_maxRange - m_minRange;
+    if      (m_value &lt; m_minRange) m_actualAngle = 0;
+    else if (m_value &gt; m_maxRange) m_actualAngle = NEEDLE_SWEEP;
+    else                           m_actualAngle = static_cast&lt;int&gt;(m_value / span * NEEDLE_SWEEP);</span>
+
+<span style = "background-color:#dfd">    const bool needleMove = (std::abs(static_cast&lt;double&gt;(m_actualAngle) - m_shownAngle)</span>
+                             &gt;= NEEDLE_SENSITIVITY);
+<span style = "background-color:#dfd">    if (needleMove || (showWatermark &amp;&amp; wmChanged)) {
+        setNeedlePoints();
+        update();</span>
+    }
+<span style = "background-color:#dfd">}</span>
+
+// -----------------------------------------------------------------------------
+// Paint
+// -----------------------------------------------------------------------------
+
+void QtMeterWidget::paintEvent(QPaintEvent *)
+<span style = "background-color:#dfd">{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.fillRect(rect(), Qt::black);
+    if (m_outerRadius &lt; 10) return;</span>
+
+<span style = "background-color:#dfd">    const QRectF meterBox(m_pivot.x() - m_outerRadius, m_pivot.y() - m_outerRadius,</span>
+                          m_outerRadius * 2.0,          m_outerRadius * 2.0);
+
+    // -- 1. Dial circle (filled black) --
+<span style = "background-color:#dfd">    p.setPen(Qt::black);
+    p.setBrush(Qt::black);
+    p.drawEllipse(meterBox);</span>
+
+    // -- 2. Scale text in the "notch" at the bottom  --
+<span style = "background-color:#dfd">    if (!m_scaleText.isEmpty()) {</span>
+        // The notch spans horizontally between the two sweep endpoints
+        // (angle=0 and angle=NEEDLE_SWEEP on the inner radius) and vertically
+        // down to the outer-radius bottom.
+<span style = "background-color:#dfd">        const QPointF leftPt  = calcPt(0,            m_innerRadius);
+        const QPointF rightPt = calcPt(NEEDLE_SWEEP, m_innerRadius);
+        const QPointF botPt   = calcPt(0,            m_outerRadius);
+        const QRectF scaleRect(</span>
+            std::min(leftPt.x(), rightPt.x()),
+            std::min(leftPt.y(), rightPt.y()),
+            std::abs(rightPt.x() - leftPt.x()),
+            std::abs(botPt.y()   - leftPt.y())
+        );
+<span style = "background-color:#dfd">        QFont sf("Arial", -1);
+        sf.setPixelSize(std::max(8, static_cast&lt;int&gt;(m_outerRadius * 0.18)));
+        p.setFont(sf);
+        p.setPen(Qt::white);
+        p.drawText(scaleRect, Qt::AlignCenter, m_scaleText);
+    }</span>
+
+    // -- 3. Labels and tick marks --
+    {
+<span style = "background-color:#dfd">        QFont lf("Arial", -1);
+        lf.setPixelSize(std::max(8, static_cast&lt;int&gt;(m_outerRadius * 0.16)));
+        p.setFont(lf);
+        p.setPen(QPen(Qt::white, 2));
+        for (const auto &amp;li : m_labels) {
+            p.drawText(li.box, Qt::AlignCenter | Qt::TextDontClip, li.text);
+            p.drawLine(li.tickInner, li.tickOuter);</span>
+        }
+<span style = "background-color:#dfd">    }</span>
+
+    // -- 4. Watermark arc (red, on inner_radius) --
+<span style = "background-color:#dfd">    if (showWatermark &amp;&amp; m_lowValue &gt;= 0.0 &amp;&amp; m_highValue &gt; m_lowValue) {
+        const double span = m_maxRange - m_minRange;</span>
+<span style = "background-color:#fdd">        auto toAngle = [&amp;](double v) -&gt; int {
+            if (v &lt;= m_minRange) return 0;
+            if (v &gt;= m_maxRange) return NEEDLE_SWEEP;
+            return static_cast&lt;int&gt;(v / span * NEEDLE_SWEEP);
+        };</span>
+<span style = "background-color:#dfd">        const int la = toAngle(m_lowValue);
+        const int ha = toAngle(m_highValue);
+        if (la != ha) {
+            const QRectF wmBox(</span>
+                m_pivot.x() - (m_innerRadius + 2), m_pivot.y() - (m_innerRadius + 2),
+                (m_innerRadius + 2) * 2.0,          (m_innerRadius + 2) * 2.0);
+            // Meter angle Î¸ â Qt 1/16Â° = -(Î¸ + 90 + PIVOT_ARC_ANGLE) * 16
+            // CW sweep (value increases CW) = negative spanAngle in Qt
+<span style = "background-color:#dfd">            const int startQt = -(la + 90 + PIVOT_ARC_ANGLE) * 16;
+            const int spanQt  = -(ha - la) * 16;
+            p.setPen(QPen(Qt::red, 3));
+            p.setBrush(Qt::NoBrush);
+            p.drawArc(wmBox, startQt, spanQt);</span>
+        }
+    }
+
+    // -- 5. Needle (blue triangle + grey pivot hub) --
+    {
+<span style = "background-color:#dfd">        const QPolygonF poly = QPolygonF()</span>
+            &lt;&lt; m_needle[0] &lt;&lt; m_needle[1] &lt;&lt; m_needle[2];
+<span style = "background-color:#dfd">        p.setPen(QPen(QColor(0, 0, 0xFF), 1));
+        p.setBrush(QColor(0, 0, 0xFF));
+        p.drawPolygon(poly);</span>
+
+<span style = "background-color:#dfd">        const QRectF pivotRect(</span>
+            m_pivot.x() - m_pivotRadius, m_pivot.y() - m_pivotRadius,
+            m_pivotRadius * 2.0,          m_pivotRadius * 2.0);
+<span style = "background-color:#dfd">        p.setPen(Qt::black);
+        p.setBrush(QColor(170, 170, 170));
+        p.drawEllipse(pivotRect);
+    }
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

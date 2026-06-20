@@ -1,0 +1,1221 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>PageDisplay.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Iometer / PageDisplay.cpp                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CPageDisplay class, which is    ## */
+/* ##               responsible for the "Results Display" tab in          ## */
+/* ##               Iometer's main window.                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - changes so VC++ 7 (.NET) will compile correctly.    ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - added new header info.                              ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "PageDisplay.h"
+#include "ManagerList.h"
+#include "GalileoView.h"
+#include "core/IcfDocument.h"
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CPageDisplay property page
+
+<span style = "background-color:#dfd">IMPLEMENT_DYNCREATE(CPageDisplay, CPropertyPage)</span>
+//
+// Default constructor.
+<span style = "background-color:#dfd">CPageDisplay::CPageDisplay():CPropertyPage(CPageDisplay::IDD)
+{</span>
+	//{{AFX_DATA_INIT(CPageDisplay)
+	//}}AFX_DATA_INIT
+
+	// Fill in conversion table of delay (ms) value for each setting of m_CUpdateFrequency control
+<span style = "background-color:#dfd">	delay_table[0] = 1000;
+	delay_table[1] = 2000;
+	delay_table[2] = 3000;
+	delay_table[3] = 4000;
+	delay_table[4] = 5000;
+	delay_table[5] = 10000;
+	delay_table[6] = 15000;
+	delay_table[7] = 30000;
+	delay_table[8] = 45000;
+	delay_table[9] = 60000;</span>
+	delay_table[10] = 0;
+
+<span style = "background-color:#dfd">	isInstantaneousMode = false;
+}</span>
+
+CPageDisplay::~CPageDisplay()
+<span style = "background-color:#dfd">{
+}</span>
+
+void CPageDisplay::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CPropertyPage::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CPageDisplay)
+<span style = "background-color:#dfd">	DDX_Control(pDX, PRate1, m_PRate1);
+	DDX_Control(pDX, PRate2, m_PRate2);
+	DDX_Control(pDX, PRate3, m_PRate3);
+	DDX_Control(pDX, PRate4, m_PRate4);
+	DDX_Control(pDX, PRate5, m_PRate5);
+	DDX_Control(pDX, PRate6, m_PRate6);
+	DDX_Control(pDX, CUpdateFrequency, m_CUpdateFrequency);
+	DDX_Control(pDX, CRecordLastUpdate, m_CRecordLastUpdate);
+	DDX_Control(pDX, RAvgLastUpdate, m_CRAvgLastUpdate);
+	DDX_Control(pDX, RAvgWholeTest, m_CRAvgWholeTest);</span>
+	//}}AFX_DATA_MAP
+<span style = "background-color:#dfd">}</span>
+
+BOOL CPageDisplay::OnInitDialog()
+<span style = "background-color:#dfd">{
+	CPropertyPage::OnInitDialog();</span>
+
+<span style = "background-color:#dfd">	Initialize();		// Initialize most everything.</span>
+
+<span style = "background-color:#dfd">	return TRUE;		// return TRUE unless you set the focus to a control</span>
+	// EXCEPTION: OCX Property Pages should return FALSE
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CPageDisplay, CPropertyPage)</span>
+    //{{AFX_MSG_MAP(CPageDisplay)
+    ON_WM_HSCROLL()
+    ON_BN_CLICKED(RAvgLastUpdate, OnRAvgLastUpdate)
+    ON_BN_CLICKED(RAvgWholeTest, OnRAvgWholeTest)
+    ON_BN_CLICKED(TWorker1, OnTWorker1)
+    ON_BN_CLICKED(TWorker2, OnTWorker2)
+    ON_BN_CLICKED(TWorker3, OnTWorker3)
+    ON_BN_CLICKED(TWorker4, OnTWorker4)
+    ON_BN_CLICKED(TWorker5, OnTWorker5)
+    ON_BN_CLICKED(TWorker6, OnTWorker6)
+    ON_BN_CLICKED(BResultType1, OnBResultType1)
+    ON_BN_CLICKED(BResultType2, OnBResultType2)
+    ON_BN_CLICKED(BResultType3, OnBResultType3)
+    ON_BN_CLICKED(BResultType4, OnBResultType4)
+    ON_BN_CLICKED(BResultType5, OnBResultType5)
+    ON_BN_CLICKED(BResultType6, OnBResultType6)
+    ON_BN_CLICKED(BBigMeter1, OnBBigMeter1)
+    ON_BN_CLICKED(BBigMeter2, OnBBigMeter2)
+    ON_BN_CLICKED(BBigMeter3, OnBBigMeter3)
+    ON_BN_CLICKED(BBigMeter4, OnBBigMeter4)
+    ON_BN_CLICKED(BBigMeter5, OnBBigMeter5)
+	ON_BN_CLICKED(BBigMeter6, OnBBigMeter6)
+	ON_CBN_SELCHANGE(CUpdateFrequency, OnSelchangeCUpdateFrequency)
+	ON_BN_CLICKED(CRecordLastUpdate, OnCRecordLastUpdate)
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+
+/////////////////////////////////////////////////////////////////////////////
+// CPageDisplay message handlers
+void CPageDisplay::Initialize()
+<span style = "background-color:#dfd">{</span>
+	// Set all of the status bars to all managers.
+	for (int i = 0; i &lt; NUM_STATUS_BARS; i++) {
+<span style = "background-color:#dfd">		barcharts[i].results = theApp.manager_list.results;</span>
+		barcharts[i].name = theApp.manager_list.name;
+<span style = "background-color:#dfd">		barcharts[i].manager = NULL;</span>
+		barcharts[i].worker = NULL;
+	}
+
+	// Init all display thingies.
+	selected_button = 0;
+<span style = "background-color:#dfd">	theApp.pView-&gt;OnMDisplay(MDisplayOpsSubmenuID, MDisplayOpsIOPS);</span>
+
+<span style = "background-color:#dfd">	selected_button = 1;
+	theApp.pView-&gt;OnMDisplay(MDisplayMBsSubmenuID, MDisplayMBsMBPSDec);</span>
+
+<span style = "background-color:#dfd">	selected_button = 2;
+	theApp.pView-&gt;OnMDisplay(MDisplayAvgSubmenuID, MDisplayAvgIO);</span>
+
+<span style = "background-color:#dfd">	selected_button = 3;
+	theApp.pView-&gt;OnMDisplay(MDisplayMaxSubmenuID, MDisplayMaxIO);</span>
+
+<span style = "background-color:#dfd">	selected_button = 4;
+	theApp.pView-&gt;OnMDisplay(MDisplayCPUSubmenuID, MDisplayCPUUtilization);</span>
+
+<span style = "background-color:#dfd">	selected_button = 5;
+	theApp.pView-&gt;OnMDisplay(MDisplayErrSubmenuID, MDisplayErrIO);</span>
+
+<span style = "background-color:#dfd">	SetUpdateDelay(1);</span>
+
+<span style = "background-color:#dfd">	SetWhichPerf(LAST_UPDATE_PERF);</span>
+
+<span style = "background-color:#dfd">	Reset();
+}</span>
+
+//
+// Resetting the result display.  This is usually called because a manager or worker has
+// been deleted.  Any references to the deleted item need to be removed.
+//
+void CPageDisplay::Reset()
+<span style = "background-color:#dfd">{</span>
+	// Set all of the status bars to all managers.
+	for (int i = 0; i &lt; NUM_STATUS_BARS; i++) {
+<span style = "background-color:#dfd">		barcharts[i].results = theApp.manager_list.results;
+		barcharts[i].name = theApp.manager_list.name;
+		barcharts[i].manager = NULL;
+		barcharts[i].worker = NULL;</span>
+	}
+
+	// Update the display information.
+<span style = "background-color:#dfd">	m_PRate1.SetPos(0);
+	m_PRate2.SetPos(0);
+	m_PRate3.SetPos(0);
+	m_PRate4.SetPos(0);
+	m_PRate5.SetPos(0);
+	m_PRate6.SetPos(0);</span>
+
+	// Do one update to set everything properly.
+<span style = "background-color:#dfd">	Update();
+}</span>
+
+//
+// Sets the source for a progress bar given for a drag-drop selection.
+//
+void CPageDisplay::SetResultSource(int manager_index, int worker_index, CPoint point)
+<span style = "background-color:#fdd">{</span>
+	void *drop_target;
+
+	// Get the pointer of the window dropped on.
+<span style = "background-color:#fdd">	drop_target = (void *)WindowFromPoint(point);</span>
+
+	int selected_progress_bar = IOERROR;	// init index.
+
+<span style = "background-color:#fdd">	for (int i = 0; i &lt; NUM_STATUS_BARS; i++) {</span>
+		// Check to see if the drop target is one of the progress bars or Result Type buttons.
+<span style = "background-color:#fdd">		if ((drop_target == (void *)GetDlgItem(PRate1 + i)) ||</span>
+		    (drop_target == (void *)GetDlgItem(BResultType1 + i))) {
+			// If so, set the index for future use.
+			selected_progress_bar = i;
+			break;
+		}
+	}
+
+	// The drop target was not a progress bar or Result Type button, so exit this function.
+	if (selected_progress_bar == IOERROR)
+		return;
+
+	// Call SetResultSource( int, int, int ) to do the rest of the job
+<span style = "background-color:#fdd">	SetResultSource(manager_index, worker_index, selected_progress_bar);
+}</span>
+
+//
+// Sets the source for a progress bar given for a specific progress bar.
+//
+void CPageDisplay::SetResultSource(int manager_index, int worker_index, int selected_progress_bar)
+<span style = "background-color:#fdd">{
+	if ((selected_progress_bar &lt; 0) || (selected_progress_bar &gt;= NUM_STATUS_BARS)) {
+		ErrorMessage("Invalid selected_progress_bar value in CPageDisplay::SetResultSource()");</span>
+		return;
+	}
+
+<span style = "background-color:#fdd">	if (manager_index == ALL_MANAGERS)	// looking for all manager results</span>
+	{
+<span style = "background-color:#fdd">		barcharts[selected_progress_bar].results = theApp.manager_list.results;
+		barcharts[selected_progress_bar].name = theApp.manager_list.name;
+		barcharts[selected_progress_bar].manager = NULL;
+		barcharts[selected_progress_bar].worker = NULL;
+	} else if (worker_index == IOERROR)	// looking for a manager's results</span>
+	{
+<span style = "background-color:#fdd">		barcharts[selected_progress_bar].results = theApp.manager_list.GetManager(manager_index)-&gt;results;
+		barcharts[selected_progress_bar].name = theApp.manager_list.GetManager(manager_index)-&gt;name;
+		barcharts[selected_progress_bar].manager = theApp.manager_list.GetManager(manager_index);
+		barcharts[selected_progress_bar].worker = NULL;
+	} else			// looking for a worker's results</span>
+	{
+<span style = "background-color:#fdd">		barcharts[selected_progress_bar].results =</span>
+		    theApp.manager_list.GetManager(manager_index)-&gt;GetWorker(worker_index)-&gt;results;
+<span style = "background-color:#fdd">		barcharts[selected_progress_bar].name =</span>
+		    theApp.manager_list.GetManager(manager_index)-&gt;GetWorker(worker_index)-&gt;name;
+<span style = "background-color:#fdd">		barcharts[selected_progress_bar].manager = theApp.manager_list.GetManager(manager_index);
+		barcharts[selected_progress_bar].worker =</span>
+		    theApp.manager_list.GetManager(manager_index)-&gt;GetWorker(worker_index);
+	}
+
+	// Updating the rates.
+<span style = "background-color:#fdd">	Update();
+}</span>
+
+void CPageDisplay::Update()
+<span style = "background-color:#dfd">{</span>
+	double max_rate[NUM_STATUS_BARS];
+	int i, j;
+<span style = "background-color:#dfd">	CString max_range_text;</span>
+	double stat_double;
+<span style = "background-color:#dfd">	CString stat_string;</span>
+
+	// Setting ranges on status bar display based on selections.
+	for (i = 0; i &lt; NUM_STATUS_BARS; i++) {
+<span style = "background-color:#dfd">		max_rate[i] = GetMaxRange(&amp;(barcharts[i].results[GetWhichPerf()]), barcharts[i].result_to_display);</span>
+	}
+
+	// If the results to display are the same, giving them the same ranges for easier comparisons.
+	for (i = 0; i &lt; NUM_STATUS_BARS - 1; i++) {
+<span style = "background-color:#dfd">		for (j = i; j &lt; NUM_STATUS_BARS; j++) {
+			if (barcharts[i].result_to_display == barcharts[j].result_to_display) {
+				if (max_rate[i] &gt; max_rate[j])</span>
+<span style = "background-color:#fdd">					max_rate[j] = max_rate[i];</span>
+				else
+<span style = "background-color:#dfd">					max_rate[i] = max_rate[j];</span>
+			}
+		}
+	}
+
+	// Setting ranges on status bar and displaying range value.
+<span style = "background-color:#dfd">	for (i = 0; i &lt; NUM_STATUS_BARS; i++) {</span>
+		// scale the status internally to 0-100, whily displaying the actual value -- is this unnecessary?
+<span style = "background-color:#dfd">		((CProgressCtrl *) GetDlgItem(PRate1 + i))-&gt;SetRange(0, 100); // was SetRange(0, max_rate[i]);</span>
+
+		// See if results are displaying a percentage.
+<span style = "background-color:#dfd">		if ((barcharts[i].result_to_display &gt;= CPU_UTILIZATION_RESULT) &amp;&amp;</span>
+		    (barcharts[i].result_to_display &lt;= IRQ_UTILIZATION_RESULT)) {
+<span style = "background-color:#dfd">			max_range_text.Format("%g %%", max_rate[i]);	// display % sign</span>
+			((CStatic *) GetDlgItem(TRate1MAX + i))-&gt;SetWindowText(max_range_text);
+		} else {
+<span style = "background-color:#dfd">			max_range_text.Format("%g", max_rate[i]);	// displaying a rate</span>
+			((CStatic *) GetDlgItem(TRate1MAX + i))-&gt;SetWindowText(max_range_text);
+		}
+
+		// Update the name.
+<span style = "background-color:#dfd">		SetDlgItemText(TWorker1 + i, barcharts[i].name);</span>
+
+		// Get the performance data to display (a number and a string)
+<span style = "background-color:#dfd">		GetDisplayData(&amp;(barcharts[i].results[GetWhichPerf()]),</span>
+			       barcharts[i].result_to_display, &amp;stat_double, &amp;stat_string);
+
+		// Update the appropriate progress bar
+		// Adjust the bar to fall within 0-100
+<span style = "background-color:#dfd">		((CProgressCtrl *) GetDlgItem(PRate1 + i))-&gt;SetPos((int)(stat_double*100/max_rate[i])); // was SetPos((int)stat_double);</span>
+
+
+		// Display the new value to the user -- this is the actual value (not scaled to 0-100)
+<span style = "background-color:#dfd">		((CStatic *) GetDlgItem(TRate1 + i))-&gt;SetWindowText(stat_string);</span>
+	}
+
+	// Update the data.
+<span style = "background-color:#dfd">	UpdateWindow();</span>
+
+	// Update the big meter dialog, if it exists.
+<span style = "background-color:#dfd">	if (m_dlgBigMeter.is_displayed)
+		m_dlgBigMeter.UpdateDisplay();
+}</span>
+
+//
+// Get Maximum Range:
+//
+// Finds and returns the maximum range that a status bar should be set to based on
+// what data is to be displayed.
+//
+double CPageDisplay::GetMaxRange(Results * results, int result_type)
+<span style = "background-color:#dfd">{
+	switch (result_type) {</span>
+	case MBPS_BIN_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;MBps_Bin);</span>
+		break;
+	case READ_MBPS_BIN_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;read_MBps_Bin);</span>
+		break;
+	case WRITE_MBPS_BIN_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;write_MBps_Bin);</span>
+		break;
+	case MBPS_DEC_RESULT:
+<span style = "background-color:#dfd">		return ReportMaxRange((double)results-&gt;MBps_Dec);</span>
+		break;
+	case READ_MBPS_DEC_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;read_MBps_Dec);</span>
+		break;
+	case WRITE_MBPS_DEC_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;write_MBps_Dec);</span>
+		break;
+
+	case IOPS_RESULT:
+<span style = "background-color:#dfd">		return ReportMaxRange((double)results-&gt;IOps);</span>
+		break;
+	case READ_IOPS_RESULT:
+<span style = "background-color:#dfd">		return ReportMaxRange((double)results-&gt;read_IOps);</span>
+		break;
+	case WRITE_IOPS_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;write_IOps);</span>
+		break;
+
+	case CONNECTION_PER_SEC_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;connections_per_second);</span>
+		break;
+	case AVG_CONNECTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;ave_connection_latency);</span>
+		break;
+	case MAX_CONNECTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;max_connection_latency);</span>
+		break;
+
+	case MAX_LATENCY_RESULT:
+<span style = "background-color:#dfd">		return ReportMaxRange((double)results-&gt;max_latency);</span>
+		break;
+	case MAX_READ_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;max_read_latency);</span>
+		break;
+	case MAX_WRITE_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;max_write_latency);</span>
+		break;
+
+	case AVG_LATENCY_RESULT:
+<span style = "background-color:#dfd">		return ReportMaxRange((double)results-&gt;ave_latency);</span>
+		break;
+	case AVG_READ_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;ave_read_latency);</span>
+		break;
+	case AVG_WRITE_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;ave_write_latency);</span>
+		break;
+
+	case TRANSACTION_PER_SEC_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;transactions_per_second);</span>
+		break;
+	case MAX_TRANSACTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;max_transaction_latency);</span>
+		break;
+	case AVG_TRANSACTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;ave_transaction_latency);</span>
+		break;
+
+	case ERROR_RESULT:
+<span style = "background-color:#dfd">		return ReportMaxRange((double)results-&gt;total_errors);</span>
+		break;
+	case READ_ERROR_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;raw.read_errors);</span>
+		break;
+	case WRITE_ERROR_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;raw.write_errors);</span>
+		break;
+
+	case CPU_UTILIZATION_RESULT:
+<span style = "background-color:#dfd">		return ReportMaxRange((double)results-&gt;CPU_utilization[CPU_TOTAL_UTILIZATION]);</span>
+		break;
+	case USER_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;CPU_utilization[CPU_USER_UTILIZATION]);</span>
+		break;
+	case PRIVILEGED_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;CPU_utilization[CPU_PRIVILEGED_UTILIZATION]);</span>
+		break;
+	case DPC_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;CPU_utilization[CPU_DPC_UTILIZATION]);</span>
+		break;
+	case IRQ_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;CPU_utilization[CPU_IRQ_UTILIZATION]);</span>
+		break;
+
+	case CPU_INTERRUPT_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;CPU_utilization[CPU_IRQ]);</span>
+		break;
+
+	case CPU_EFFECTIVENESS_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;CPU_effectiveness);</span>
+		break;
+
+	case NI_PACKET_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;ni_statistics[NI_PACKETS]);</span>
+		break;
+	case NI_ERROR_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;ni_statistics[NI_ERRORS]);</span>
+		break;
+	case TCP_SEGMENT_RESULT:
+<span style = "background-color:#fdd">		return ReportMaxRange((double)results-&gt;tcp_statistics[TCP_SEGMENTS_RESENT]);</span>
+		break;
+
+	default:
+		return 0;
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Report Maximum Range:
+// 
+// Returns the value that the maximum range for a status bar should be set to based 
+// on what's needed.
+//
+double CPageDisplay::ReportMaxRange(double max_range_needed)
+<span style = "background-color:#dfd">{
+	double max_rate = 1.0;	// Start the max range at 1.0,</span>
+
+<span style = "background-color:#dfd">	if (max_range_needed &lt; 1.0)</span>
+	{
+<span style = "background-color:#dfd">		while (max_rate &gt; (max_range_needed * 10))	// and continue to shrink it in increments</span>
+		{											// of 0.1x until the need is met.
+<span style = "background-color:#dfd">			max_rate /= 10;</span>
+		}
+	}
+	else
+	{
+<span style = "background-color:#dfd">		while (max_rate &lt; max_range_needed)	// and continue to grow it in increments</span>
+		{									// of 10x until the need is met.
+<span style = "background-color:#dfd">			if (max_rate * 10.0 &lt; max_rate)	// Trap overflow.</span>
+				break;
+<span style = "background-color:#dfd">			max_rate *= 10.0;</span>
+		}
+	}
+
+	return max_rate;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Pass in a results structure and the ID# of the statistic you want.
+//
+// GetDisplayData will fill in these values:
+//              result_value - the performance number (64.566 IOps) requested
+//              result_text - the user-friendly text version of that result
+//
+BOOL CPageDisplay::GetDisplayData(Results * results, int result_type, double *result_value, CString * result_text)
+<span style = "background-color:#dfd">{
+	switch (result_type) {</span>
+	case MBPS_BIN_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;MBps_Bin;
+		result_text-&gt;Format("%.2f MiBPS (%.2f MBPS)", results-&gt;MBps_Bin, results-&gt;MBps_Dec);</span>
+		break;
+	case READ_MBPS_BIN_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;read_MBps_Bin;
+		result_text-&gt;Format("%.2f MiBPS (%.2f MBPS)", results-&gt;read_MBps_Bin, results-&gt;read_MBps_Dec);
+		break;</span>
+	case WRITE_MBPS_BIN_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;write_MBps_Bin;
+		result_text-&gt;Format("%.2f MiBPS (%.2f MBPS)", results-&gt;write_MBps_Bin, results-&gt;write_MBps_Dec);
+		break;</span>
+	case MBPS_DEC_RESULT:
+<span style = "background-color:#dfd">		*result_value = results-&gt;MBps_Dec;
+		result_text-&gt;Format("%.2f MBPS (%.2f MiBPS)", results-&gt;MBps_Dec, results-&gt;MBps_Bin);
+		break;</span>
+	case READ_MBPS_DEC_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;read_MBps_Dec;
+		result_text-&gt;Format("%.2f MBPS (%.2f MiBPS)", results-&gt;read_MBps_Dec, results-&gt;read_MBps_Bin);
+		break;</span>
+	case WRITE_MBPS_DEC_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;write_MBps_Dec;
+		result_text-&gt;Format("%.2f MBPS (%.2f MiBPS)", results-&gt;write_MBps_Dec, results-&gt;write_MBps_Bin);
+		break;</span>
+
+	case IOPS_RESULT:
+<span style = "background-color:#dfd">		*result_value = results-&gt;IOps;
+		result_text-&gt;Format("%.2f", results-&gt;IOps);
+		break;</span>
+	case READ_IOPS_RESULT:
+<span style = "background-color:#dfd">		*result_value = results-&gt;read_IOps;
+		result_text-&gt;Format("%.2f", results-&gt;read_IOps);
+		break;</span>
+	case WRITE_IOPS_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;write_IOps;
+		result_text-&gt;Format("%.2f", results-&gt;write_IOps);
+		break;</span>
+
+	case CONNECTION_PER_SEC_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;connections_per_second;
+		result_text-&gt;Format("%.2f", results-&gt;connections_per_second);
+		break;</span>
+	case AVG_CONNECTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;ave_connection_latency;
+		result_text-&gt;Format("%.4f", results-&gt;ave_connection_latency);
+		break;</span>
+	case MAX_CONNECTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;max_connection_latency;
+		result_text-&gt;Format("%.4f", results-&gt;max_connection_latency);
+		break;</span>
+
+	case MAX_LATENCY_RESULT:
+<span style = "background-color:#dfd">		*result_value = results-&gt;max_latency;
+		result_text-&gt;Format("%.4f", results-&gt;max_latency);
+		break;</span>
+	case MAX_READ_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;max_read_latency;
+		result_text-&gt;Format("%.4f", results-&gt;max_read_latency);
+		break;</span>
+	case MAX_WRITE_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;max_write_latency;
+		result_text-&gt;Format("%.4f", results-&gt;max_write_latency);
+		break;</span>
+
+	case AVG_LATENCY_RESULT:
+<span style = "background-color:#dfd">		*result_value = results-&gt;ave_latency;
+		result_text-&gt;Format("%.4f", results-&gt;ave_latency);
+		break;</span>
+	case AVG_READ_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;ave_read_latency;
+		result_text-&gt;Format("%.4f", results-&gt;ave_read_latency);
+		break;</span>
+	case AVG_WRITE_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;ave_write_latency;
+		result_text-&gt;Format("%.4f", results-&gt;ave_write_latency);
+		break;</span>
+
+	case TRANSACTION_PER_SEC_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;transactions_per_second;
+		result_text-&gt;Format("%.2f", results-&gt;transactions_per_second);
+		break;</span>
+	case MAX_TRANSACTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;max_transaction_latency;
+		result_text-&gt;Format("%.4f", results-&gt;max_transaction_latency);
+		break;</span>
+	case AVG_TRANSACTION_LATENCY_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;ave_transaction_latency;
+		result_text-&gt;Format("%.4f", results-&gt;ave_transaction_latency);
+		break;</span>
+
+	case ERROR_RESULT:
+<span style = "background-color:#dfd">		*result_value = results-&gt;total_errors;
+		result_text-&gt;Format("%d", results-&gt;total_errors);</span>
+		break;
+	case READ_ERROR_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;raw.read_errors;
+		result_text-&gt;Format("%d", results-&gt;raw.read_errors);
+		break;</span>
+	case WRITE_ERROR_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;raw.write_errors;
+		result_text-&gt;Format("%d", results-&gt;raw.write_errors);
+		break;</span>
+
+	case CPU_UTILIZATION_RESULT:
+<span style = "background-color:#dfd">		*result_value = results-&gt;CPU_utilization[CPU_TOTAL_UTILIZATION];
+		result_text-&gt;Format("%.2f %%", results-&gt;CPU_utilization[CPU_TOTAL_UTILIZATION]);
+		break;</span>
+	case USER_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;CPU_utilization[CPU_USER_UTILIZATION];
+		result_text-&gt;Format("%.2f %%", results-&gt;CPU_utilization[CPU_USER_UTILIZATION]);
+		break;</span>
+	case PRIVILEGED_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;CPU_utilization[CPU_PRIVILEGED_UTILIZATION];
+		result_text-&gt;Format("%.2f %%", results-&gt;CPU_utilization[CPU_PRIVILEGED_UTILIZATION]);
+		break;</span>
+	case DPC_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;CPU_utilization[CPU_DPC_UTILIZATION];
+		result_text-&gt;Format("%.2f %%", results-&gt;CPU_utilization[CPU_DPC_UTILIZATION]);
+		break;</span>
+	case IRQ_UTILIZATION_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;CPU_utilization[CPU_IRQ_UTILIZATION];
+		result_text-&gt;Format("%.2f %%", results-&gt;CPU_utilization[CPU_IRQ_UTILIZATION]);
+		break;</span>
+
+	case CPU_INTERRUPT_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;CPU_utilization[CPU_IRQ];
+		result_text-&gt;Format("%.2f", results-&gt;CPU_utilization[CPU_IRQ]);
+		break;</span>
+
+	case CPU_EFFECTIVENESS_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;CPU_effectiveness;
+		result_text-&gt;Format("%.2f", results-&gt;CPU_effectiveness);
+		break;</span>
+
+	case NI_PACKET_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;ni_statistics[NI_PACKETS];
+		result_text-&gt;Format("%.2f", results-&gt;ni_statistics[NI_PACKETS]);
+		break;</span>
+	case NI_ERROR_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;ni_statistics[NI_ERRORS];
+		result_text-&gt;Format("%.2f", results-&gt;ni_statistics[NI_ERRORS]);
+		break;</span>
+	case TCP_SEGMENT_RESULT:
+<span style = "background-color:#fdd">		*result_value = results-&gt;tcp_statistics[TCP_SEGMENTS_RESENT];
+		result_text-&gt;Format("%.2f", results-&gt;tcp_statistics[TCP_SEGMENTS_RESENT]);</span>
+		break;
+	default:
+<span style = "background-color:#dfd">		return FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+UINT CPageDisplay::GetUpdateDelay()
+<span style = "background-color:#dfd">{</span>
+	// We know that the combo box value will be in the range 0..(NUM_UPDATE_TIMES - 1)
+<span style = "background-color:#dfd">	return (delay_table[m_CUpdateFrequency.GetCurSel()]);
+}</span>
+
+void CPageDisplay::SetUpdateDelay(UINT new_delay)
+<span style = "background-color:#dfd">{</span>
+	int i;
+<span style = "background-color:#fdd">	int new_setting = (NUM_UPDATE_TIMES - 1);	// Default if new_delay is not found in delay_table</span>
+
+<span style = "background-color:#dfd">	for (i = 0; i &lt; NUM_UPDATE_TIMES; i++) {
+		if ((new_delay * 1000) == delay_table[i]) {</span>
+			new_setting = i;
+			break;
+		}
+	}
+
+<span style = "background-color:#dfd">	m_CUpdateFrequency.SetCurSel(new_setting);</span>
+}
+
+int CPageDisplay::GetWhichPerf()
+<span style = "background-color:#dfd">{
+	if (GetCheckedRadioButton(RAvgWholeTest, RAvgLastUpdate) == RAvgLastUpdate) {</span>
+		return LAST_UPDATE_PERF;
+	} else {
+		return WHOLE_TEST_PERF;
+	}
+<span style = "background-color:#dfd">}</span>
+
+void CPageDisplay::SetWhichPerf(int which_perf)
+<span style = "background-color:#dfd">{</span>
+	if (which_perf == LAST_UPDATE_PERF) {
+		CheckRadioButton(RAvgWholeTest, RAvgLastUpdate, RAvgLastUpdate);
+	} else {
+		CheckRadioButton(RAvgWholeTest, RAvgLastUpdate, RAvgWholeTest);
+	}
+<span style = "background-color:#dfd">}</span>
+
+// Update frequency has changed.
+void CPageDisplay::OnSelchangeCUpdateFrequency()
+<span style = "background-color:#dfd">{
+	if(theApp.test_state == TestRecording)</span>
+	{
+<span style = "background-color:#fdd">		theApp.pView-&gt;SetTimer(DISPLAY_TIMER, 0, NULL);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+// Enables and disables the instantaneous output depending on the check box state.
+void CPageDisplay::OnCRecordLastUpdate()
+<span style = "background-color:#dfd">{
+	isInstantaneousMode = m_CRecordLastUpdate.GetCheck() == TRUE;</span>
+
+<span style = "background-color:#dfd">	if(isInstantaneousMode)</span>
+	{
+<span style = "background-color:#fdd">		SetWhichPerf(LAST_UPDATE_PERF);
+		m_CRAvgWholeTest.EnableWindow(FALSE);
+		SetUpdateDelay(1);</span>
+	}
+	else
+	{
+<span style = "background-color:#dfd">		m_CRAvgWholeTest.EnableWindow(TRUE);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+bool CPageDisplay::IsInstantaneousMode()
+<span style = "background-color:#dfd">{
+	return isInstantaneousMode;
+}</span>
+
+void CPageDisplay::Enable(BOOL enable)
+<span style = "background-color:#dfd">{
+	m_CRecordLastUpdate.EnableWindow(enable);</span>
+
+<span style = "background-color:#dfd">	if(m_CRecordLastUpdate.GetCheck())</span>
+	{
+<span style = "background-color:#fdd">		m_CRAvgLastUpdate.EnableWindow(enable);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Generic handler for press on any BResultType button.  
+// Records which button was pressed, then pops up the result type menu.
+// 
+void CPageDisplay::OnBResultType(int which_button)
+<span style = "background-color:#dfd">{
+	CMenu menu;
+	CRect button_rect;</span>
+	RECT screen_rect;
+	int menu_height, menu_x, menu_y;
+
+	// Record which button was pressed, for later use by OnMDisplay().
+<span style = "background-color:#dfd">	selected_button = which_button;</span>
+
+	// This prevents the menu from popping up if the user is "unchecking" the button.
+<span style = "background-color:#dfd">	if (((CButton *) GetDlgItem(BResultType1 + selected_button))-&gt;GetCheck()) {</span>
+<span style = "background-color:#fdd">		((CButton *) GetDlgItem(BResultType1 + selected_button))-&gt;SetCheck(FALSE);</span>
+		return;
+	}
+	// Create the popup menu from the resource.
+<span style = "background-color:#dfd">	VERIFY(menu.LoadMenu(IDR_POPUP_DISPLAY_LIST));
+	CMenu *pPopup = menu.GetSubMenu(0);</span>
+
+	ASSERT(pPopup != NULL);
+
+	// Find the first non-child window to be the popup's parent.
+<span style = "background-color:#dfd">	CWnd *pWndPopupOwner = this;</span>
+
+<span style = "background-color:#dfd">	while (pWndPopupOwner-&gt;GetStyle() &amp; WS_CHILD)
+		pWndPopupOwner = pWndPopupOwner-&gt;GetParent();</span>
+
+	// Get the screen coordinates of the button that was pressed.
+<span style = "background-color:#dfd">	GetDlgItem(BResultType1 + selected_button)-&gt;GetWindowRect(&amp;button_rect);</span>
+
+	// Position the menu with its upper left corner at the lower left corner of the button.
+<span style = "background-color:#dfd">	menu_x = button_rect.TopLeft().x;
+	menu_y = button_rect.BottomRight().y;</span>
+
+	// If the menu would go off the bottom of the screen, make it go *up* from the button instead.
+<span style = "background-color:#dfd">	menu_height = GetSystemMetrics(SM_CYMENUSIZE) * MDisplayNumSubmenus;
+	if (SystemParametersInfo(SPI_GETWORKAREA, 0, &amp;screen_rect, 0) &amp;&amp; (menu_y + menu_height &gt; screen_rect.bottom)) {
+		menu_y = button_rect.TopLeft().y - menu_height + 1;</span>
+	}
+	// Set the button's visual state to "pressed" as long as the menu is popped up.
+<span style = "background-color:#dfd">	((CButton *) GetDlgItem(BResultType1 + selected_button))-&gt;SetCheck(TRUE);</span>
+
+	// Pop up the menu.
+<span style = "background-color:#dfd">	pPopup-&gt;TrackPopupMenu(TPM_LEFTALIGN | TPM_LEFTBUTTON, menu_x, menu_y, pWndPopupOwner);</span>
+
+	// The user's selection (if any) from the pop-up menu will result in a call to one of the 
+	// CGalileoView::OnMDisplay...() functions, which will in turn call CPageDisplay::OnMDisplay().
+
+	// Set the button's visual state to "not pressed" after the menu is dismissed.
+<span style = "background-color:#dfd">	((CButton *) GetDlgItem(BResultType1 + selected_button))-&gt;SetState(FALSE);
+}</span>
+
+//
+// Generic handler for any selection from the IDR_POPUP_DISPLAY_LIST menu.  
+// (The specific handlers for each selection are members of the CGalileoView class;
+// they each call this function.)  Its main purpose is to set the result_to_display
+// member variable.
+//
+// This function assumes that the member variable selected_button is set to 
+// indicate the button that was pressed to pop up the menu.  This is typically done
+// by the function OnBResultType(), which popped up the menu.
+//
+// The parameters submenu_id and menu_item are resource ID's, used to get the
+// menu item string for the button label.  The parameter result_code must be one 
+// of the *_RESULT constants from PageDisplay.h, and determines which result will
+// be displayed by the status bar associated with the selected_button.
+// 
+void CPageDisplay::OnMDisplay(int submenu_id, int menu_item, int result_code)
+<span style = "background-color:#dfd">{
+	if ((selected_button &lt; 0) || (selected_button &gt;= NUM_STATUS_BARS)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Invalid selected_button value in CPageDisplay::OnMDisplay()");</span>
+		return;
+	}
+<span style = "background-color:#dfd">	if ((submenu_id &lt; 0) || (submenu_id &gt;= MDisplayNumSubmenus)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Invalid submenu_id value in CPageDisplay::OnMDisplay()");</span>
+		return;
+	}
+<span style = "background-color:#dfd">	if ((result_code &lt; 0) || (result_code &gt;= NUM_RESULTS)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Invalid result_code value in CPageDisplay::OnMDisplay()");</span>
+		return;
+	}
+	// store the selected result for later use
+<span style = "background-color:#dfd">	barcharts[selected_button].result_to_display = result_code;</span>
+
+	// get the selected menu item's title and store it in the selected button
+<span style = "background-color:#dfd">	CMenu menu;</span>
+
+<span style = "background-color:#dfd">	VERIFY(menu.LoadMenu(IDR_POPUP_DISPLAY_LIST));</span>
+
+<span style = "background-color:#dfd">	CMenu *pPopup = menu.GetSubMenu(0);</span>
+
+	ASSERT(pPopup != NULL);	// we can use ASSERT here because this should work every time if it works at all
+
+<span style = "background-color:#dfd">	CMenu *pSubPopup = pPopup-&gt;GetSubMenu(submenu_id);</span>
+
+<span style = "background-color:#dfd">	if (pSubPopup == NULL) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Could not get submenu in CPageDisplay::OnMDisplay()");</span>
+		return;
+	}
+
+<span style = "background-color:#dfd">	CString title;</span>
+
+<span style = "background-color:#dfd">	pSubPopup-&gt;GetMenuString(menu_item, title, MF_BYCOMMAND);</span>
+
+<span style = "background-color:#dfd">	GetDlgItem(BResultType1 + selected_button)-&gt;SetWindowText(title);
+	((CButton *) GetDlgItem(BResultType1 + selected_button))-&gt;SetCheck(FALSE);</span>
+
+<span style = "background-color:#dfd">	Update();
+}</span>
+
+//
+// Find a statistic by its name (as stored in result file) and select it
+// as though it had been selected from the menu.
+// 
+void CPageDisplay::SelectStatisticByName(int button, const char *statistic_name)
+<span style = "background-color:#dfd">{</span>
+	unsigned int submenu_id, menu_item;
+
+<span style = "background-color:#dfd">	if ((button &lt; 0) || (button &gt;= NUM_STATUS_BARS)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Invalid button value in CPageDisplay::SelectStatisticByName()");</span>
+		return;
+	}
+<span style = "background-color:#dfd">	if (!statistic_name) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Invalid string in CPageDisplay::SelectStatisticByName()");
+		return;</span>
+	}
+
+<span style = "background-color:#dfd">	CMenu menu;</span>
+
+<span style = "background-color:#dfd">	VERIFY(menu.LoadMenu(IDR_POPUP_DISPLAY_LIST));</span>
+
+<span style = "background-color:#dfd">	CMenu *pPopup = menu.GetSubMenu(0);</span>
+
+	ASSERT(pPopup != NULL);	// we can use ASSERT here because this should work every time if it works at all
+
+<span style = "background-color:#dfd">	for (submenu_id = 0; submenu_id &lt; MDisplayNumSubmenus; submenu_id++) {
+		CMenu *pSubPopup = pPopup-&gt;GetSubMenu(submenu_id);</span>
+
+<span style = "background-color:#dfd">		if (pSubPopup == NULL) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("Could not get submenu in CPageDisplay::SelectStatisticByName()");</span>
+			return;
+		}
+
+<span style = "background-color:#dfd">		for (menu_item = 0; menu_item &lt; (UINT)pSubPopup-&gt;GetMenuItemCount(); menu_item++) {
+			CString title;</span>
+
+<span style = "background-color:#dfd">			pSubPopup-&gt;GetMenuString(menu_item, title, MF_BYPOSITION);</span>
+
+<span style = "background-color:#dfd">			if (title.CompareNoCase(statistic_name) == 0) {
+				selected_button = button;
+				theApp.pView-&gt;OnMDisplay(submenu_id, pSubPopup-&gt;GetMenuItemID(menu_item));
+				return;</span>
+			}
+<span style = "background-color:#dfd">		}</span>
+	}
+	// No match found, just leave the current selection unchanged
+<span style = "background-color:#dfd">	return;</span>
+<span style = "background-color:#fdd">}</span>
+
+//
+// Find a manager by its name (as stored in result file) and select it
+// as though it had been dragged.
+// 
+void CPageDisplay::SelectManagerByName(int button, const char *mgr_name, const int mgr_id)
+<span style = "background-color:#fdd">{</span>
+	Manager *mgr;
+
+<span style = "background-color:#fdd">	if (!mgr_name) {
+		ErrorMessage("Invalid string in CPageDisplay::SelectManagerByName()");</span>
+		return;
+	}
+
+<span style = "background-color:#fdd">	if (strlen(mgr_name)) {</span>
+		// The manager name is non-empty; get a pointer to the
+		// first manager with the specified name
+<span style = "background-color:#fdd">		mgr = theApp.manager_list.GetManagerByName(mgr_name, mgr_id);</span>
+
+<span style = "background-color:#fdd">		if (mgr) {</span>
+			// A manager with the specified name was found in the ManagerList; use it
+<span style = "background-color:#fdd">			SetResultSource(mgr-&gt;GetIndex(), IOERROR, button);
+		} else {</span>
+			// No manager with the specified name was found
+<span style = "background-color:#fdd">			if (theApp.manager_list.ManagerCount() == 1) {</span>
+				// There is only one manager; use it (ignoring its name)
+				SetResultSource(0, IOERROR, button);
+			} else {
+				// More than one manager; default to ALL_MANAGERS
+				SetResultSource(ALL_MANAGERS, IOERROR, button);
+			}
+		}
+<span style = "background-color:#fdd">	} else {</span>
+		// The manager name is an empty string; use ALL_MANAGERS
+<span style = "background-color:#fdd">		SetResultSource(ALL_MANAGERS, IOERROR, button);</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Find a worker by its name (as stored in result file) and select it
+// as though it had been dragged.
+// 
+void CPageDisplay::SelectWorkerByName(int button, const char *wkr_name, const int wkr_id)
+<span style = "background-color:#fdd">{</span>
+	Manager *mgr;
+	Worker *wkr;
+
+<span style = "background-color:#fdd">	if (!wkr_name) {
+		ErrorMessage("Invalid string in CPageDisplay::SelectWorkerByName()");</span>
+		return;
+	}
+	// Get a pointer to the button's currently assigned manager
+<span style = "background-color:#fdd">	mgr = barcharts[button].manager;
+	if (mgr) {</span>
+		// The specified button already has a manager (probably was just assigned by 
+		// the previous line in the config file, but even if not we'll use it anyway).
+
+<span style = "background-color:#fdd">		if (strlen(wkr_name)) {</span>
+			// The worker name is non-empty; get a pointer to the
+			// first worker with the specified name within the current manager
+<span style = "background-color:#fdd">			wkr = mgr-&gt;GetWorkerByName(wkr_name, wkr_id);</span>
+
+<span style = "background-color:#fdd">			if (wkr) {</span>
+				// A worker with the specified name was found; use it
+<span style = "background-color:#fdd">				SetResultSource(mgr-&gt;GetIndex(), wkr-&gt;GetIndex(), button);</span>
+			} else {
+				// No worker with the specified name was found
+<span style = "background-color:#fdd">				if (mgr-&gt;WorkerCount() == 1) {</span>
+					// There is only one worker; use it (ignoring its name)
+					SetResultSource(mgr-&gt;GetIndex(), 0, button);
+				} else {
+					// More than one worker; default to all workers
+					SetResultSource(mgr-&gt;GetIndex(), IOERROR, button);
+				}
+			}
+<span style = "background-color:#fdd">		} else {</span>
+			// The worker name is an empty string; use all workers
+<span style = "background-color:#fdd">			SetResultSource(mgr-&gt;GetIndex(), IOERROR, button);</span>
+		}
+	}
+	// Else: the specified button does not have a manager, ignore the specified worker name
+<span style = "background-color:#fdd">}</span>
+
+//
+// Called by OnTWorker1 - OnTWorker6 in response to left mouse button
+// clicks on the worker/manager name above the result display bars.
+//
+void CPageDisplay::SelectWorkerViewItem(const int bar_number)
+<span style = "background-color:#dfd">{</span>
+	// Highlight the manager/worker/whatever being monitored by the chosen bar.
+<span style = "background-color:#dfd">	theApp.pView-&gt;m_pWorkerView-&gt;SelectItem(barcharts[bar_number].manager, barcharts[bar_number].worker);</span>
+}
+
+void CPageDisplay::ClearCheckButton()
+<span style = "background-color:#dfd">{</span>
+	CButton *button;
+<span style = "background-color:#dfd">	CRect button_rect;
+	CPoint point;</span>
+
+	// When displaying the popup menu, if the user clicks outside the popup and
+	// not on the button that poped the popup up, Windows handles removing the
+	// menu.  We have to handle unchecking the button.
+
+<span style = "background-color:#dfd">	button = (CButton *) GetDlgItem(BResultType1 + selected_button);
+	button-&gt;GetWindowRect(&amp;button_rect);
+	GetCursorPos(&amp;point);</span>
+
+	// Note that we only reset the state of the check button if the cursor is
+	// not within the button's bounding rectangle.  If the cursor is within
+	// the bounding rectangle, the user clicked the button a second time.  The
+	// Button handler will take care of unchecking the button, and will not
+	// display the menu.  This allows the button to toggle the menu.
+
+<span style = "background-color:#dfd">	if (button-&gt;GetCheck() &amp;&amp; !button_rect.PtInRect(point))</span>
+<span style = "background-color:#fdd">		button-&gt;SetCheck(FALSE);</span>
+
+	// If the Big Meter display is open, the WM_EXITMENULOOP message may have
+	// been intended for that dialog box.  Uncheck its ResultType button.
+
+<span style = "background-color:#dfd">	if (m_dlgBigMeter.is_displayed)
+		m_dlgBigMeter.ClearCheckButton();
+}</span>
+
+//
+// Show the big performance meter for a given performance bar.
+//
+void CPageDisplay::ShowBigMeter(int performance_bar)
+<span style = "background-color:#dfd">{
+	CString stat_title, worker_title;</span>
+
+	// Get the name of the result we are displaying from the appropriate performance bar.
+<span style = "background-color:#dfd">	GetDlgItem(BResultType1 + performance_bar)-&gt;GetWindowText(stat_title);</span>
+	// Get the name of the worker (or manager or All Managers) being watched.
+<span style = "background-color:#dfd">	GetDlgItem(TWorker1 + performance_bar)-&gt;GetWindowText(worker_title);</span>
+
+	// Create the big performance meter dialog for the given performance bar.
+<span style = "background-color:#dfd">	m_dlgBigMeter.Create(performance_bar, (CString) "Iometer " + theApp.GetVersionString()</span>
+			     + " " + theApp.pView-&gt;m_pPageSetup-&gt;test_name, stat_title, worker_title);
+<span style = "background-color:#dfd">}</span>
+
+//
+// Save the current settings of the page to a file.
+//
+BOOL CPageDisplay::SaveConfig(ostream &amp; outfile)
+<span style = "background-color:#dfd">{</span>
+	int i;
+<span style = "background-color:#dfd">	CString statistic;</span>
+
+	// Update memory variables with data located on GUI.
+<span style = "background-color:#dfd">	UpdateData(TRUE);</span>
+
+	// The 'RESULTS DISPLAY byte format is the shared writer (iocore::IcfWriter);
+	// this adapter gathers the page/bar state into the struct. Each bar emits a
+	// statistic line, optionally followed by a manager line and a worker line
+	// (each its own entry, written in order - reproducing the grouped layout).
+<span style = "background-color:#dfd">	iocore::IcfDisplaySettings ds;
+	ds.recordLastUpdate = IsInstantaneousMode() ? true : false;
+	ds.updateFrequency  = GetUpdateDelay() / 1000;
+	ds.whichPerf        = (GetWhichPerf() == LAST_UPDATE_PERF) ? 1 : 0;</span>
+
+<span style = "background-color:#dfd">	for (i = 0; i &lt; NUM_STATUS_BARS; i++) {</span>
+		// Get the name of the result we are displaying.
+<span style = "background-color:#dfd">		GetDlgItem(BResultType1 + i)-&gt;GetWindowText(statistic);</span>
+
+<span style = "background-color:#dfd">		iocore::IcfDisplaySettings::Bar stat;
+		stat.index = i;
+		stat.kind  = iocore::IcfDisplaySettings::Bar::Statistic;
+		stat.name  = (LPCTSTR) statistic;
+		ds.bars.push_back(stat);</span>
+
+		// Is a specific manager being monitored?
+<span style = "background-color:#dfd">		if (barcharts[i].manager) {</span>
+<span style = "background-color:#fdd">			iocore::IcfDisplaySettings::Bar mgr;
+			mgr.index = i;
+			mgr.kind  = iocore::IcfDisplaySettings::Bar::Manager;
+			mgr.id    = barcharts[i].manager-&gt;id;
+			mgr.name  = barcharts[i].manager-&gt;name;
+			ds.bars.push_back(mgr);</span>
+
+			// Is a specific worker on that manager being monitored?
+<span style = "background-color:#fdd">			if (barcharts[i].worker) {
+				iocore::IcfDisplaySettings::Bar wkr;
+				wkr.index = i;
+				wkr.kind  = iocore::IcfDisplaySettings::Bar::Worker;
+				wkr.id    = barcharts[i].worker-&gt;id;
+				wkr.name  = barcharts[i].worker-&gt;name;
+				ds.bars.push_back(wkr);
+			}
+		}</span>
+<span style = "background-color:#dfd">	}</span>
+
+<span style = "background-color:#dfd">	iocore::IcfWriter::writeResultsDisplay(outfile, ds);</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Load the settings of the page from a file.
+//
+BOOL CPageDisplay::LoadConfig(const CString &amp; infilename)
+<span style = "background-color:#dfd">{</span>
+	// The 'RESULTS DISPLAY parsing is shared core logic (iocore::IcfDocument,
+	// a faithful port of the parser that used to live here). This adapter
+	// replays the recorded MFC error texts as dialogs and applies the parsed
+	// settings through the same GUI calls as before. (One small divergence:
+	// the old code applied settings as it parsed, so a file failing PARTWAY
+	// could leave earlier settings applied; settings are now applied only
+	// when the section parses - a failed load aborts the restore anyway.)
+<span style = "background-color:#dfd">	iocore::IcfDocument doc((LPCTSTR) infilename);
+	iocore::IcfDisplaySettings ds;</span>
+
+<span style = "background-color:#dfd">	const bool ok = doc.loadResultsDisplay(ds);</span>
+
+	// Show the error dialogs exactly as the old in-place parser did
+	// (including the "Ignoring this bar setting" warnings on success).
+<span style = "background-color:#dfd">	for (size_t i = 0; i &lt; doc.errors().size(); i++)</span>
+<span style = "background-color:#fdd">		ErrorMessage(CString(doc.errors()[i].c_str()));</span>
+
+<span style = "background-color:#dfd">	if (!ok)</span>
+		return FALSE;
+
+<span style = "background-color:#dfd">	if (ds.updateLinePresent) {
+		m_CRecordLastUpdate.SetCheck(ds.recordLastUpdate ? TRUE : FALSE);
+		OnCRecordLastUpdate();
+		SetUpdateDelay(ds.updateFrequency);
+		SetWhichPerf(ds.whichPerf);   // core uses the same *_PERF values</span>
+	}
+
+<span style = "background-color:#dfd">	for (size_t i = 0; i &lt; ds.bars.size(); i++) {
+		const iocore::IcfDisplaySettings::Bar &amp; bar = ds.bars[i];
+		switch (bar.kind) {</span>
+		case iocore::IcfDisplaySettings::Bar::Statistic:
+<span style = "background-color:#dfd">			SelectStatisticByName(bar.index, CString(bar.name.c_str()));</span>
+			break;
+		case iocore::IcfDisplaySettings::Bar::Manager:
+<span style = "background-color:#fdd">			SelectManagerByName(bar.index, CString(bar.name.c_str()), bar.id);
+			break;</span>
+		case iocore::IcfDisplaySettings::Bar::Worker:
+<span style = "background-color:#fdd">			SelectWorkerByName(bar.index, CString(bar.name.c_str()), bar.id);</span>
+			break;
+		}
+	}
+
+	// Update the GUI with the values read in from the file.
+<span style = "background-color:#dfd">	UpdateData(FALSE);</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+void CPageDisplay::OnRAvgLastUpdate()
+<span style = "background-color:#fdd">{
+	if (theApp.test_state == TestRecording)
+		theApp.manager_list.UpdateResults(LAST_UPDATE_PERF, IsInstantaneousMode());
+	Update();
+}</span>
+
+void CPageDisplay::OnRAvgWholeTest()
+<span style = "background-color:#dfd">{
+	if (theApp.test_state == TestRecording)</span>
+<span style = "background-color:#fdd">		theApp.manager_list.UpdateResults(WHOLE_TEST_PERF, IsInstantaneousMode());</span>
+<span style = "background-color:#dfd">	Update();
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

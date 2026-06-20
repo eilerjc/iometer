@@ -1,0 +1,460 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>ByteOrder.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Dynamo) / ByteOrder.cpp                                           ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Contains the code which is needed to transform the    ## */
+/* ##               messages - passed between Iometer and Dynamo - from   ## */
+/* ##               big to little endian.                                 ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2004-03-05 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved the Dump_*_Results() functions (used for      ## */
+/* ##                 debugging purposes) from IOManager.cpp to here.     ## */
+/* ##               - Moved the *_double_swap() functions for the         ## */
+/* ##                 Linux/XScale combination from IOManager.cpp         ## */
+/* ##                 to here.                                            ## */
+/* ##               2004-02-16 (mingz@ele.uri.edu)                        ## */
+/* ##               - Added a special double-precision number word        ## */
+/* ##                 swapping code for ARM architecture here. A 2 word   ## */
+/* ##                 double number is same order in word but different   ## */
+/* ##                 order between two words compared with IA32.         ## */
+/* ##               2003-10-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               2003-07-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Removed the [BIG|LITTLE]_ENDIAN_ARCH defines.       ## */
+/* ##               - Cleanup the formatting.                             ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOCommon.h"
+#include "IOTest.h"
+#include "IOMessage.h"
+
+inline void rotate(char *ptr, int size);
+template &lt; class T &gt; inline void reorder(T &amp;);
+inline void reorder(CPU_Results &amp;, int);
+inline void reorder(Net_Results &amp;, int);
+inline void reorder(Raw_Result &amp;);
+void reorder(Message &amp;);
+void reorder(Data_Message &amp;, int union_type, int send_recv);
+
+#if defined(_DEBUG)
+void Dump_CPU_Results(struct CPU_Results *res)
+{
+	if (!res)
+		return;
+	cout &lt;&lt; " CPU Counters:";
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;CPU_utilization[0][CPU_TOTAL_UTILIZATION];
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;CPU_utilization[0][CPU_USER_UTILIZATION];
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;CPU_utilization[0][CPU_PRIVILEGED_UTILIZATION];
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;CPU_utilization[0][CPU_IRQ];
+	cout &lt;&lt; endl;
+}
+
+void Dump_Net_Results(struct Net_Results *res)
+{
+	if (!res)
+		return;
+	cout &lt;&lt; " Net Counters:";
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;tcp_stats[TCP_SEGMENTS_RESENT];
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;ni_stats[0][NI_PACKETS];
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;ni_stats[0][NI_OUT_ERRORS];
+	cout &lt;&lt; "   " &lt;&lt; res-&gt;ni_stats[0][NI_IN_ERRORS];
+	cout &lt;&lt; endl;
+}
+
+void Dump_Manager_Results(struct Manager_Results *res)
+{
+	if (!res)
+		return;
+	cout &lt;&lt; "Dump manager result: " &lt;&lt; endl;
+	cout &lt;&lt; " time_counter = " &lt;&lt; res-&gt;time_counter &lt;&lt; endl;
+	Dump_CPU_Results(&amp;(res-&gt;cpu_results));
+	Dump_Net_Results(&amp;(res-&gt;net_results));
+}
+
+void Dump_Raw_Result(struct Raw_Result *res)
+{
+	if (!res)
+		return;
+	cout &lt;&lt; "Dump raw result: " &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "bytes_read =" &lt;&lt; res-&gt;bytes_read &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "bytes_written =" &lt;&lt; res-&gt;bytes_written &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "read_count =" &lt;&lt; res-&gt;read_count &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "write_count =" &lt;&lt; res-&gt;write_count &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "transaction_count =" &lt;&lt; res-&gt;transaction_count &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "connection_count =" &lt;&lt; res-&gt;connection_count &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "read_errors =" &lt;&lt; res-&gt;read_errors &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "write_errors =" &lt;&lt; res-&gt;write_errors &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "max_raw_read_latency =" &lt;&lt; res-&gt;max_raw_read_latency &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "read_latency_sum =" &lt;&lt; res-&gt;read_latency_sum &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "max_raw_write_latency =" &lt;&lt; res-&gt;max_raw_write_latency &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "write_latency_sum =" &lt;&lt; res-&gt;write_latency_sum &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "max_raw_transaction_latency =" &lt;&lt; res-&gt;max_raw_transaction_latency &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "max_raw_connection_latency =" &lt;&lt; res-&gt;max_raw_connection_latency &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "transaction_latency_sum =" &lt;&lt; res-&gt;transaction_latency_sum &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "connection_latency_sum =" &lt;&lt; res-&gt;connection_latency_sum &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; "counter_time =" &lt;&lt; res-&gt;counter_time &lt;&lt; endl;
+	cout &lt;&lt; "Dump raw result end. " &lt;&lt; endl;
+}
+#endif
+
+#if defined(IOMTR_OS_LINUX) &amp;&amp; defined(IOMTR_CPU_XSCALE)
+//
+//      This can be optimized definitely.
+//
+/* This is the standard way, leave here for understanding its purpose.
+void double_wordswap(double *d)
+{
+	unsigned char *c;
+	unsigned char tmp[4];
+	
+	c = (unsigned char *)d;
+	memcpy(tmp, c, 4);
+	memcpy(c, c + 4, 4);
+	memcpy(c + 4, tmp, 4);
+}
+*/
+
+//
+// I guess this should be much faster than upper code, am I right?
+//
+void double_wordswap(double *d)
+{
+	unsigned long *c, t;
+
+	c = (unsigned long *)d;
+	t = *c;
+	*c = *(c + 1);
+	*(c + 1) = t;
+}
+
+//
+// ARM can run as little endian or big endian. But even it runs
+// at little endian, it has different word order for double-precision
+// number.
+//
+void Manager_Info_double_swap(struct Manager_Info *p)
+{
+	double_wordswap(&amp;(p-&gt;timer_resolution));
+}
+
+void Manager_Results_double_swap(struct Manager_Results *p)
+{
+	CPU_Results_double_swap(&amp;(p-&gt;cpu_results));
+	Net_Results_double_swap(&amp;(p-&gt;net_results));
+}
+
+void CPU_Results_double_swap(struct CPU_Results *p)
+{
+	int i, j;
+
+	for (i = 0; i &lt; MAX_CPUS; i++)
+		for (j = 0; j &lt; CPU_RESULTS; j++)
+			double_wordswap(&amp;(p-&gt;CPU_utilization[i][j]));
+}
+
+void Net_Results_double_swap(struct Net_Results *p)
+{
+	int i, j;
+
+	for (i = 0; i &lt; TCP_RESULTS; i++)
+		double_wordswap(&amp;(p-&gt;tcp_stats[i]));
+	for (i = 0; i &lt; MAX_NUM_INTERFACES; i++)
+		for (j = 0; j &lt; NI_RESULTS; j++)
+			double_wordswap(&amp;(p-&gt;ni_stats[i][j]));
+}
+#endif
+
+inline void rotate(char *ptr, int size)
+{
+	int i;
+	int sz = size - 1;
+
+	for (i = 0; i &lt; (size / 2); i++) {
+		ptr[i] = ptr[i] ^ ptr[sz - i];
+		ptr[sz - i] = ptr[i] ^ ptr[sz - i];
+		ptr[i] = ptr[i] ^ ptr[sz - i];
+	}
+	return;
+}
+
+template &lt; class T &gt; inline void reorder(T &amp; tref)
+{
+	(void)rotate((char *)&amp;tref, sizeof(T));
+	return;
+}
+
+inline void reorder(CPU_Results &amp; var, int send_recv)
+<span style = "background-color:#fdd">{</span>
+	int i, j;
+
+<span style = "background-color:#fdd">	if (send_recv == RECV)
+		reorder(var.count);</span>
+
+<span style = "background-color:#fdd">	for (i = 0; i &lt; var.count; i++)</span>
+		for (j = 0; j &lt; CPU_RESULTS; j++)
+<span style = "background-color:#fdd">			reorder(var.CPU_utilization[i][j]);</span>
+
+<span style = "background-color:#fdd">	if (send_recv == SEND)
+		reorder(var.count);</span>
+
+	return;
+<span style = "background-color:#fdd">}</span>
+
+inline void reorder(Net_Results &amp; var, int send_recv)
+<span style = "background-color:#fdd">{</span>
+	int i, j;
+
+<span style = "background-color:#fdd">	if (send_recv == RECV)
+		reorder(var.ni_count);</span>
+
+	for (i = 0; i &lt; TCP_RESULTS; i++)
+<span style = "background-color:#fdd">		reorder(var.tcp_stats[i]);</span>
+
+<span style = "background-color:#fdd">	for (i = 0; i &lt; var.ni_count; i++)</span>
+		for (j = 0; j &lt; NI_RESULTS; j++)
+<span style = "background-color:#fdd">			reorder(var.ni_stats[i][j]);</span>
+
+<span style = "background-color:#fdd">	if (send_recv == SEND)
+		reorder(var.ni_count);</span>
+
+	return;
+<span style = "background-color:#fdd">}</span>
+
+void reorder(Raw_Result &amp; var)
+<span style = "background-color:#fdd">{
+	reorder(var.bytes_read);
+	reorder(var.bytes_written);
+	reorder(var.read_count);
+	reorder(var.write_count);</span>
+
+<span style = "background-color:#fdd">	reorder(var.transaction_count);
+	reorder(var.connection_count);
+	reorder(var.read_errors);
+	reorder(var.write_errors);</span>
+
+<span style = "background-color:#fdd">	reorder(var.max_raw_read_latency);
+	reorder(var.read_latency_sum);
+	reorder(var.max_raw_write_latency);
+	reorder(var.write_latency_sum);</span>
+
+<span style = "background-color:#fdd">	reorder(var.max_raw_transaction_latency);
+	reorder(var.max_raw_connection_latency);
+	reorder(var.transaction_latency_sum);
+	reorder(var.connection_latency_sum);</span>
+
+<span style = "background-color:#fdd">	reorder(var.counter_time);</span>
+
+<span style = "background-color:#fdd">	for(int x = 0; x &lt; LATENCY_BIN_SIZE; x++)
+		reorder(var.latency_bin[x]);</span>
+
+	return;
+<span style = "background-color:#fdd">}</span>
+
+void reorder(Message &amp; var)
+<span style = "background-color:#fdd">{
+	(void)reorder(var.purpose);
+	(void)reorder(var.data);</span>
+	return;
+<span style = "background-color:#fdd">}</span>
+
+void reorder(Data_Message &amp; var, int uniontype, int send_recv)
+<span style = "background-color:#fdd">{</span>
+	int i;
+
+	// must be first after a recv.
+<span style = "background-color:#fdd">	if (send_recv == RECV)
+		reorder(var.count);</span>
+
+<span style = "background-color:#fdd">	switch (uniontype) {</span>
+	case 0:
+		return;
+		break;
+
+	case DATA_MESSAGE_MANAGER_INFO:
+		// struct Manager_Info
+#ifdef _DEBUG
+		cout &lt;&lt; "Manager_Info count: " &lt;&lt; var.count &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		reorder(var.data.manager_info.port_number);
+		reorder(var.data.manager_info.processors);
+		reorder(var.data.manager_info.timer_resolution);</span>
+		break;
+
+	case DATA_MESSAGE_TARGET_SPEC:
+		// struct Target_Spec
+#ifdef _DEBUG
+		cout &lt;&lt; "Target_Spec count: " &lt;&lt; var.count &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		for (i = 0; i &lt; var.count; i++) {</span>
+			// must be first after recv.
+<span style = "background-color:#fdd">			if (send_recv == RECV)
+				reorder(var.data.targets[i].type);</span>
+
+			// Is target Disk/Network/Vi type ?
+<span style = "background-color:#fdd">			if (IsType(var.data.targets[i].type, GenericDiskType)) {
+				reorder(var.data.targets[i].disk_info.sector_size);
+				reorder(var.data.targets[i].disk_info.maximum_size);
+				reorder(var.data.targets[i].disk_info.starting_sector);
+				reorder(var.data.targets[i].DataPattern);
+				reorder(var.data.targets[i].use_fixed_seed);
+				reorder(var.data.targets[i].fixed_seed_value);</span>
+			}
+
+<span style = "background-color:#fdd">			if (IsType(var.data.targets[i].type, GenericNetType)) {
+				reorder(var.data.targets[i].tcp_info.local_port);
+				reorder(var.data.targets[i].tcp_info.remote_port);</span>
+			}
+
+			if (IsType(var.data.targets[i].type, GenericVIType)) {
+#ifdef _DEBUG
+				cerr &lt;&lt; "WARNING: VI data marshalling not supported yet." &lt;&lt; endl;
+#endif
+			}
+			// Now re-order the other stuff.
+<span style = "background-color:#fdd">			reorder(var.data.targets[i].queue_depth);</span>
+#ifndef USE_NEW_DISCOVERY_MECHANISM // part of the bitwise char
+			reorder(var.data.targets[i].test_connection_rate);
+#endif
+<span style = "background-color:#fdd">			reorder(var.data.targets[i].trans_per_conn);
+			reorder(var.data.targets[i].random);
+			reorder(var.data.targets[i].use_fixed_seed);</span>
+
+			// Must be last before send. Else Sparc Solaris will be confused.
+<span style = "background-color:#fdd">			if (send_recv == SEND)
+				reorder(var.data.targets[i].type);</span>
+		}
+<span style = "background-color:#fdd">		break;</span>
+
+	case DATA_MESSAGE_TEST_SPEC:
+		// struct Test_Spec
+#ifdef _DEBUG
+		cout &lt;&lt; "Test_Spec count: " &lt;&lt; var.count &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		reorder(var.data.spec.default_assignment);
+		for (i = 0; i &lt; MAX_ACCESS_SPECS; i++) {
+			reorder(var.data.spec.access[i].of_size);
+			reorder(var.data.spec.access[i].reads);
+			reorder(var.data.spec.access[i].random);
+			reorder(var.data.spec.access[i].delay);
+			reorder(var.data.spec.access[i].burst);
+			reorder(var.data.spec.access[i].align);
+			reorder(var.data.spec.access[i].reply);
+			reorder(var.data.spec.access[i].size);</span>
+		}
+<span style = "background-color:#fdd">		break;</span>
+
+	case DATA_MESSAGE_MANAGER_RESULTS:
+		// Manager Results processed here.
+#ifdef _DEBUG
+		cout &lt;&lt; "Test_Spec count: " &lt;&lt; var.count &lt;&lt; endl;
+#endif
+		for (i = 0; i &lt; MAX_SNAPSHOTS; i++)
+<span style = "background-color:#fdd">			reorder(var.data.manager_results.time_counter[i]);</span>
+
+<span style = "background-color:#fdd">		reorder(var.data.manager_results.cpu_results, send_recv);
+		reorder(var.data.manager_results.net_results, send_recv);
+		break;</span>
+
+	case DATA_MESSAGE_WORKER_RESULTS:
+		// Worker Results processed here.
+#ifdef _DEBUG
+		cout &lt;&lt; "Test_Spec count: " &lt;&lt; var.count &lt;&lt; endl;
+#endif
+		for (i = 0; i &lt; MAX_SNAPSHOTS; i++)
+<span style = "background-color:#fdd">			reorder(var.data.worker_results.time[i]);</span>
+
+<span style = "background-color:#fdd">		if (send_recv == RECV)	// never used as of now.
+			reorder(var.data.worker_results.target_results.count);</span>
+
+<span style = "background-color:#fdd">		for (i = 0; i &lt; var.data.worker_results.target_results.count; i++)
+			reorder(var.data.worker_results.target_results.result[i]);</span>
+
+<span style = "background-color:#fdd">		if (send_recv == SEND)
+			reorder(var.data.worker_results.target_results.count);
+		break;</span>
+
+	default:
+		return;
+		break;
+	}			// end of switch(uniontype)....
+
+	// Must be last before send. Else Sparc Solaris will be confused.
+<span style = "background-color:#fdd">	if (send_recv == SEND)
+		reorder(var.count);</span>
+
+	return;
+<span style = "background-color:#fdd">}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

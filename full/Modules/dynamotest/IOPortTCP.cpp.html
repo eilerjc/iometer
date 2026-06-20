@@ -1,0 +1,1033 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOPortTCP.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer &amp; Dynamo) / IOPortTCP.cpp                                 ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: This class covers the communication between Iometer   ## */
+/* ##               and Dynamo (implementing the TCP/IP transport).       ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: - As the code never supported asynchronous type of    ## */
+/* ##                 connections for Unix, we are focusing and aiming    ## */
+/* ##                 for synchronous connections only!                   ## */
+/* ##               - There is still code for asynchronous conncetions,   ## */
+/* ##                 but it will be skipped in a later versions.         ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2005-04-18 (raltherr@apple.com)                       ## */
+/* ##               - Support for MacOS X                                 ## */
+/* ##               2005-04-10 (mingz@ele.uri.edu)                        ## */
+/* ##               - Add type cast to remove compile warning for Solaris.## */
+/* ##               2005-04-01 (mingz@ele.uri.edu)                        ## */
+/* ##               - Added space in binding error msg print out          ## */
+/* ##               2005-01-12 (henryx.w.tieman@intel.com)                ## */
+/* ##               - fixed include file differences for Windows DDK.     ## */
+/* ##               2004-09-01 (henryx.w.tieman@intel.com)                ## */
+/* ##               - Cleanup some warnings with type casts.              ## */
+/* ##               2004-03-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Code cleanup to ensure common style.                ## */
+/* ##               - Applied Thayne Harmon's patch for supporting        ## */
+/* ##                 Netware support (on I386).                          ## */
+/* ##               2003-07-19 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Assimilated the patch from Robert Jones which is    ## */
+/* ##                 needed to build under Solaris 9 on x86 (i386).      ## */
+/* ##               2003-07-18 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-26 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Improved error messages for better support.         ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               2003-03-04 (joe@eiler.net)                            ## */
+/* ##               - Added a #ifdef for SOLARIS support                  ## */
+/* ##               2003-03-01 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Cut out the Windows Pipes support for               ## */
+/* ##                 communication efforts.                              ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#include "StdAfx.h"
+#endif
+
+#include "IOPortTCP.h"
+
+#if defined(IOMTR_OS_LINUX)
+#include &lt;sys/time.h&gt;
+#include &lt;sys/types.h&gt;
+#include &lt;unistd.h&gt;
+#endif
+
+#if defined(IOMTR_OS_NETWARE)
+#include &lt;sys/select.h&gt;
+#endif
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#if defined(USING_DDK)
+#include "winsock.h"
+#else
+#include "mswsock.h"
+#endif
+#endif
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+//////////////////////////////////////////////////////////////////////
+// Static data member initialization.
+//////////////////////////////////////////////////////////////////////
+
+unsigned int PortTCP::sockets_in_use = 0;
+
+//////////////////////////////////////////////////////////////////////
+// Construction/Destruction
+//////////////////////////////////////////////////////////////////////
+
+PortTCP::PortTCP(BOOL synch)
+<span style = "background-color:#dfd">:  Port(synch)			// call Port constructor
+{
+	type = PORT_TYPE_TCP;</span>
+
+<span style = "background-color:#dfd">	server_socket = (int)INVALID_SOCKET;
+	client_socket = (int)INVALID_SOCKET;</span>
+
+	// initialize WinSock -- do this only if it has not yet been initialized in this process
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#dfd">	if (sockets_in_use++ == 0) {</span>
+#ifdef _DEBUG
+		cout &lt;&lt; "Initializing WinSock." &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+		int retval;
+		WSADATA wd;
+
+		// request WinSock version 2.0
+<span style = "background-color:#dfd">		retval = WSAStartup(MAKEWORD(2, 0), &amp;wd);</span>
+
+<span style = "background-color:#dfd">		if (retval != 0) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Could not initialize WinSock." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::PortTCP() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     retval = " &lt;&lt; retval &lt;&lt; ends;
+<span style = "background-color:#fdd">			OutputErrMsg();</span>
+		}
+	}
+	// The accept_ex_buffer is used in PortTCP::Accept().  We need to provide enough space 
+	// for two addresses plus 16 additional bytes per address (see AcceptEx() documentation).
+	// This data will not be used, but we can't tell AcceptEx() not to give it to us, so
+	// we need to provide the buffer anyway.
+<span style = "background-color:#dfd">	accept_ex_buffer = new char[sizeof(struct sockaddr_in) + 16 + sizeof(struct sockaddr_in) + 16 + 1];</span>
+#endif				// IOMTR_OS_WIN32 || IOMTR_OS_WIN64
+// Note: synch is not used.
+<span style = "background-color:#dfd">}</span>
+
+PortTCP::~PortTCP()
+<span style = "background-color:#dfd">{
+	(void)CloseSocket(&amp;server_socket, "server");
+	(void)CloseSocket(&amp;client_socket, "client");</span>
+
+	// clean up WinSock -- do this only if nobody else is using it in this process
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#dfd">	if (sockets_in_use-- == 0) {</span>
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Cleaning up WinSock." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#fdd">		if (WSACleanup() != 0) {
+			*errmsg &lt;&lt; "===&gt; ERROR: Could not clean up WinSock." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::~PortTCP() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     return code = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">			OutputErrMsg();</span>
+		}
+	}
+
+<span style = "background-color:#dfd">	delete accept_ex_buffer;</span>
+#endif				// IOMTR_OS_WIN32 || IOMTR_OS_WIN64
+<span style = "background-color:#dfd">}</span>
+
+//
+// Creates a TCP socket for communication.  Used by server.
+// "size" argument is ignored, but accepted for compatibility with PortPipe.
+// (PortPipe does no longer exists, but one day there might be an successor)
+//
+BOOL PortTCP::Create(char *port_name, char *remote_name, DWORD size, unsigned short port_number)
+<span style = "background-color:#dfd">{</span>
+	struct sockaddr_in sin;
+	socklen_t buflen;
+
+<span style = "background-color:#dfd">	network_port = port_number;	// listen at specified port (0 = system assigns port number)</span>
+
+<span style = "background-color:#dfd">	if (port_name) {</span>
+<span style = "background-color:#fdd">		strcpy(name, port_name);</span>
+	} else {
+		// get the unqualified local host name
+<span style = "background-color:#dfd">		if (gethostname(name, MAX_NETWORK_NAME) == SOCKET_ERROR) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Getting local host name failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::Create() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">			OutputErrMsg();
+			return FALSE;</span>
+		}
+	}
+
+<span style = "background-color:#dfd">	if (remote_name) {</span>
+<span style = "background-color:#fdd">		strcpy(network_name, remote_name);
+	} else {</span>
+		// get the specified host's first network address
+<span style = "background-color:#dfd">		struct addrinfo hints = {}, *res = NULL;</span>
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+<span style = "background-color:#dfd">		if (getaddrinfo(name, NULL, &amp;hints, &amp;res) != 0 || res == NULL) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Getting host name for \"" &lt;&lt; name &lt;&lt; "\" failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::Create() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">			if (res) freeaddrinfo(res);
+			OutputErrMsg();
+			return FALSE;</span>
+		}
+<span style = "background-color:#dfd">		inet_ntop(AF_INET, &amp;((struct sockaddr_in *)res-&gt;ai_addr)-&gt;sin_addr,</span>
+		          network_name, sizeof(network_name));
+<span style = "background-color:#dfd">		freeaddrinfo(res);</span>
+
+	}
+
+	//
+	// Create socket.
+	//
+
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Creating socket." &lt;&lt; endl;
+	WSASetLastError(0);
+#endif
+
+<span style = "background-color:#dfd">	if (synchronous) {
+		server_socket = socket(AF_INET, SOCK_STREAM, PF_UNSPEC);
+	}</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	else {
+<span style = "background-color:#dfd">		server_socket = WSASocketW(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);</span>
+	}
+#endif
+
+<span style = "background-color:#dfd">	if (server_socket == (int)INVALID_SOCKET) {</span>
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "===&gt; ERROR: Creating socket failed." &lt;&lt; endl</span>
+		    &lt;&lt; "     [PortTCP::Create() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+		    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+		OutputErrMsg();
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	//
+	// Bind to socket.
+	//
+
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Binding to socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+	WSASetLastError(0);
+#endif
+
+	sin.sin_family = AF_INET;	// use Internet Protocol
+<span style = "background-color:#dfd">	sin.sin_addr.s_addr = htonl(INADDR_ANY);	// listen at any available address
+	sin.sin_port = htons(network_port);	// listen at specified port (0 = system assigns port number)</span>
+
+<span style = "background-color:#dfd">	if (bind(server_socket, (struct sockaddr *)&amp;sin, sizeof(sin)) != 0) {</span>
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "===&gt; ERROR: Binding to socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl</span>
+		    &lt;&lt; "     [PortTCP::Create() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+		    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+		OutputErrMsg();
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// get actual port number in use
+	buflen = sizeof(sin);
+<span style = "background-color:#dfd">	if (getsockname(server_socket, (struct sockaddr *)&amp;sin, &amp;buflen) != 0) {</span>
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "===&gt; ERROR: Getting information about server socket failed." &lt;&lt; endl</span>
+		    &lt;&lt; "     [PortTCP::Create() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+		    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+		OutputErrMsg();
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+<span style = "background-color:#dfd">	network_port = ntohs(sin.sin_port);</span>
+
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Bound server socket on port " &lt;&lt; network_port &lt;&lt; "." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Connects to an existing port waiting to accept a connection.  Used by client.
+//     port_name is a hostname or a string IP address ("xxx.xxx.xxx.xxx").
+//     port_number is the port number to use at that address.
+//
+BOOL PortTCP::Connect(char *port_name, unsigned short port_number)
+<span style = "background-color:#dfd">{</span>
+	struct sockaddr_in sin;
+	int retval;
+
+	// get hostname to connect to (default local host name).
+
+<span style = "background-color:#dfd">	if (strlen(port_name)) {
+		strcpy(name, port_name);</span>
+	} else {
+<span style = "background-color:#fdd">		if (gethostname(name, MAX_NETWORK_NAME) == SOCKET_ERROR) {
+			*errmsg &lt;&lt; "===&gt; ERROR: Getting local host name failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::Connect() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+			OutputErrMsg();
+<span style = "background-color:#fdd">			return FALSE;</span>
+		}
+	}
+
+	// resolve numeric IP or hostname to a sockaddr
+	{
+<span style = "background-color:#dfd">		struct addrinfo hints = {}, *res = NULL;
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		if (getaddrinfo(name, NULL, &amp;hints, &amp;res) != 0 || res == NULL) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Getting host information for \"" &lt;&lt; name &lt;&lt; "\" failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::Connect() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">			if (res) freeaddrinfo(res);</span>
+			OutputErrMsg();
+			return FALSE;
+		}
+<span style = "background-color:#dfd">		sin.sin_addr.s_addr = ((struct sockaddr_in *)res-&gt;ai_addr)-&gt;sin_addr.s_addr;
+		freeaddrinfo(res);</span>
+	}
+	// create socket for the connnection.
+
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Creating socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+	WSASetLastError(0);
+#endif
+
+<span style = "background-color:#dfd">	if (synchronous) {
+		client_socket = socket(AF_INET, SOCK_STREAM, PF_UNSPEC);
+	}</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	else {
+<span style = "background-color:#fdd">		client_socket = WSASocketW(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);</span>
+	}
+#endif
+
+<span style = "background-color:#dfd">	if (client_socket == (int)INVALID_SOCKET) {</span>
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "===&gt; ERROR: Creating socket failed." &lt;&lt; endl</span>
+		    &lt;&lt; "     [PortTCP::Connect() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+		    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+		OutputErrMsg();
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// specify protocol, port, and address to connect to.
+
+	sin.sin_family = AF_INET;	// use Internet Protocol
+<span style = "background-color:#dfd">	sin.sin_port = htons(port_number);	// connect to this port</span>
+	// sin.sin_addr.s_addr already set by getaddrinfo block above
+
+#if PORT_DETAILS || _DETAILS
+	{
+		char addr_str[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &amp;sin.sin_addr, addr_str, sizeof(addr_str));
+		cout &lt;&lt; "Host address: " &lt;&lt; addr_str &lt;&lt; endl;
+	}
+#endif
+
+	// attempt to connect (keep trying forever if necessary).
+
+	do {
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Attempting to connect to socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+		WSASetLastError(0);
+#endif
+
+<span style = "background-color:#dfd">		retval = connect(client_socket, (struct sockaddr *)&amp;sin, sizeof(sin));</span>
+
+<span style = "background-color:#dfd">		if (retval != 0) {</span>
+#if PORT_DETAILS || _DETAILS
+			// WSAECONNREFUSED means the server isn't up yet or is busy,
+			// don't print an error message
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+			if (errno != ECONNREFUSED)
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+			if (WSAGetLastError() != WSAECONNREFUSED)
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+			{
+				*errmsg &lt;&lt; "===&gt; ERROR: Connecting to socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl
+				    &lt;&lt; "     [PortTCP::Connect() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+				    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+				OutputErrMsg();
+			}
+#endif
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+			// According to connect(3XN):
+			//      If connect() fails, the state of the socket
+			//      is  unspecified.  Portable  applications
+			//      should close the file descriptor and
+			//      create a new socket before attempting to
+			//      reconnect.
+
+#if PORT_DETAILS || _DETAILS
+			cout &lt;&lt; "Re-creating socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+			WSASetLastError(0);
+#endif
+
+			if (close(client_socket) &lt; 0) {
+				*errmsg &lt;&lt; "===&gt; ERROR: Closing socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl
+				    &lt;&lt; "     [PortTCP::Connect() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+				    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+				OutputErrMsg();
+				return FALSE;
+			}
+
+			if ((client_socket = socket(AF_INET, SOCK_STREAM, PF_UNSPEC))
+			    == (int)INVALID_SOCKET) {
+				*errmsg &lt;&lt; "===&gt; ERROR: Recreating socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl
+				    &lt;&lt; "     [PortTCP::Connect() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+				    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+				OutputErrMsg();
+				return FALSE;
+			}
+#endif				// IOMTR_OSFAMILY_UNIX
+<span style = "background-color:#fdd">			Sleep(RETRY_DELAY);</span>
+		}
+	}
+<span style = "background-color:#fdd">	while (retval != 0);</span>
+
+<span style = "background-color:#dfd">	printf("Successful PortTCP::Connect\n  - port name: %s\n", name);</span>
+
+<span style = "background-color:#dfd">	return TRUE;</span>
+<span style = "background-color:#fdd">}</span>
+
+//
+// Begin accepting a connection to an existing port.  Used by server.
+// For synchronous port, blocks until a connection is made (returns TRUE) or an error occurs (returns FALSE).
+// For asynchronous port, returns immediately.  Returns TRUE for success or FALSE if any error occurs.
+//     Call IsAcceptComplete() to determine if it has completed, and GetAcceptResult() to get result.
+//
+BOOL PortTCP::Accept()
+<span style = "background-color:#dfd">{</span>
+	//
+	// Listen to socket.
+	//
+
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Listening to socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+	WSASetLastError(0);
+#endif
+
+<span style = "background-color:#dfd">	if (listen(server_socket, 0) != 0)	// allow at most one connection at a time</span>
+	{
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "===&gt; ERROR: Listening to socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl</span>
+		    &lt;&lt; "     [PortTCP::Accept() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+		    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+		OutputErrMsg();
+		return FALSE;
+	}
+	//
+	// Accept connections to socket.
+	//
+
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Accepting connections to socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+	WSASetLastError(0);
+#endif
+
+<span style = "background-color:#dfd">	if (synchronous) {</span>
+		// don't need any info about who we're talking to
+<span style = "background-color:#dfd">		client_socket = accept(server_socket, NULL, NULL);</span>
+
+<span style = "background-color:#dfd">		if (client_socket == (int)INVALID_SOCKET) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Accepting connection to socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::Accept() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">			OutputErrMsg();
+			return FALSE;</span>
+		} else {
+			return TRUE;
+		}
+	}
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	else {
+		DWORD bytes_received;
+
+<span style = "background-color:#dfd">		if (!InitOverlapped(&amp;accept_overlapped)) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Creating OVERLAPPED structure for socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::Accept() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+			OutputErrMsg();
+<span style = "background-color:#fdd">			return FALSE;</span>
+		}
+
+		//
+		// Create client socket.
+		//
+
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Creating client socket for " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+		WSASetLastError(0);
+#endif
+
+<span style = "background-color:#dfd">		client_socket = WSASocketW(AF_INET, SOCK_STREAM, PF_UNSPEC, NULL, 0, WSA_FLAG_OVERLAPPED);</span>
+
+<span style = "background-color:#dfd">		if (client_socket == INVALID_SOCKET) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Creating client socket for " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::Accept() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+			OutputErrMsg();
+<span style = "background-color:#fdd">			return FALSE;</span>
+		}
+		//
+		// Accept connections to socket.
+		//
+<span style = "background-color:#dfd">		if (AcceptEx(server_socket, client_socket, accept_ex_buffer, 0,	// read no data, only the two addresses, into accept_ex_buffer</span>
+			     sizeof(struct sockaddr_in) + 16, sizeof(struct sockaddr_in) + 16,
+			     &amp;bytes_received, &amp;accept_overlapped)) {
+#if PORT_DETAILS || _DETAILS
+			cout &lt;&lt; "Connection accepted." &lt;&lt; endl;
+#endif
+
+			return TRUE;
+		} else {
+<span style = "background-color:#dfd">			if (WSAGetLastError() == WSA_IO_PENDING)	// Read started OK...</span>
+			{
+				return TRUE;
+			} else {
+<span style = "background-color:#fdd">				*errmsg &lt;&lt; "===&gt; ERROR: AcceptEx() failed." &lt;&lt; endl</span>
+				    &lt;&lt; "     [PortTCP::Accept() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+				OutputErrMsg();
+<span style = "background-color:#fdd">				return FALSE;</span>
+			}
+		}
+	}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	else {
+		*errmsg &lt;&lt; "===&gt; ERROR: Attempting asynchronous connection in Unix." &lt;&lt; endl
+		    &lt;&lt; "     [PortTCP::Accept() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+		OutputErrMsg();
+		return (FALSE);
+	}
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif				// (asynch code)
+<span style = "background-color:#dfd">}</span>
+
+//
+// Called from the "server" side of a port to disconnect a "client" from
+// its port.
+//
+BOOL PortTCP::Disconnect()
+<span style = "background-color:#dfd">{
+	return CloseSocket(&amp;client_socket, "client");</span>
+}
+
+//
+// Get result of completed asynchronous Accept().  Be sure that IsAcceptComplete() has returned TRUE
+// before calling this function.  Does not block.
+//
+BOOL PortTCP::GetAcceptResult()
+<span style = "background-color:#dfd">{
+	if (synchronous) {</span>
+<span style = "background-color:#fdd">		return (client_socket != (int)INVALID_SOCKET);</span>
+	}
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	DWORD bytes_read;
+	BOOL result;
+
+<span style = "background-color:#dfd">	result = GetOverlappedResult((HANDLE) client_socket, &amp;accept_overlapped, &amp;bytes_read, FALSE);</span>
+
+	return result;
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	*errmsg &lt;&lt; "===&gt; ERROR: Asynchronous socket accept attempted under Unix." &lt;&lt; endl
+	    &lt;&lt; "     [PortTCP::GetAcceptResult() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+	OutputErrMsg();
+	return (FALSE);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">}</span>
+
+//
+// Closes connections to a port.  Called from either "client" or "server" side.
+//
+BOOL PortTCP::Close()
+<span style = "background-color:#dfd">{</span>
+	BOOL client_close_state, server_close_state;
+
+	// make two separate calls to make sure both are closed
+<span style = "background-color:#dfd">	client_close_state = CloseSocket(&amp;client_socket, "client");
+	server_close_state = CloseSocket(&amp;server_socket, "server");</span>
+
+<span style = "background-color:#dfd">	return (client_close_state &amp;&amp; server_close_state);
+}</span>
+
+//
+// Call which receives data from a connected port.  Blocking call for synchronous port; non-blocking
+// call for asynchronous port.  Note that a receive call will not receive data from itself.
+//
+DWORDLONG PortTCP::Receive(LPVOID msg, DWORD size)
+<span style = "background-color:#dfd">{
+	if (synchronous) {</span>
+		return SynchReceive(msg, size);
+	}
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	else {
+<span style = "background-color:#dfd">		return AsynchReceive(msg, size);</span>
+	}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	else {
+		*errmsg &lt;&lt; "===&gt; ERROR: Asynchronous TCP attempted under Unix." &lt;&lt; endl
+		    &lt;&lt; "     [PortTCP::Receive() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+		OutputErrMsg();
+		return (0);
+	}
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+}
+
+//
+// Synchronous implementation of Receive().
+//
+DWORDLONG PortTCP::SynchReceive(LPVOID msg, DWORD size)
+<span style = "background-color:#dfd">{
+	if (!synchronous) {</span>
+<span style = "background-color:#fdd">		return PORT_ERROR;</span>
+	}
+
+	int bytes_read;
+<span style = "background-color:#dfd">	DWORD total_bytes_read = 0;
+	DWORD total_size = size;</span>
+
+<span style = "background-color:#dfd">	while (total_bytes_read &lt; total_size) {
+		bytes_read = recv(client_socket, (char *)msg, size, 0);
+		if (bytes_read == 0 || bytes_read == SOCKET_ERROR) {</span>
+			// socket has been closed, return error
+<span style = "background-color:#dfd">			cerr &lt;&lt; "Get port error in SynchReceive." &lt;&lt; endl;
+			return PORT_ERROR;</span>
+		}
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Received " &lt;&lt; bytes_read &lt;&lt; " of " &lt;&lt; size &lt;&lt; " bytes from socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+#endif
+
+		total_bytes_read += bytes_read;	// add bytes read so far to total
+<span style = "background-color:#dfd">		msg = ((char *)msg) + bytes_read;	// move pointer to end of bytes read so far
+		size -= bytes_read;	// decrease number of bytes to read in next recv()</span>
+	}
+
+<span style = "background-color:#dfd">	return (DWORDLONG) total_bytes_read;
+}</span>
+
+//
+// Asynchronous implementation of Receive().
+//
+DWORDLONG PortTCP::AsynchReceive(LPVOID msg, DWORD size)
+<span style = "background-color:#dfd">{
+	if (synchronous) {</span>
+		return PORT_ERROR;
+	}
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+
+	DWORD bytes_read;
+
+<span style = "background-color:#dfd">	if (!InitOverlapped(&amp;receive_overlapped)) {</span>
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "===&gt; ERROR: Creating OVERLAPPED structure for socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl</span>
+		    &lt;&lt; "     [PortTCP::AsynchReceive() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+<span style = "background-color:#fdd">		OutputErrMsg();
+		return PORT_ERROR;</span>
+	}
+
+<span style = "background-color:#dfd">	if (ReadFile((HANDLE) client_socket, msg, size, &amp;bytes_read, &amp;receive_overlapped)) {</span>
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Received " &lt;&lt; bytes_read &lt;&lt; " of " &lt;&lt; size &lt;&lt; " bytes from socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#dfd">		return (DWORDLONG) bytes_read;</span>
+	} else {
+<span style = "background-color:#fdd">		if (GetLastError() == ERROR_IO_PENDING)	// Read started OK...</span>
+		{
+<span style = "background-color:#fdd">			return 0;	// not an error code, but no bytes read yet</span>
+		}
+		return PORT_ERROR;
+	}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	else {
+		*errmsg &lt;&lt; "===&gt; ERROR: Asynchronous TCP attempted under Unix." &lt;&lt; endl
+		    &lt;&lt; "     [PortTCP::AsynchReceive() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+		OutputErrMsg();
+		return (PORT_ERROR);
+	}
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">}</span>
+
+//
+// Get result of completed asynchronous Receive() (number of bytes read, -1 for any error).  Be sure that 
+// IsReceiveComplete() has returned TRUE before calling this function.  Does not block.
+//
+// NOTE: For asynchronous PortTCP's, IsReceiveComplete() will return TRUE when the receive operation 
+// completes, which does NOT necessarily indicate that all requested bytes have been read.  It is the
+// caller's responsibility to check the return value of GetReceiveResult() and, if not all requested
+// bytes have been read, to post additional Receive() calls until all the bytes are read.
+//
+DWORDLONG PortTCP::GetReceiveResult()
+<span style = "background-color:#dfd">{
+	if (synchronous) {</span>
+		return PORT_ERROR;
+	}
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	DWORD bytes_read;
+
+<span style = "background-color:#dfd">	if (GetOverlappedResult((HANDLE) client_socket, &amp;receive_overlapped, &amp;bytes_read, FALSE)) {
+		return (DWORDLONG) bytes_read;</span>
+	} else {
+<span style = "background-color:#fdd">		return PORT_ERROR;</span>
+	}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	else {
+		*errmsg &lt;&lt; "===&gt; ERROR: Asynchronous TCP attempted under Unix." &lt;&lt; endl
+		    &lt;&lt; "     [PortTCP::GetReceiveResult() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+		OutputErrMsg();
+		return (PORT_ERROR);
+	}
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">}</span>
+
+//
+// Call which sends data to a connected port.  Blocking call for synchronous port; non-blocking
+// call for asynchronous port.  Note that a process will not send data to itself.
+//
+DWORDLONG PortTCP::Send(LPVOID msg, DWORD size)
+<span style = "background-color:#dfd">{
+	if (synchronous) {</span>
+		return SynchSend(msg, size);
+	} else {
+<span style = "background-color:#dfd">		return AsynchSend(msg, size);</span>
+	}
+}
+
+//
+// Synchronous implementation of Send().
+//
+DWORDLONG PortTCP::SynchSend(LPVOID msg, DWORD size)
+<span style = "background-color:#dfd">{
+	if (!synchronous) {</span>
+		return PORT_ERROR;
+	}
+
+	int bytes_written;
+<span style = "background-color:#dfd">	DWORD total_bytes_written = 0;
+	DWORD total_size = size;</span>
+	static int error_count=0;
+
+#ifdef _DEBUG
+	cout &lt;&lt; "in SynchSend " &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">	while (total_bytes_written &lt; total_size) {
+		bytes_written = send(client_socket, (char *)msg, size, 0);</span>
+
+<span style = "background-color:#dfd">		if (bytes_written == 0 || bytes_written == SOCKET_ERROR) {</span>
+<span style = "background-color:#fdd">			error_count++;
+			if (error_count == 1 || error_count%10 == 0) {</span>
+				// socket has been closed, return error
+<span style = "background-color:#fdd">				*errmsg &lt;&lt; "===&gt; ERROR: Send failed." &lt;&lt; endl</span>
+					&lt;&lt; "     [PortTCP::SynchSend() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+					&lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; endl
+					&lt;&lt; "     error repeats " &lt;&lt; error_count &lt;&lt; " time(s)." &lt;&lt; ends;
+
+<span style = "background-color:#fdd">				OutputErrMsg();</span>
+			}
+<span style = "background-color:#fdd">			return PORT_ERROR;</span>
+		}
+		else
+		{
+<span style = "background-color:#dfd">			if (error_count)</span>
+			{
+<span style = "background-color:#fdd">				*errmsg &lt;&lt; "===&gt; ERROR: Send failed." &lt;&lt; endl</span>
+					&lt;&lt; "     [PortTCP::SynchSend() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+					&lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; endl
+					&lt;&lt; "     error repeated " &lt;&lt; error_count &lt;&lt; " time(s)." &lt;&lt; ends;
+<span style = "background-color:#fdd">				OutputErrMsg();</span>
+			}
+
+			error_count=0;
+		}
+
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Sent " &lt;&lt; bytes_written &lt;&lt; " of " &lt;&lt; size &lt;&lt; " bytes to socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#dfd">		total_bytes_written += bytes_written;	// add bytes written so far to total
+		msg = ((char *)msg) + bytes_written;	// move pointer to end of bytes written so far
+		size -= bytes_written;	// decrease number of bytes to write in next send()</span>
+	}
+
+<span style = "background-color:#dfd">	return (DWORDLONG) total_bytes_written;
+}</span>
+
+//
+// Asynchronous implementation of Send().
+//
+DWORDLONG PortTCP::AsynchSend(LPVOID msg, DWORD size)
+<span style = "background-color:#dfd">{
+	if (synchronous) {</span>
+		return PORT_ERROR;
+	}
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	DWORD bytes_written;
+
+<span style = "background-color:#dfd">	if (!InitOverlapped(&amp;send_overlapped)) {</span>
+		return PORT_ERROR;
+	}
+
+<span style = "background-color:#dfd">	if (WriteFile((HANDLE) client_socket, msg, size, &amp;bytes_written, &amp;send_overlapped)) {</span>
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Sent " &lt;&lt; bytes_written &lt;&lt; " of " &lt;&lt; size &lt;&lt; " bytes to socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		return (DWORDLONG) bytes_written;</span>
+	} else {
+<span style = "background-color:#fdd">		if (GetLastError() == ERROR_IO_PENDING)	// Write started OK...</span>
+		{
+			return 0;	// not an error code, but no bytes read yet
+		}
+<span style = "background-color:#fdd">		return PORT_ERROR;</span>
+	}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	else {
+		*errmsg &lt;&lt; "===&gt; ERROR: Asynchronous TCP attempted under Unix." &lt;&lt; endl
+		    &lt;&lt; "     [PortTCP::AsynchSend() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+		OutputErrMsg();
+		return (PORT_ERROR);
+	}
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">}</span>
+
+//
+// Get result of completed asynchronous Send() (number of bytes read, -1 for any error).  Be sure that 
+// IsSendComplete() has returned TRUE before calling this function.  Does not block.
+//
+DWORDLONG PortTCP::GetSendResult()
+<span style = "background-color:#fdd">{
+	if (synchronous) {</span>
+		return PORT_ERROR;
+	}
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	DWORD bytes_written;
+
+<span style = "background-color:#fdd">	if (GetOverlappedResult((HANDLE) client_socket, &amp;send_overlapped, &amp;bytes_written, FALSE)) {
+		return (DWORDLONG) bytes_written;</span>
+	} else {
+<span style = "background-color:#fdd">		return PORT_ERROR;</span>
+	}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	else {
+		*errmsg &lt;&lt; "===&gt; ERROR: Asynchronous TCP attempted under Unix." &lt;&lt; endl
+		    &lt;&lt; "     [PortTCP::GetSendResult() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; ends;
+		OutputErrMsg();
+		return (PORT_ERROR);
+	}
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#fdd">}</span>
+
+//
+// Non blocking call which reads data from a connected port without
+// removing it.  Note that a process does not receive data from itself.
+//
+DWORD PortTCP::Peek()
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE)
+	int bytes_available = 0;
+#elif defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS) || defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#dfd">	DWORD bytes_available = 0;</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	BOOL success = FALSE;
+	fd_set sock_set;	//For use with select
+	timeval timeout = { 0, 0 };	//For use with select, initialized to zero for instaneous return
+	char buf[1];		// we have to provide a buffer, so we provide just one character of buffer
+
+<span style = "background-color:#dfd">	if (synchronous) {</span>
+		FD_ZERO(&amp;sock_set);	// clear the fd_set structure.
+<span style = "background-color:#fdd">		FD_SET(client_socket, &amp;sock_set);	// Add the one and only socket to it.
+		if (select((int)(client_socket + 1), &amp;sock_set, NULL, NULL, &amp;timeout)) {</span>
+			//if there is data available or select returns an error, 
+			//we want bytes_available to set by the result of recv().
+<span style = "background-color:#fdd">			bytes_available = recv(client_socket, buf, sizeof(buf), MSG_PEEK);</span>
+		} else {
+			//otherwise, there are no bytes available, this prevents recv() from blocking
+<span style = "background-color:#fdd">			bytes_available = 0;</span>
+		}
+<span style = "background-color:#fdd">		success = (bytes_available != SOCKET_ERROR); // was (long)bytes_available ...
+	}</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	else {
+		DWORD flags;	// flags must be provided as a (DWORD *), so we need to have a DWORD variable
+		WSABUF wsabuf[1];
+
+		flags = MSG_PEEK;
+<span style = "background-color:#dfd">		wsabuf[0].buf = buf;</span>
+		wsabuf[0].len = sizeof(buf);
+
+<span style = "background-color:#dfd">		success = (WSARecv(client_socket, wsabuf, 1, &amp;bytes_available, &amp;flags, NULL, NULL) == 0);</span>
+	}
+#endif
+
+<span style = "background-color:#dfd">	if (success) {</span>
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; "Peeked " &lt;&lt; bytes_available &lt;&lt; " bytes from socket " &lt;&lt; name &lt;&lt; "." &lt;&lt; endl;
+#endif
+		return (DWORD) bytes_available;
+	} else {
+#if PORT_DETAILS || _DETAILS
+		*errmsg &lt;&lt; "===&gt; ERROR: Peeking from socket " &lt;&lt; name &lt;&lt; " failed." &lt;&lt; endl
+		    &lt;&lt; "     [PortTCP::Peek() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+		    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+		OutputErrMsg();
+#endif
+		return 0;	// no data available at this time, maybe later
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Utility function to close a socket.  socket_name parameter is used only for debugging outputs.
+//
+BOOL PortTCP::CloseSocket(SOCKET * s, const char *socket_name)
+<span style = "background-color:#dfd">{
+	if (*s == (int)INVALID_SOCKET) {</span>
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; socket_name &lt;&lt; " socket is already closed." &lt;&lt; endl;
+#endif
+		return TRUE;
+	}
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Shutting down " &lt;&lt; socket_name &lt;&lt; " socket." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#dfd">	if (shutdown(*s, SD_BOTH) != 0) {</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+		// WSAENOTCONN = "socket is not connected", which occurs on the server side if the socket is
+		// closed with no Accept() active -- this is no problem since we're just closing it anyway
+<span style = "background-color:#dfd">		if (WSAGetLastError() != WSAENOTCONN) {</span>
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "===&gt; ERROR: Shutting down socket " &lt;&lt; socket_name &lt;&lt; " failed." &lt;&lt; endl</span>
+			    &lt;&lt; "     [PortTCP::CloseSocket() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+			    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">			OutputErrMsg();
+			return FALSE;</span>
+		}
+#endif
+#if PORT_DETAILS || _DETAILS
+		cout &lt;&lt; socket_name &lt;&lt; " socket is already shut down." &lt;&lt; endl;
+#endif
+	}
+#if PORT_DETAILS || _DETAILS
+	cout &lt;&lt; "Closing " &lt;&lt; socket_name &lt;&lt; " socket." &lt;&lt; endl;
+#endif
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#dfd">	if (closesocket(*s) != 0)</span>
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if (close(*s) != 0)
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "===&gt; ERROR: Closing socket " &lt;&lt; socket_name &lt;&lt; " failed." &lt;&lt; endl</span>
+		    &lt;&lt; "     [PortTCP::CloseSocket() in " &lt;&lt; __FILE__ &lt;&lt; " line " &lt;&lt; __LINE__ &lt;&lt; "]" &lt;&lt; endl
+		    &lt;&lt; "     errno = " &lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">		OutputErrMsg();
+		return FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	*s = (int)INVALID_SOCKET;</span>
+	return TRUE;
+<span style = "background-color:#dfd">}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

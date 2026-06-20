@@ -1,0 +1,248 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IcfWriter.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "IcfWriter.h"
+#include &lt;iomanip&gt;
+
+namespace iocore {
+
+// The section header rules are copied verbatim (as adjacent string literals) from
+// the MFC SaveConfig methods so the "====" run width is byte-identical.
+
+void IcfWriter::writeVersionLine(std::ostream &amp;os, const std::string &amp;version)
+<span style = "background-color:#dfd">{
+    os &lt;&lt; "Version " &lt;&lt; version &lt;&lt; "\n";
+}</span>
+
+// ---- 'TEST SETUP (port of CPageSetup::SaveConfig) -------------------------------
+
+void IcfWriter::writeTestSetup(std::ostream &amp;os, const IcfTestSetup &amp;ts)
+<span style = "background-color:#dfd">{
+    os &lt;&lt; "'TEST SETUP ============================" "========================================" &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Test Description" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; ts.testName &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    os &lt;&lt; std::left;   // MFC: setiosflags(ios::left)</span>
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Run Time" &lt;&lt; "\n"</span>
+       &lt;&lt; "'\t" &lt;&lt; std::setw(11) &lt;&lt; "hours" &lt;&lt; std::setw(11) &lt;&lt; "minutes" &lt;&lt; "seconds" &lt;&lt; "\n"
+       &lt;&lt; "\t" &lt;&lt; std::setw(11) &lt;&lt; ts.hours &lt;&lt; std::setw(11) &lt;&lt; ts.minutes &lt;&lt; ts.seconds &lt;&lt; "\n";
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Ramp Up Time (s)" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; ts.rampTime &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Default Disk Workers to Spawn" &lt;&lt; "\n" &lt;&lt; "\t";
+    if (ts.diskWorkerCount == -1) os &lt;&lt; "NUMBER_OF_CPUS" &lt;&lt; "\n";
+    else                          os &lt;&lt; ts.diskWorkerCount &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Default Network Workers to Spawn" &lt;&lt; "\n" &lt;&lt; "\t";
+    if (ts.netWorkerCount == -1)  os &lt;&lt; "NUMBER_OF_CPUS" &lt;&lt; "\n";
+    else                          os &lt;&lt; ts.netWorkerCount &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Record Results" &lt;&lt; "\n" &lt;&lt; "\t";
+    switch (ts.resultType) {
+    case 1:  os &lt;&lt; "NO_TARGETS"  &lt;&lt; "\n"; break;
+    case 2:  os &lt;&lt; "NO_WORKERS"  &lt;&lt; "\n"; break;
+    case 3:  os &lt;&lt; "NO_MANAGERS" &lt;&lt; "\n"; break;
+    case 4:  os &lt;&lt; "NONE"        &lt;&lt; "\n"; break;
+    default: os &lt;&lt; "ALL"         &lt;&lt; "\n"; break;   // 0 = RecordAll</span>
+    }
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Worker Cycling" &lt;&lt; "\n"</span>
+       &lt;&lt; "'\t" &lt;&lt; std::setw(11) &lt;&lt; "start" &lt;&lt; std::setw(11) &lt;&lt; "step" &lt;&lt; "step type" &lt;&lt; "\n"
+       &lt;&lt; "\t" &lt;&lt; std::setw(11) &lt;&lt; ts.workerCycling.start &lt;&lt; std::setw(11) &lt;&lt; ts.workerCycling.step
+       &lt;&lt; (ts.workerCycling.stepType == 1 ? "EXPONENTIAL" : "LINEAR") &lt;&lt; "\n";
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Disk Cycling" &lt;&lt; "\n"</span>
+       &lt;&lt; "'\t" &lt;&lt; std::setw(11) &lt;&lt; "start" &lt;&lt; std::setw(11) &lt;&lt; "step" &lt;&lt; "step type" &lt;&lt; "\n"
+       &lt;&lt; "\t" &lt;&lt; std::setw(11) &lt;&lt; ts.targetCycling.start &lt;&lt; std::setw(11) &lt;&lt; ts.targetCycling.step
+       &lt;&lt; (ts.targetCycling.stepType == 1 ? "EXPONENTIAL" : "LINEAR") &lt;&lt; "\n";
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Queue Depth Cycling" &lt;&lt; "\n"</span>
+       &lt;&lt; "'\t" &lt;&lt; std::setw(11) &lt;&lt; "start" &lt;&lt; std::setw(11) &lt;&lt; "end" &lt;&lt; std::setw(11) &lt;&lt; "step" &lt;&lt; "step type" &lt;&lt; "\n"
+       &lt;&lt; "\t" &lt;&lt; std::setw(11) &lt;&lt; ts.queueCycling.start &lt;&lt; std::setw(11) &lt;&lt; ts.queueCycling.end
+       &lt;&lt; std::setw(11) &lt;&lt; ts.queueCycling.step
+       &lt;&lt; (ts.queueCycling.stepType == 1 ? "EXPONENTIAL" : "LINEAR") &lt;&lt; "\n";
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Test Type" &lt;&lt; "\n" &lt;&lt; "\t";
+    switch (ts.testType) {
+    case 1:  os &lt;&lt; "CYCLE_TARGETS"                     &lt;&lt; "\n"; break;
+    case 2:  os &lt;&lt; "CYCLE_WORKERS"                     &lt;&lt; "\n"; break;
+    case 3:  os &lt;&lt; "INCREMENT_TARGETS_PARALLEL"        &lt;&lt; "\n"; break;
+    case 4:  os &lt;&lt; "INCREMENT_TARGETS_SERIAL"          &lt;&lt; "\n"; break;
+    case 5:  os &lt;&lt; "CYCLE_WORKERS_AND_TARGETS"         &lt;&lt; "\n"; break;
+    case 6:  os &lt;&lt; "CYCLE_OUTSTANDING_IOS"             &lt;&lt; "\n"; break;
+    case 7:  os &lt;&lt; "CYCLE_OUTSTANDING_IOS_AND_TARGETS" &lt;&lt; "\n"; break;
+    default: os &lt;&lt; "NORMAL"                            &lt;&lt; "\n"; break;   // 0 = NORMAL</span>
+    }
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'END test setup" &lt;&lt; "\n";
+    os &lt;&lt; std::right;   // leave the stream as we found it
+}</span>
+
+// ---- 'RESULTS DISPLAY (port of CPageDisplay::SaveConfig) -------------------------
+
+void IcfWriter::writeResultsDisplay(std::ostream &amp;os, const IcfDisplaySettings &amp;ds)
+<span style = "background-color:#dfd">{
+    os &lt;&lt; "'RESULTS DISPLAY =======================" "========================================" &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Record Last Update Results,Update Frequency,Update Type" &lt;&lt; "\n" &lt;&lt; "\t";
+    os &lt;&lt; (ds.recordLastUpdate ? "ENABLED" : "DISABLED");
+    os &lt;&lt; "," &lt;&lt; ds.updateFrequency;
+    os &lt;&lt; "," &lt;&lt; (ds.whichPerf == 1 ? "LAST_UPDATE" : "WHOLE_TEST") &lt;&lt; "\n";</span>
+
+    // Each loaded bar entry maps to one output line; entries for the same bar
+    // (statistic, then manager, then worker) are consecutive, reproducing the
+    // grouped MFC layout.
+<span style = "background-color:#dfd">    for (const auto &amp;bar : ds.bars) {
+        const int n = bar.index + 1;   // file is one-based
+        switch (bar.kind) {</span>
+        case IcfDisplaySettings::Bar::Statistic:
+<span style = "background-color:#dfd">            os &lt;&lt; "'Bar chart " &lt;&lt; n &lt;&lt; " statistic" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; bar.name &lt;&lt; "\n";</span>
+            break;
+        case IcfDisplaySettings::Bar::Manager:
+<span style = "background-color:#dfd">            os &lt;&lt; "'Bar chart " &lt;&lt; n &lt;&lt; " manager ID, manager name" &lt;&lt; "\n"</span>
+               &lt;&lt; "\t" &lt;&lt; bar.id &lt;&lt; "," &lt;&lt; bar.name &lt;&lt; "\n";
+<span style = "background-color:#dfd">            break;</span>
+        case IcfDisplaySettings::Bar::Worker:
+<span style = "background-color:#dfd">            os &lt;&lt; "'Bar chart " &lt;&lt; n &lt;&lt; " worker ID, worker name" &lt;&lt; "\n"</span>
+               &lt;&lt; "\t" &lt;&lt; bar.id &lt;&lt; "," &lt;&lt; bar.name &lt;&lt; "\n";
+            break;
+        }
+    }
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'END results display" &lt;&lt; "\n";
+}</span>
+
+// ---- 'ACCESS SPECIFICATIONS (port of AccessSpecList::SaveConfig) -----------------
+
+void IcfWriter::writeAccessSpecs(std::ostream &amp;os, const std::vector&lt;IcfAccessSpec&gt; &amp;specs)
+<span style = "background-color:#dfd">{
+    os &lt;&lt; "'ACCESS SPECIFICATIONS =================" "========================================" &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    for (const auto &amp;spec : specs) {
+        os &lt;&lt; "'Access specification name,default assignment" &lt;&lt; "\n";
+        os &lt;&lt; "\t" &lt;&lt; spec.name &lt;&lt; ",";
+        switch (spec.defaultAssignment) {
+        case 1:  os &lt;&lt; "ALL"  &lt;&lt; "\n"; break;
+        case 2:  os &lt;&lt; "DISK" &lt;&lt; "\n"; break;
+        case 3:  os &lt;&lt; "NET"  &lt;&lt; "\n"; break;
+        default: os &lt;&lt; "NONE" &lt;&lt; "\n"; break;   // 0 = AssignNone</span>
+        }
+
+<span style = "background-color:#dfd">        os &lt;&lt; "'size,% of size,% reads,% random,delay,burst,align,reply" &lt;&lt; "\n";
+        for (const auto &amp;l : spec.lines) {
+            os &lt;&lt; "\t" &lt;&lt; l.size &lt;&lt; "," &lt;&lt; l.ofSize &lt;&lt; "," &lt;&lt; l.reads &lt;&lt; "," &lt;&lt; l.random</span>
+               &lt;&lt; "," &lt;&lt; l.delay &lt;&lt; "," &lt;&lt; l.burst &lt;&lt; "," &lt;&lt; l.align &lt;&lt; "," &lt;&lt; l.reply &lt;&lt; "\n";
+        }
+    }
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'END access specifications" &lt;&lt; "\n";
+}</span>
+
+// ---- 'MANAGER LIST (port of ManagerList/Manager/Worker::SaveConfig) --------------
+
+void IcfWriter::writeWorker(std::ostream &amp;os, const IcfWorkerConfig &amp;w,
+                            bool saveAspecs, bool saveTargets)
+<span style = "background-color:#dfd">{
+    os &lt;&lt; "'Worker" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; w.name &lt;&lt; "\n" &lt;&lt; "'Worker type" &lt;&lt; "\n";
+    switch (w.kind) {
+    case IcfWorkerKind::NetTCP: os &lt;&lt; "\tNETWORK" &lt;&lt; ",TCP" &lt;&lt; "\n"; break;
+    case IcfWorkerKind::NetVI:  os &lt;&lt; "\tNETWORK" &lt;&lt; ",VI"  &lt;&lt; "\n"; break;
+    default:                    os &lt;&lt; "\tDISK"               &lt;&lt; "\n"; break;</span>
+    }
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'Default target settings for worker" &lt;&lt; "\n";
+    os &lt;&lt; "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value" &lt;&lt; "\n";
+    os &lt;&lt; "\t" &lt;&lt; w.queueDepth</span>
+       &lt;&lt; "," &lt;&lt; (w.testConnRate ? "ENABLED" : "DISABLED")
+       &lt;&lt; "," &lt;&lt; w.transPerConn
+       &lt;&lt; "," &lt;&lt; (w.useFixedSeed ? "ENABLED" : "DISABLED")
+       &lt;&lt; "," &lt;&lt; w.fixedSeedValue &lt;&lt; "\n";
+
+<span style = "background-color:#dfd">    if (w.kind == IcfWorkerKind::Disk) {
+        os &lt;&lt; "'Disk maximum size,starting sector,Data pattern" &lt;&lt; "\n";
+        os &lt;&lt; "\t" &lt;&lt; w.diskMaxSize &lt;&lt; "," &lt;&lt; w.startingSector &lt;&lt; "," &lt;&lt; w.dataPattern &lt;&lt; "\n";</span>
+    }
+<span style = "background-color:#dfd">    if (w.kind == IcfWorkerKind::NetTCP || w.kind == IcfWorkerKind::NetVI) {
+        os &lt;&lt; "'Local network interface" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; w.localNetworkInterface &lt;&lt; "\n";</span>
+    }
+<span style = "background-color:#dfd">    if (w.kind == IcfWorkerKind::NetVI) {
+        os &lt;&lt; "'VI outstanding IOs" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; w.viOutstandingIos &lt;&lt; "\n";</span>
+    }
+<span style = "background-color:#dfd">    os &lt;&lt; "'End default target settings for worker" &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    if (saveAspecs) {
+        os &lt;&lt; "'Assigned access specs" &lt;&lt; "\n";
+        for (const auto &amp;s : w.assignedSpecNames)
+            os &lt;&lt; "\t" &lt;&lt; s &lt;&lt; "\n";
+        os &lt;&lt; "'End assigned access specs" &lt;&lt; "\n";</span>
+    }
+
+<span style = "background-color:#dfd">    if (saveTargets) {
+        os &lt;&lt; "'Target assignments" &lt;&lt; "\n";
+        for (const auto &amp;t : w.targets) {
+            os &lt;&lt; "'Target" &lt;&lt; "\n";
+            switch (t.kind) {</span>
+            case IcfWorkerKind::NetTCP:
+<span style = "background-color:#dfd">                os &lt;&lt; "\t" &lt;&lt; t.name &lt;&lt; "\n" &lt;&lt; "'Target type" &lt;&lt; "\n" &lt;&lt; "\tNETWORK,TCP" &lt;&lt; "\n";</span>
+                os &lt;&lt; "'Target manager ID, manager name" &lt;&lt; "\n"
+                   &lt;&lt; "\t" &lt;&lt; t.targetManagerId &lt;&lt; "," &lt;&lt; t.targetManagerName &lt;&lt; "\n";
+                break;
+            case IcfWorkerKind::NetVI:
+<span style = "background-color:#dfd">                os &lt;&lt; "\t" &lt;&lt; t.name &lt;&lt; "\n" &lt;&lt; "'Target type" &lt;&lt; "\n" &lt;&lt; "\tNETWORK,VI" &lt;&lt; "\n";</span>
+                os &lt;&lt; "'Target manager ID, manager name" &lt;&lt; "\n"
+                   &lt;&lt; "\t" &lt;&lt; t.targetManagerId &lt;&lt; "," &lt;&lt; t.targetManagerName &lt;&lt; "\n";
+<span style = "background-color:#dfd">                break;</span>
+            default:   // Disk
+<span style = "background-color:#dfd">                os &lt;&lt; "\t" &lt;&lt; t.name &lt;&lt; "\n" &lt;&lt; "'Target type" &lt;&lt; "\n" &lt;&lt; "\tDISK" &lt;&lt; "\n";</span>
+                break;
+            }
+<span style = "background-color:#dfd">            os &lt;&lt; "'End target" &lt;&lt; "\n";</span>
+        }
+<span style = "background-color:#dfd">        os &lt;&lt; "'End target assignments" &lt;&lt; "\n";</span>
+    }
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'End worker" &lt;&lt; "\n";
+}</span>
+
+void IcfWriter::writeManagerList(std::ostream &amp;os,
+                                 const std::vector&lt;IcfManagerConfig&gt; &amp;managers,
+                                 bool saveAspecs, bool saveTargets)
+<span style = "background-color:#dfd">{
+    os &lt;&lt; "'MANAGER LIST ==========================" "========================================" &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    for (const auto &amp;m : managers) {
+        os &lt;&lt; "'Manager ID, manager name" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; m.id &lt;&lt; "," &lt;&lt; m.name &lt;&lt; "\n";
+        os &lt;&lt; "'Manager network address" &lt;&lt; "\n" &lt;&lt; "\t" &lt;&lt; m.address &lt;&lt; "\n";
+        for (const auto &amp;w : m.workers)
+            writeWorker(os, w, saveAspecs, saveTargets);
+        os &lt;&lt; "'End manager" &lt;&lt; "\n";</span>
+    }
+
+<span style = "background-color:#dfd">    os &lt;&lt; "'END manager list" &lt;&lt; "\n";
+}</span>
+
+} // namespace iocore</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

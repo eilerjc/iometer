@@ -1,0 +1,292 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IcfFile.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "IcfFile.h"
+#include "IcfDocument.h"
+#include "IcfWriter.h"
+#include &lt;fstream&gt;
+
+const std::string IcfFile::VERSION_STRING = "1.1.0";
+
+// --- Parsing helpers ---------------------------------------------------------
+
+// Extract quoted string from manager list field (e.g., C: "System")
+<span style = "background-color:#dfd">static std::string extractTarget(const std::string &amp;s) {
+    size_t start = s.find('"');
+    size_t end = s.rfind('"');
+    if (start != std::string::npos &amp;&amp; end != std::string::npos &amp;&amp; start &lt; end) {
+        return s.substr(start + 1, end - start - 1);</span>
+    }
+<span style = "background-color:#dfd">    return s;
+}</span>
+
+bool IcfFile::load(const std::string &amp;filepath,
+                   TestConfig &amp;cfg,
+                   std::vector&lt;AccessSpec&gt; &amp;specs,
+                   std::vector&lt;BatchWorker&gt; &amp;workers)
+<span style = "background-color:#dfd">{</span>
+    {
+<span style = "background-color:#dfd">        std::ifstream probe(filepath);
+        if (!probe) return false;   // missing/unreadable file
+    }</span>
+
+<span style = "background-color:#dfd">    cfg = TestConfig();
+    specs.clear();
+    workers.clear();</span>
+
+    // Each section is parsed independently by the shared MFC-faithful loader
+    // (iocore::IcfDocument), which opens its own stream and seeks its own
+    // section - so no manual line scanning is needed here.
+
+    // 'TEST SETUP - parsed by the shared MFC-faithful section loader
+    // (iocore::IcfDocument). Pre-fill so keys absent from the file retain the
+    // current values, exactly like the MFC page members.
+    {
+<span style = "background-color:#dfd">        iocore::IcfDocument doc(filepath);
+        iocore::IcfTestSetup ts;
+        ts.testName   = cfg.description;
+        ts.hours      = cfg.runHours;
+        ts.minutes    = cfg.runMinutes;
+        ts.seconds    = cfg.runSeconds;
+        ts.rampTime   = cfg.rampSeconds;
+        ts.resultType = cfg.recordResults;
+        ts.testType   = cfg.cyclingMode;
+        ts.workerCycling.start    = cfg.workerStart;
+        ts.workerCycling.step     = cfg.workerStep;
+        ts.workerCycling.stepType = cfg.workerStepping;
+        ts.targetCycling.start    = cfg.targetStart;
+        ts.targetCycling.step     = cfg.targetStep;
+        ts.targetCycling.stepType = cfg.targetStepping;
+        ts.queueCycling.start     = cfg.ioqStart;
+        ts.queueCycling.end       = cfg.ioqEnd;
+        ts.queueCycling.step      = cfg.ioqPower;
+        ts.queueCycling.stepType  = cfg.ioqStepping;</span>
+
+<span style = "background-color:#dfd">        if (!doc.loadTestSetup(ts))
+            return false;   // malformed TEST SETUP - same as the MFC GUI</span>
+
+<span style = "background-color:#dfd">        cfg.description   = ts.testName;
+        cfg.runHours      = ts.hours;
+        cfg.runMinutes    = ts.minutes;
+        cfg.runSeconds    = ts.seconds;
+        cfg.rampSeconds   = ts.rampTime;</span>
+        // TestConfig's recordResults is a 0=All / 1=other model.
+<span style = "background-color:#dfd">        cfg.recordResults = (ts.resultType == 0) ? 0 : 1;
+        cfg.cyclingMode   = ts.testType;
+        cfg.workerStart    = ts.workerCycling.start;
+        cfg.workerStep     = ts.workerCycling.step;
+        cfg.workerStepping = ts.workerCycling.stepType;
+        cfg.targetStart    = ts.targetCycling.start;
+        cfg.targetStep     = ts.targetCycling.step;
+        cfg.targetStepping = ts.targetCycling.stepType;
+        cfg.ioqStart       = ts.queueCycling.start;
+        cfg.ioqEnd         = ts.queueCycling.end;
+        cfg.ioqPower       = ts.queueCycling.step;
+        cfg.ioqStepping    = ts.queueCycling.stepType;
+    }</span>
+
+    // 'ACCESS SPECIFICATIONS - parsed by the shared MFC-faithful loader
+    // (handles both the modern named format and the pre-1998.05.21 numeric
+    // format, with the MFC validation rules).
+    {
+<span style = "background-color:#dfd">        iocore::IcfDocument doc(filepath);
+        std::vector&lt;iocore::IcfAccessSpec&gt; rawSpecs;
+        if (!doc.loadAccessSpecs(rawSpecs))
+            return false;   // malformed spec section - same as the MFC GUI</span>
+
+<span style = "background-color:#dfd">        for (const auto &amp;rs : rawSpecs) {
+            AccessSpec spec;
+            spec.name        = rs.name;</span>
+            // Friendly model keeps a single flag: any default assignment counts.
+<span style = "background-color:#dfd">            spec.defaultSpec = (rs.defaultAssignment != 0);
+            for (const auto &amp;rl : rs.lines) {</span>
+                AccessSpecLine asl;
+<span style = "background-color:#dfd">                asl.sizeBytes   = rl.size;
+                asl.ofSize      = rl.ofSize;
+                asl.readPercent = rl.reads;
+                asl.seqPercent  = 100 - rl.random;
+                asl.delayMs     = rl.delay;
+                asl.burstLength = rl.burst;
+                asl.alignBytes  = rl.align;
+                asl.replyBytes  = rl.reply;
+                spec.lines.push_back(asl);</span>
+            }
+<span style = "background-color:#dfd">            if (!spec.lines.empty())
+                specs.push_back(spec);
+        }
+    }</span>
+
+    // 'MANAGER LIST - parsed by the shared MFC-faithful loader, then flattened to
+    // the front-end's BatchWorker list (one entry per worker, tagged with its
+    // manager's name/address/id for ManagerMap-driven restore). The loader
+    // enforces the exact MFC accept/reject rules; the (line-based) lenient scan
+    // this replaces accepted some non-MFC inputs.
+    {
+<span style = "background-color:#dfd">        iocore::IcfDocument doc(filepath);
+        std::vector&lt;iocore::IcfManagerConfig&gt; mgrs;
+        if (!doc.loadManagerList(mgrs))</span>
+<span style = "background-color:#fdd">            return false;   // malformed MANAGER LIST - same as the MFC GUI</span>
+
+<span style = "background-color:#dfd">        for (const auto &amp;mgr : mgrs) {
+            for (const auto &amp;w : mgr.workers) {
+                if (w.name.empty())</span>
+                    continue;
+<span style = "background-color:#dfd">                BatchWorker bw;
+                bw.name           = w.name;
+                bw.managerName    = mgr.name;
+                bw.managerAddress = mgr.address;
+                bw.managerId      = mgr.id;
+                switch (w.kind) {
+                    case iocore::IcfWorkerKind::NetTCP: bw.type = "TCP";  break;</span>
+<span style = "background-color:#fdd">                    case iocore::IcfWorkerKind::NetVI:  bw.type = "VI";   break;</span>
+<span style = "background-color:#dfd">                    default:                            bw.type = "DISK"; break;</span>
+                }
+<span style = "background-color:#fdd">                bw.assignedSpecs = w.assignedSpecNames;</span>
+<span style = "background-color:#dfd">                for (const auto &amp;t : w.targets)
+                    bw.targets.push_back(extractTarget(t.name));
+                workers.push_back(bw);
+            }</span>
+        }
+<span style = "background-color:#dfd">    }</span>
+
+<span style = "background-color:#dfd">    return true;
+}</span>
+
+bool IcfFile::save(const std::string &amp;filepath,
+                   const TestConfig &amp;cfg,
+                   const std::vector&lt;AccessSpec&gt; &amp;specs,
+                   const std::vector&lt;BatchWorker&gt; &amp;workers)
+<span style = "background-color:#dfd">{
+    std::ofstream out(filepath);
+    if (!out) return false;</span>
+
+    // The on-disk format is produced by the shared, MFC-faithful section writers
+    // (iocore::IcfWriter). This adapter just maps the front-end's friendly model
+    // (TestConfig / AccessSpec / BatchWorker) into the canonical section structs.
+<span style = "background-color:#dfd">    iocore::IcfWriter::writeVersionLine(out, VERSION_STRING);</span>
+
+    // 'TEST SETUP
+<span style = "background-color:#dfd">    iocore::IcfTestSetup ts;
+    ts.testName        = cfg.description;
+    ts.hours           = cfg.runHours;
+    ts.minutes         = cfg.runMinutes;
+    ts.seconds         = cfg.runSeconds;
+    ts.rampTime        = cfg.rampSeconds;
+    ts.diskWorkerCount = 1;   // historical Qt batch defaults (1 disk / 0 net)</span>
+    ts.netWorkerCount  = 0;
+<span style = "background-color:#dfd">    ts.resultType      = cfg.recordResults;   // 0 = ALL, else NO_TARGETS
+    ts.workerCycling   = { cfg.workerStart, 1, cfg.workerStep, cfg.workerStepping };
+    ts.targetCycling   = { cfg.targetStart, 1, cfg.targetStep, cfg.targetStepping };
+    ts.queueCycling    = { cfg.ioqStart, cfg.ioqEnd, cfg.ioqPower, cfg.ioqStepping };
+    ts.testType        = cfg.cyclingMode;
+    iocore::IcfWriter::writeTestSetup(out, ts);</span>
+
+    // 'RESULTS DISPLAY - this friendly model doesn't track display bars, so write
+    // the canonical default six-statistic layout (as the Qt save always has).
+<span style = "background-color:#dfd">    iocore::IcfDisplaySettings ds;</span>
+    ds.recordLastUpdate = false;
+<span style = "background-color:#dfd">    ds.updateFrequency  = 1;
+    ds.whichPerf        = 1;   // LAST_UPDATE</span>
+    static const char *const kBarNames[6] = {
+        "Total I/Os per Second", "Total MBs per Second (Decimal)",
+        "Average I/O Response Time (ms)", "Maximum I/O Response Time (ms)",
+        "% CPU Utilization (total)", "Total Error Count"
+    };
+<span style = "background-color:#dfd">    for (int i = 0; i &lt; 6; ++i) {
+        iocore::IcfDisplaySettings::Bar bar;
+        bar.index = i;
+        bar.kind  = iocore::IcfDisplaySettings::Bar::Statistic;
+        bar.name  = kBarNames[i];
+        ds.bars.push_back(bar);
+    }
+    iocore::IcfWriter::writeResultsDisplay(out, ds);</span>
+
+    // 'ACCESS SPECIFICATIONS
+<span style = "background-color:#dfd">    std::vector&lt;iocore::IcfAccessSpec&gt; rawSpecs;
+    for (const auto &amp;spec : specs) {
+        iocore::IcfAccessSpec rs;
+        rs.name              = spec.name;
+        rs.defaultAssignment = spec.defaultSpec ? 1 : 0;   // ALL / NONE
+        for (const auto &amp;l : spec.lines) {</span>
+            iocore::IcfAccessSpecLine rl;
+<span style = "background-color:#dfd">            rl.size   = l.sizeBytes;
+            rl.ofSize = l.ofSize;
+            rl.reads  = l.readPercent;
+            rl.random = 100 - l.seqPercent;
+            rl.delay  = static_cast&lt;int&gt;(l.delayMs);
+            rl.burst  = l.burstLength;
+            rl.align  = l.alignBytes;
+            rl.reply  = l.replyBytes;
+            rs.lines.push_back(rl);</span>
+        }
+<span style = "background-color:#dfd">        rawSpecs.push_back(rs);
+    }
+    iocore::IcfWriter::writeAccessSpecs(out, rawSpecs);</span>
+
+    // 'MANAGER LIST - the friendly model keeps a flat worker list; emit them under
+    // one manager (TESTHOST), as the Qt save always has.
+<span style = "background-color:#dfd">    std::vector&lt;iocore::IcfManagerConfig&gt; mgrs;
+    if (!workers.empty()) {
+        iocore::IcfManagerConfig mgr;
+        mgr.id      = 1;
+        mgr.name    = "TESTHOST";
+        mgr.address = "";
+        for (const auto &amp;bw : workers) {</span>
+            // bw.type may be "DISK"/"TCP"/"VI" or already "NETWORK,TCP" etc.
+<span style = "background-color:#dfd">            const bool isVi  = bw.type.find("VI") != std::string::npos;
+            const bool isNet = isVi || bw.type.find("TCP") != std::string::npos</span>
+                                    || bw.type.find("NETWORK") != std::string::npos
+                                    || bw.type.find("Network") != std::string::npos;
+<span style = "background-color:#dfd">            iocore::IcfWorkerConfig w;
+            w.name = bw.name;
+            w.kind = !isNet ? iocore::IcfWorkerKind::Disk</span>
+                            : (isVi ? iocore::IcfWorkerKind::NetVI : iocore::IcfWorkerKind::NetTCP);
+            // historical Qt defaults (the friendly model carries no per-worker settings)
+<span style = "background-color:#dfd">            w.queueDepth = 1;
+            w.transPerConn = 1;
+            w.assignedSpecNames = bw.assignedSpecs;
+            for (const auto &amp;tname : bw.targets) {
+                iocore::IcfTargetConfig t;
+                t.name = tname;
+                t.kind = w.kind;   // target type mirrors the worker
+                if (isNet) { t.targetManagerId = mgr.id; t.targetManagerName = mgr.name; }
+                w.targets.push_back(t);
+            }
+            mgr.workers.push_back(w);
+        }
+        mgrs.push_back(mgr);
+    }
+    iocore::IcfWriter::writeManagerList(out, mgrs, /*saveAspecs*/true, /*saveTargets*/true);</span>
+
+<span style = "background-color:#dfd">    iocore::IcfWriter::writeVersionLine(out, VERSION_STRING);
+    out.close();
+    return true;
+}</span>
+
+bool IcfFile::isValidVersion(const std::string &amp;versionStr)
+<span style = "background-color:#dfd">{
+    return versionStr.find("1.1.0") != std::string::npos;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,38 @@
+﻿<!DOCTYPE html><html><head><meta charset="utf-8"><title>Iometer coverage</title>
+<style>
+ body{font-family:Segoe UI,Arial,sans-serif;margin:2em;color:#222}
+ h1{margin-bottom:0}.sub{color:#666;margin-top:.2em}
+ table{border-collapse:collapse;margin:1.5em 0}td,th{border:1px solid #ccc;padding:.5em .9em;text-align:left}
+ th{background:#f4f4f4}.big{font-size:1.4em;font-weight:bold}
+ a.card{display:inline-block;border:1px solid #ccc;border-radius:6px;padding:1em 1.4em;margin:.4em 1em .4em 0;text-decoration:none;color:#06c}
+ a.card:hover{background:#f0f7ff}.note{color:#555;font-size:.92em;max-width:60em}
+</style></head><body>
+<h1>Iometer &mdash; code coverage</h1>
+<p class="sub">Generated 2026-06-19 19:01 &middot; measured (not estimated) from the unit-test + smoke runs.</p>
+
+<table>
+ <tr><th>Report</th><th>Engine</th><th>Scope</th><th>Line</th><th>Branch</th></tr>
+ <tr><td><a href="full/index.html">Full (all files)</a></td><td>OpenCppCoverage</td>
+     <td>core + Qt + Dynamo + MFC GUI</td><td class="big">76.5%</td><td>&mdash;</td></tr>
+ <tr><td><a href="branch/index.html">Branch detail</a></td><td>llvm-cov (clang-cl)</td>
+     <td>core + Qt</td><td>78.68%</td><td class="big">66.21%</td></tr>
+</table>
+
+<p>
+ <a class="card" href="full/index.html">&#128193; Browse all source files (line coverage, incl. MFC)</a>
+ <a class="card" href="branch/index.html">&#127807; Branch coverage (core + Qt)</a>
+</p>
+
+<p class="note">
+ <b>Two engines, by necessity.</b> Only clang-cl/<code>llvm-cov</code> produces branch
+ coverage, but it cannot build the MFC GUI; only OpenCppCoverage (PDB-based) reaches
+ the MFC binary, but is line-only. So <b>Full</b> covers every file incl. MFC at line
+ granularity, and <b>Branch detail</b> adds partial-branch highlighting for the
+ clang-cl-buildable core + Qt. The MFC line data covers the batch run paths plus,
+ when the foreground PyAutoGUI suite is collected (<code>make_coverage_report.ps1
+ -IncludeGuiTests</code>), the interactive GUI handlers (tab edits, the Save
+ dialog, access-spec assign/remove/reorder). Regenerate with
+ <code>src/qt/make_coverage_report.ps1</code>. See <code>coverage/summary.txt</code>
+ for the per-file llvm-cov table.
+</p>
+</body></html>

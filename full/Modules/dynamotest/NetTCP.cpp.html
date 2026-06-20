@@ -1,0 +1,1089 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>NetTCP.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / NetTCP.cpp                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implements the NetAsyncTCP class for asynchronous     ## */
+/* ##               TCP/IP sockets for communicating between network      ## */
+/* ##               workers.                                              ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2005-04-18 (raltherr@apple.com)                       ## */
+/* ##               - Support for MacOS X                                 ## */
+/* ##               2005-04-07 (thayneharmon@users.sourceforge.net)       ## */
+/* ##               - Cast from SOCKET to CONNECTION in NetAsyncTCP()     ## */
+/* ##               2005-01-12 (henryx.w.tieman@intel.com)                ## */
+/* ##               - Changed include files for Windows DDK.              ## */
+/* ##               2004-09-01 (henryx.w.tieman@intel.com)                ## */
+/* ##               - Changed SOCKET to CONNECTION for greater clarity,   ## */
+/* ##                 because SOCKET has a standard meaning outside       ## */
+/* ##                 Iometer.                                            ## */
+/* ##               2004-03-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Code cleanup to ensure common style.                ## */
+/* ##               - Applied Thayne Harmon's patch for supporting        ## */
+/* ##                 Netware support (on I386).                          ## */
+/* ##               2003-07-19 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Assimilated the patch from Robert Jones which is    ## */
+/* ##                 needed to build under Solaris 9 on x86 (i386).      ## */
+/* ##               2003-07-18 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+ #include &lt;afx.h&gt;
+#endif
+
+#include "NetTCP.h"
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+ #if defined(USING_DDK)
+  #include "winsock.h"
+ #else
+  #include "mswsock.h"
+ #endif
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS) || defined(IOMTR_OS_NETWARE)
+ #include &lt;sys/socket.h&gt;
+
+ #if defined(IOMTR_OS_NETWARE)
+  #include &lt;sys/select.h&gt;
+ #endif
+
+ #include &lt;netinet/in.h&gt;
+ #include &lt;arpa/inet.h&gt;
+
+ #if !defined(IOMTR_OS_NETWARE)
+  #include &lt;netinet/tcp.h&gt;
+ #endif
+
+ #define SD_SEND		0x01
+ #define WSAENOTCONN		ENOTCONN
+ #define WSA_IO_PENDING		ERROR_IO_PENDING
+
+ #define wsprintf 		sprintf
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+
+
+
+//////////////////////////////////////////////////////////////////////
+// Static data member initialization.
+//////////////////////////////////////////////////////////////////////
+
+LONG NetAsyncTCP::sockets_in_use = 0;
+
+//////////////////////////////////////////////////////////////////////
+// Construction/Destruction
+//////////////////////////////////////////////////////////////////////
+
+NetAsyncTCP::NetAsyncTCP()
+<span style = "background-color:#fdd">{</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	int retval;
+	WSADATA wd;
+#endif
+
+<span style = "background-color:#fdd">	server_socket = (CONNECTION)INVALID_SOCKET;
+	client_socket = (CONNECTION)INVALID_SOCKET;</span>
+#if defined(IOMTR_OSFAMILY_UNIX)
+	server_fp.fd = client_fp.fd = -1;
+	server_socket = (CONNECTION)&amp;server_fp;
+	client_socket = (CONNECTION)&amp;client_fp;
+	maxfd = sysconf(_SC_OPEN_MAX);    // the max # of file descriptors that select() handles.
+
+#endif // IOMTR_OSFAMILY_UNIX
+
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	server_fp.fd = client_fp.fd = -1;
+	server_socket = (CONNECTION)&amp;server_fp;
+	client_socket = (CONNECTION)&amp;client_fp;
+#endif
+
+<span style = "background-color:#fdd">	server_address.sin_family = AF_INET; // use Internet Protocol
+	client_address.sin_family = AF_INET; // use Internet Protocol
+	SetTimeout( 0, 0 );</span>
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	// Initialize WinSock if it has not yet been initialized in this process.
+<span style = "background-color:#fdd">	if ( InterlockedIncrement ( &amp;sockets_in_use ) == 1 )</span>
+	{
+		#if NETWORK_DETAILS || defined(_DEBUG)
+			cout &lt;&lt; "Initializing WinSock." &lt;&lt; endl;
+		#endif
+
+		// request WinSock version 2.0
+<span style = "background-color:#fdd">		retval = WSAStartup( MAKEWORD(2, 0), &amp;wd ); </span>
+
+<span style = "background-color:#fdd">		if ( retval != 0 )</span>
+		{
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "*** Could not initialize WinSock!  Error " </span>
+				&lt;&lt; retval &lt;&lt; ends;
+<span style = "background-color:#fdd">			OutputErrMsg();
+			InterlockedDecrement ( &amp;sockets_in_use );</span>
+		}
+	}
+#endif
+<span style = "background-color:#fdd">}</span>
+
+
+
+NetAsyncTCP::~NetAsyncTCP()
+<span style = "background-color:#fdd">{
+	Destroy();</span>
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	// Clean up WinSock if nobody else is using it in this process.
+<span style = "background-color:#fdd">	if ( InterlockedDecrement ( &amp;sockets_in_use ) == 0 )</span>
+	{
+		#if NETWORK_DETAILS || defined(_DEBUG)
+			cout &lt;&lt; "Cleaning up WinSock." &lt;&lt; endl;
+		#endif
+		
+		// Reset the error code.
+<span style = "background-color:#fdd">		if ( WSACleanup() != 0 )</span>
+		{
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "*** Could not clean up WinSock!  Error " </span>
+				&lt;&lt; WSAGetLastError() &lt;&lt; ends;
+<span style = "background-color:#fdd">			OutputErrMsg();</span>
+		}
+	}
+#endif
+<span style = "background-color:#fdd">}</span>
+
+
+void NetAsyncTCP::SetAddress( BOOL set_server, const char *ip_address, 
+	unsigned short port_num )
+<span style = "background-color:#fdd">{</span>
+	SOCKADDR_IN *address;
+	if ( set_server )
+	{
+		address = &amp;server_address;
+	}
+	else
+	{
+		address = &amp;client_address;
+	}
+
+<span style = "background-color:#fdd">	address-&gt;sin_family = AF_INET; // use Internet Protocol
+	if ( ip_address )</span>
+	{
+		// accept connections on specified address
+<span style = "background-color:#fdd">		inet_pton(AF_INET, ip_address, &amp;address-&gt;sin_addr);
+    } </span>
+	else
+	{
+		// accept connections on any available address
+<span style = "background-color:#fdd">		address-&gt;sin_addr.s_addr = htonl(INADDR_ANY);	</span>
+	}
+	// listen at specified port (0 = system assigns port number)
+<span style = "background-color:#fdd">	address-&gt;sin_port = htons ( port_num ); 
+}</span>
+
+
+
+//
+// Creates the server and client sockets, and binds the server socket.
+//
+ReturnVal NetAsyncTCP::Create( BOOL create_server )
+<span style = "background-color:#fdd">{</span>
+	CONNECTION	*s;
+	SOCKADDR_IN	*address;
+	
+	if ( create_server )
+	{
+		s = &amp;server_socket;
+		address = &amp;server_address;
+	}
+	else
+	{
+		s = &amp;client_socket;
+		address = &amp;client_address;
+	}
+
+<span style = "background-color:#fdd">	if ( CreateSocket( s ) != ReturnSuccess || </span>
+		BindSocket( s, address ) != ReturnSuccess )
+	{
+		return ReturnError;
+	}
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Creates a socket.
+//
+ReturnVal NetAsyncTCP::CreateSocket( CONNECTION *s )
+<span style = "background-color:#fdd">{</span>
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "Creating socket." &lt;&lt; endl;
+	#endif
+
+	// Create socket.
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	struct File *fp;
+	fp = (struct File *)*s;
+	fp-&gt;fd = socket(AF_INET, SOCK_STREAM, PF_UNSPEC);
+
+	if ( fp-&gt;fd &lt; 0 )
+	{
+		*errmsg &lt;&lt; "*** Could not create socket in NetAsyncTCP::"
+				&lt;&lt; "CreateSocket(), error: " &lt;&lt; WSAGetLastError()  &lt;&lt; ends;
+		OutputErrMsg();
+		fp-&gt;fd = (int) INVALID_SOCKET;
+		return ReturnError;
+	}
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	*s = socket( AF_INET, SOCK_STREAM, PF_UNSPEC );</span>
+
+<span style = "background-color:#fdd">	if ( *s == INVALID_SOCKET )</span>
+	{
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "*** Could not create socket in NetAsyncTCP::"</span>
+				&lt;&lt; "CreateSocket(), error: " &lt;&lt; WSAGetLastError()  &lt;&lt; ends;
+<span style = "background-color:#fdd">		OutputErrMsg();
+		return ReturnError;</span>
+	}
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	// Set and verify socket options.
+<span style = "background-color:#fdd">	SetOptions( s );</span>
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Binds a socket to the address specified.
+// The SOCKADDR_IN structure must have been filled in
+// before calling this function (use SetAddress).
+//
+ReturnVal NetAsyncTCP::BindSocket( CONNECTION *s, SOCKADDR_IN *address )
+<span style = "background-color:#fdd">{</span>
+	socklen_t buflen;
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	struct File *fp = (struct File *)*s;
+#endif
+
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "Binding to socket." &lt;&lt; endl;
+	#endif
+
+	// Bind socket.
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	if ( bind ( fp-&gt;fd, (struct sockaddr *) address, sizeof(*address) ) != 0 )
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	if ( bind ( *s, (struct sockaddr *) address, sizeof(*address) ) != 0 )</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "*** Error " &lt;&lt; Error( WSAGetLastError() )</span>
+				&lt;&lt; " binding to socket in NetAsyncTCP::BindSocket()." &lt;&lt; ends;
+		OutputErrMsg();
+		return ReturnError;
+	}
+
+	// get actual port number in use
+	buflen = sizeof(*address);
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX) 
+	if ( getsockname ( fp-&gt;fd, (struct sockaddr *) address, &amp;buflen ) != 0 )
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	if ( getsockname ( *s, (struct sockaddr *) address, &amp;buflen ) != 0 )</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "*** Error " &lt;&lt; WSAGetLastError() &lt;&lt; " getting information "</span>
+				&lt;&lt; "about socket in NetAsyncTCP::BindSocket()." &lt;&lt; ends;
+		OutputErrMsg();
+<span style = "background-color:#fdd">		return ReturnError;</span>
+	}
+
+	#if NETWORK_DETAILS || defined(_DEBUG)
+		cout &lt;&lt; "Bound socket on port " &lt;&lt; ntohs(address-&gt;sin_port) &lt;&lt; "." &lt;&lt; endl;
+	#endif
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Connect client_socket to specified address.
+//
+ReturnVal NetAsyncTCP::ConnectSocket( SOCKADDR_IN *address )
+<span style = "background-color:#fdd">{</span>
+	// attempt to connect.
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "Attempting to connect to socket at " 
+			 &lt;&lt; inet_ntoa( address-&gt;sin_addr ) &lt;&lt; ":" 
+			 &lt;&lt; ntohs( address-&gt;sin_port ) &lt;&lt; "." &lt;&lt; endl;
+	#endif
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	if ( connect(((struct File *)client_socket)-&gt;fd, (struct sockaddr *) address, sizeof(*address)) == SOCKET_ERROR )
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	if ( connect(client_socket, (struct sockaddr *) address, sizeof(*address)) == SOCKET_ERROR )</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		#if NETWORK_DETAILS || defined(_DEBUG)
+			// WSAECONNREFUSED means the server isn't up yet or is busy, 
+			// don't print an error message
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+			if ( errno != ECONNREFUSED ) 
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+			if ( WSAGetLastError() != WSAECONNREFUSED ) 
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+			{
+				*errmsg &lt;&lt; "*** Error " &lt;&lt; WSAGetLastError() 
+						&lt;&lt; " connecting to " &lt;&lt; "socket " 
+						&lt;&lt; inet_ntoa( address-&gt;sin_addr ) &lt;&lt; ":" 
+						&lt;&lt; ntohs( address-&gt;sin_port ) 
+						&lt;&lt; " in NetAsyncTCP::ConnectSocket()." &lt;&lt; ends;
+				OutputErrMsg();
+			}
+		#endif
+		// Expand error checking here for better handling.
+		return ReturnRetry;
+	}
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Attempts to connect the client socket to the address specified.
+// Returns immediately, reguardless of success.
+//
+ReturnVal NetAsyncTCP::Connect( const char *ip_address, 
+	unsigned short port_number )
+<span style = "background-color:#fdd">{</span>
+	struct sockaddr_in address;
+	ReturnVal result;
+
+	// specify protocol, port, and address to connect to.
+<span style = "background-color:#fdd">	address.sin_family = AF_INET; // use Internet Protocol
+	inet_pton(AF_INET, ip_address, &amp;address.sin_addr); // connect to this server
+	address.sin_port = htons(port_number); // connect to this port</span>
+
+<span style = "background-color:#fdd">	result = ConnectSocket( &amp;address );</span>
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	if ( result != ReturnSuccess )
+	{
+		// According to connect(3XN):
+		//      If connect() fails, the state of the socket
+		//      is unspecified.  Portable applications
+		//      should close the file descriptor and
+		//      create a new socket before attempting to
+		//      reconnect.
+
+		Close( CLIENT );
+		if ( Create( CLIENT ) != ReturnSuccess )
+		{
+			cout &lt;&lt; "*** Failed to re-create TCP client socket." &lt;&lt; endl;
+			return ReturnError;
+		}
+	}
+#endif // IOMTR_OSFAMILY_UNIX
+	return result;
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Sets the time to wait on the select call in the 
+// Accept() function.
+//
+void NetAsyncTCP::SetTimeout( int sec, int usec )
+<span style = "background-color:#fdd">{
+	timeout.tv_sec = sec;
+	timeout.tv_usec = usec;
+}</span>
+
+
+
+//
+// Begin accepting a connection to an existing port.  Used by server.
+// Returns TRUE for success or FALSE if any error occurs.
+//		Call IsAcceptComplete() to determine if it has completed, 
+//		and GetAcceptResult() to get result.
+//
+ReturnVal NetAsyncTCP::Accept()
+<span style = "background-color:#fdd">{</span>
+	fd_set	  sock_set;		// used by select function.
+	socklen_t addr_len;
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	struct File *fp = (struct File *)server_socket;
+#endif
+
+	// Listen to socket.
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "Listening to socket " 
+			 &lt;&lt; inet_ntoa( server_address.sin_addr )
+			 &lt;&lt; ":" &lt;&lt; ntohs( server_address.sin_port ) &lt;&lt; "." &lt;&lt; endl;
+	#endif
+
+	// It's ok to listen more than once on a socket.
+	// allow only a single connection.
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+		if ( listen ( fp-&gt;fd, 1 ) != 0 )
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">		if ( listen ( server_socket, 1 ) != 0 ) </span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+		{
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "*** Error " &lt;&lt; WSAGetLastError() </span>
+				&lt;&lt; " listening to socket in NetAsyncTCP::Listen()." &lt;&lt; ends;
+			OutputErrMsg();
+			return ReturnError;
+		}
+
+	// Accept connections to socket.
+	#if NETWORK_DETAILS || defined(_DEBUG)
+		cout &lt;&lt; "Accepting connections to socket." &lt;&lt; endl;
+	#endif
+
+	// Check the server socket for a connection request.  
+	FD_ZERO( &amp;sock_set );				// clear the fd_set structure.
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	FD_SET( fp-&gt;fd, &amp;sock_set);
+
+	// if timeout is NULL, operation blocks until successful.
+	switch ( select( maxfd, &amp;sock_set, NULL, NULL, &amp;timeout ) )	
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	FD_SET( server_socket, &amp;sock_set ); // Add the server socket to it.</span>
+
+	// if timeout is NULL, operation blocks until successful.
+<span style = "background-color:#fdd">	switch ( select( 0, &amp;sock_set, NULL, NULL, &amp;timeout ) )</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+	case 1:
+		// A connection was requested.  Accept it.
+		addr_len = sizeof( client_address );
+		// Create client socket.
+		#if NETWORK_DETAILS || defined(_DEBUG)
+			cout &lt;&lt; "Creating client socket." &lt;&lt; endl;
+		#endif
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+		((struct File *)client_socket)-&gt;fd = accept (fp-&gt;fd,
+						(struct sockaddr *) &amp;client_address, &amp;addr_len);
+
+		if (((struct File *)client_socket)-&gt;fd &lt; 0)
+		{
+			*errmsg &lt;&lt; "*** Could not create socket in NetAsyncTCP::"
+					&lt;&lt; "CreateSocket(), error: " &lt;&lt; WSAGetLastError()  &lt;&lt; ends;
+			OutputErrMsg();
+			((struct File *)client_socket)-&gt;fd = (int)INVALID_SOCKET;
+			return ReturnError;
+		}
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">		client_socket = accept ( server_socket, </span>
+						(struct sockaddr *) &amp;client_address, &amp;addr_len );
+
+<span style = "background-color:#fdd">		if ( client_socket== INVALID_SOCKET )</span>
+		{
+<span style = "background-color:#fdd">			*errmsg &lt;&lt; "*** Could not create socket in NetAsyncTCP::"</span>
+					&lt;&lt; "CreateSocket(), error: " &lt;&lt; WSAGetLastError()  &lt;&lt; ends;
+			OutputErrMsg();
+<span style = "background-color:#fdd">			return ReturnError;</span>
+		}
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+		// Set and verify socket options.
+<span style = "background-color:#fdd">		SetOptions( &amp;client_socket );</span>
+
+<span style = "background-color:#fdd">		return ReturnSuccess;</span>
+	case 0:
+		// opperation timed out.
+<span style = "background-color:#fdd">		return ReturnRetry;</span>
+	default:
+		// error.
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "*** select() failed in NetAsyncTCP::Accept(): " </span>
+			&lt;&lt; WSAGetLastError() &lt;&lt; ends;
+		OutputErrMsg();
+<span style = "background-color:#fdd">		return ReturnError;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Wait to receive notification that the remote end disconnected.
+//
+ReturnVal NetAsyncTCP::WaitForDisconnect()
+<span style = "background-color:#fdd">{</span>
+	struct sockaddr	address;
+<span style = "background-color:#fdd">	socklen_t addr_len = sizeof( address );</span>
+
+	fd_set readfds;
+	int res;
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	struct File    *fp = (struct File *)client_socket;
+#endif
+
+
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "Waiting for other end to disconnect." &lt;&lt; endl;
+	#endif
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">	if ( client_socket == INVALID_SOCKET )</span>
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if ( fp-&gt;fd == (int)INVALID_SOCKET )
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+	{
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "Socket is already closed." &lt;&lt; endl;
+		#endif
+		return ReturnSuccess;
+	}
+
+	// If we're not connected to anything, return.
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	res = getpeername(fp-&gt;fd, &amp;address, &amp;addr_len);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	res = getpeername(client_socket, &amp;address, &amp;addr_len);</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+<span style = "background-color:#fdd">	if (res == SOCKET_ERROR) {</span>
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "Not connected to anything.  Aborting WaitForDisconnect()." &lt;&lt; endl;
+		#endif
+		return ReturnSuccess;
+	}
+
+<span style = "background-color:#fdd">	SetTimeout(1, 0);</span>
+	FD_ZERO(&amp;readfds);
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	FD_SET(fp-&gt;fd, &amp;readfds);
+	res = select(maxfd, &amp;readfds, NULL, NULL, &amp;timeout);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">	FD_SET(client_socket, &amp;readfds);
+	SetTimeout(1, 0);		// wait 1 second for the connection to close</span>
+
+<span style = "background-color:#fdd">	res = select(0, &amp;readfds, NULL, NULL, &amp;timeout);</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+<span style = "background-color:#fdd">	if (res) {</span>
+		// This must mean that client_socket was closed.
+<span style = "background-color:#fdd">		return ReturnSuccess;</span>
+	} else {
+		// The socket still wasn't closed after one second.
+		return ReturnRetry;
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Close both the server and client sockets.  Calls shutdown first.
+//
+ReturnVal NetAsyncTCP::Destroy()
+<span style = "background-color:#fdd">{</span>
+	ReturnVal client_closed, server_closed;
+
+<span style = "background-color:#fdd">	client_closed = Close( CLIENT );
+	server_closed = Close( SERVER );</span>
+
+<span style = "background-color:#fdd">	if ( client_closed == ReturnSuccess &amp;&amp; server_closed == ReturnSuccess )</span>
+		return ReturnSuccess;
+	else
+		return ReturnError;
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Receive on client socket.
+//
+ReturnVal NetAsyncTCP::Receive( LPVOID buffer, DWORD bytes, LPDWORD return_value,
+	LPOVERLAPPED asynchronous_io, DWORD flags )
+<span style = "background-color:#fdd">{</span>
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "* Receiving " &lt;&lt; bytes &lt;&lt; " bytes from socket." &lt;&lt; endl;
+	#endif
+
+	// specify the file pointer (meaningless for a socket, but must be set)
+<span style = "background-color:#fdd">	asynchronous_io-&gt;Offset = 0;</span>
+	asynchronous_io-&gt;OffsetHigh = 0;
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	wsa_buf.len = bytes;
+	wsa_buf.buf = (char*)buffer;
+
+	// Do the read.
+	if ( WSARecv( (client_socket), &amp;wsa_buf, 1, return_value, &amp;flags, 
+<span style = "background-color:#fdd">		asynchronous_io, NULL ) == 0 )</span>
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if ( ReadFile( client_socket, buffer, bytes, return_value, asynchronous_io ) )
+#elif defined(IOMTR_OS_NETWARE)
+	if ( *return_value = read( (int)client_socket, buffer, (unsigned int)bytes) )
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+	{
+		// Read succeeded.
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "* Received " &lt;&lt; *return_value &lt;&lt; " of " &lt;&lt; bytes 
+				&lt;&lt; " bytes from socket." &lt;&lt; endl;
+		#endif
+		return ReturnSuccess;
+	}
+
+	// See if the read was queued.
+<span style = "background-color:#fdd">	if ( WSAGetLastError() == WSA_IO_PENDING )</span>
+	{
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "* Queued receive for " &lt;&lt; *return_value &lt;&lt; " of " 
+				 &lt;&lt; bytes &lt;&lt; " bytes from socket." &lt;&lt; endl;
+		#endif
+<span style = "background-color:#fdd">		return ReturnPending;</span>
+	}
+
+	// Read failed!
+<span style = "background-color:#fdd">	*return_value = WSAGetLastError();</span>
+	#if NETWORK_DETAILS || _DETAILS
+		*errmsg &lt;&lt; "*** Error " &lt;&lt; *return_value &lt;&lt; " receiving " 
+				&lt;&lt; bytes &lt;&lt; " bytes from socket." &lt;&lt; ends;
+		OutputErrMsg();
+	#endif
+<span style = "background-color:#fdd">	return ReturnError;
+}</span>
+
+
+
+//
+// Send on client socket.
+//
+ReturnVal NetAsyncTCP::Send( LPVOID buffer, DWORD bytes, LPDWORD return_value,
+	LPOVERLAPPED asynchronous_io, DWORD flags )
+<span style = "background-color:#fdd">{</span>
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "* Sending " &lt;&lt; bytes &lt;&lt; " bytes to socket." &lt;&lt; endl;
+	#endif
+
+	// specify the file pointer (meaningless for a socket, but must be set)
+<span style = "background-color:#fdd">	asynchronous_io-&gt;Offset = 0;</span>
+	asynchronous_io-&gt;OffsetHigh = 0;
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	wsa_buf.len = bytes;
+	wsa_buf.buf = (char*)buffer;
+
+	// Do the write.
+	if ( WSASend( (client_socket), &amp;wsa_buf, 1, return_value, NULL, 
+<span style = "background-color:#fdd">			asynchronous_io, NULL ) == 0 )</span>
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if ( WriteFile( client_socket, buffer, bytes, return_value, asynchronous_io ) )
+#elif defined(IOMTR_OS_NETWARE)
+	if ( *return_value = write( (int)client_socket, (void *)buffer, (unsigned int)bytes) )
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+	{
+		// Write succeeded.
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "* Sent " &lt;&lt; *return_value &lt;&lt; " of " &lt;&lt; bytes 
+				&lt;&lt; " bytes to socket." &lt;&lt; endl;
+		#endif
+		return ReturnSuccess;
+	}
+
+	// See if the write was queued.
+<span style = "background-color:#fdd">	if ( WSAGetLastError() == WSA_IO_PENDING )</span>
+	{
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "* Queued send for " &lt;&lt; *return_value &lt;&lt; " of " 
+				 &lt;&lt; bytes &lt;&lt; " bytes to socket." &lt;&lt; endl;
+		#endif
+<span style = "background-color:#fdd">		return ReturnPending;</span>
+	}
+
+	// Write failed.
+<span style = "background-color:#fdd">	*return_value = WSAGetLastError();</span>
+	#if NETWORK_DETAILS || _DETAILS
+		*errmsg &lt;&lt; "*** Error " &lt;&lt; *return_value &lt;&lt; " sending " 
+				&lt;&lt; bytes &lt;&lt; " bytes to socket." &lt;&lt; ends;
+		OutputErrMsg();
+	#endif
+<span style = "background-color:#fdd">	return ReturnError;
+}</span>
+
+
+
+//
+// Non blocking call which reads data from a connected port without
+// removing it.  Note that a process does not receive data from itself.
+// Returns the number of bytes available to be read.
+//
+// **** This function has not been tested.
+DWORD NetAsyncTCP::Peek()
+<span style = "background-color:#fdd">{
+	DWORD	bytes_available = 0;</span>
+
+	// we have to provide a buffer, so we provide just one character of buffer
+	char buf[1];
+	int res = 0, t = 0;
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	res = (int)recv(((struct File *)client_socket)-&gt;fd, buf, sizeof(buf), MSG_PEEK);
+	if (res &gt; 0) {
+		bytes_available = res;
+		res = ReturnSuccess;
+	} else
+		t = errno;
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	wsa_buf.buf = buf;
+	wsa_buf.len = sizeof(buf);
+
+<span style = "background-color:#fdd">	res = Receive(buf, 1, &amp;bytes_available, NULL, MSG_PEEK);
+	if (res != ReturnSuccess)
+		t = WSAGetLastError();</span>
+
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+	if (res == ReturnSuccess) {
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "* Peeked " &lt;&lt; bytes_available &lt;&lt; " bytes from socket." &lt;&lt; endl;
+		#endif
+<span style = "background-color:#fdd">		return bytes_available;</span>
+	} else {
+		#if NETWORK_DETAILS || defined(_DEBUG)
+			*errmsg &lt;&lt; "*** Error " &lt;&lt; t &lt;&lt; " peeking from socket in NetAsyncTCP::Peek()." &lt;&lt; ends;
+			OutputErrMsg();
+		#endif
+<span style = "background-color:#fdd">		return 0;	// no data available at this time, maybe later</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Utility function to close a socket.
+//
+ReturnVal NetAsyncTCP::CloseSocket( CONNECTION *s )
+<span style = "background-color:#fdd">{</span>
+	#if NETWORK_DETAILS || _DETAILS
+		cout &lt;&lt; "Closing socket." &lt;&lt; endl;
+	#endif
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if ( ((struct File *)*s)-&gt;fd == (int)INVALID_SOCKET )
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">	if ( *s == INVALID_SOCKET )</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+	{
+		#if NETWORK_DETAILS || _DETAILS
+			cout &lt;&lt; "Socket is already closed." &lt;&lt; endl;
+		#endif
+		return ReturnSuccess;
+	}
+
+	#if NETWORK_DETAILS || defined(_DEBUG)
+		cout &lt;&lt; "Closing socket." &lt;&lt; endl;
+	#endif
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	WSASetLastError(0);
+	if ( close ( ((struct File *)*s)-&gt;fd ) != 0 )
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">	if ( closesocket ( *s ) != 0 )</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+	{
+<span style = "background-color:#fdd">		*errmsg &lt;&lt; "*** Error " &lt;&lt; WSAGetLastError() </span>
+				&lt;&lt; " closing socket in NetAsyncTCP::CloseSocket()." &lt;&lt; ends;
+<span style = "background-color:#fdd">		OutputErrMsg();
+		return ReturnError;</span>
+	}
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	((struct File *)*s)-&gt;fd = (int)INVALID_SOCKET;
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">	*s = INVALID_SOCKET;</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Perform an abortive close of the specified socket.
+//
+ReturnVal NetAsyncTCP::Close( BOOL close_server )
+<span style = "background-color:#fdd">{</span>
+	CONNECTION *s;
+
+	if ( close_server )
+	{
+		s = &amp;server_socket;
+	}
+	else
+		s = &amp;client_socket;
+
+<span style = "background-color:#fdd">	return CloseSocket( s );</span>
+}
+
+
+
+//
+// Set socket options.
+//
+void NetAsyncTCP::SetOptions( CONNECTION *s )
+<span style = "background-color:#fdd">{</span>
+	static BOOL setoption = TRUE;
+	LINGER lstruct = {TRUE, 0};
+
+	
+#if (NETWORK_DETAILS || defined(_DEBUG)) &amp;&amp; defined(IOMTR_OS_FAMILY_WINDOWS)
+	BOOL CHECK_setoption;
+	LINGER	CHECK_lstruct;
+	int size;
+#endif
+
+
+	// SET the socket option settings
+	///////////////////////////////////
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	struct File *fp = (struct File *) *s;
+	// When closing the connection, do a hard close.
+	if ( setsockopt( fp-&gt;fd, SOL_SOCKET, SO_LINGER, (char *) &amp;lstruct, sizeof(lstruct) ) == SOCKET_ERROR )
+		cout &lt;&lt; "*** Couldn't set SO_LINGER option" &lt;&lt; endl;
+	// Reuse socket addresses
+	if ( setsockopt( fp-&gt;fd, SOL_SOCKET, SO_REUSEADDR, (char *) &amp;setoption, sizeof(setoption) ) == SOCKET_ERROR )
+		cout &lt;&lt; "*** Couldn't set SO_REUSEADDR option" &lt;&lt; endl;
+	// Don't delay sending data.
+	if ( setsockopt( fp-&gt;fd, IPPROTO_TCP, TCP_NODELAY, (char *) &amp;setoption, sizeof(setoption) ) == SOCKET_ERROR )
+		cout &lt;&lt; "*** Couldn't set TCP_NODELAY option" &lt;&lt; endl;
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+	// When closing the connection, do a hard close.
+<span style = "background-color:#fdd">	if ( setsockopt( *s, SOL_SOCKET, SO_LINGER, (char *) &amp;lstruct, sizeof(lstruct) ) == SOCKET_ERROR )
+		cout &lt;&lt; "*** Couldn't set SO_LINGER option" &lt;&lt; endl;</span>
+	// Reuse socket addresses
+<span style = "background-color:#fdd">	if ( setsockopt( *s, SOL_SOCKET, SO_REUSEADDR, (char *) &amp;setoption, sizeof(setoption) ) == SOCKET_ERROR )
+		cout &lt;&lt; "*** Couldn't set SO_REUSEADDR option" &lt;&lt; endl;</span>
+	// Don't delay sending data.
+<span style = "background-color:#fdd">	if ( setsockopt( *s, IPPROTO_TCP, TCP_NODELAY, (char *) &amp;setoption, sizeof(setoption) ) == SOCKET_ERROR )
+		cout &lt;&lt; "*** Couldn't set TCP_NODELAY option" &lt;&lt; endl;</span>
+#else
+ #warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+
+	// CHECK the socket option settings
+	/////////////////////////////////////
+
+#if defined(IOMTR_OS_FAMILY_WINDOWS)
+	#if NETWORK_DETAILS || defined(_DEBUG)
+		// When closing the connection, do a hard close.
+		size = sizeof(CHECK_lstruct);
+		if ( getsockopt( *s, SOL_SOCKET, SO_LINGER, (char *) &amp;CHECK_lstruct, &amp;size ) == SOCKET_ERROR )
+			cout &lt;&lt; "*** Couldn't get SO_LINGER option" &lt;&lt; endl;
+		else if ( memcmp( &amp;lstruct, &amp;CHECK_lstruct, sizeof(lstruct) ) )
+			cout &lt;&lt; "*** SO_LINGER was not set correctly" &lt;&lt; endl;
+
+		// Reuse socket addresses
+		size = sizeof(CHECK_setoption);
+		if ( getsockopt( *s, SOL_SOCKET, SO_REUSEADDR, (char *) &amp;CHECK_setoption, &amp;size ) == SOCKET_ERROR )
+			cout &lt;&lt; "*** Couldn't get SO_REUSEADDR option" &lt;&lt; endl;
+		else if ( setoption != CHECK_setoption )
+			cout &lt;&lt; "*** SO_REUSEADDR was not set correctly" &lt;&lt; endl;
+
+		// Don't delay sending data.
+		size = sizeof(CHECK_setoption);
+		if ( getsockopt( *s, IPPROTO_TCP, TCP_NODELAY, (char *) &amp;CHECK_setoption, &amp;size ) == SOCKET_ERROR )
+			cout &lt;&lt; "*** Couldn't get TCP_NODELAY option" &lt;&lt; endl;
+		else if ( setoption != CHECK_setoption )
+			cout &lt;&lt; "*** TCP_NODELAY was not set correctly" &lt;&lt; endl;
+	#endif
+#endif
+<span style = "background-color:#fdd">}</span>
+
+
+
+//
+// Handy debugger function.  Call like so:
+//
+// cout &lt;&lt; "*** Error: " &lt;&lt; Error( WSAGetLastError() ) &lt;&lt; endl;
+//
+char *NetAsyncTCP::Error(int error_num)
+<span style = "background-color:#fdd">{</span>
+	static char errmsg[2048];
+
+<span style = "background-color:#fdd">	switch (error_num)</span>
+	{
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	case WSANOTINITIALISED:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSANOTINITIALIZED - WinSock not initialized." );</span>
+		break;
+	case WSAENETDOWN:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAENETDOWN - The network subsystem has failed." );</span>
+		break;
+	case WSAEADDRINUSE:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEADDRINUSE - The socket's local port number is already in use." );</span>
+		break;
+	case WSAEINTR:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEINTR - The (blocking) Windows Socket 1.1 call was canceled "</span>
+					"through WSACancelBlockingCall." );
+		break;
+	case WSAEINPROGRESS:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEINPROGRESS - A blocking Windows Sockets 1.1 call is in progress, "</span>
+					"or the service provider is still processing a callback function." );
+		break;
+	case WSAEALREADY:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEALREADY - A nonblocking connect call is in progress on "</span>
+					"the specified socket." );
+		break;
+	case WSAEADDRNOTAVAIL:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEADDRNOTAVAIL - The remote address is not a valid address." );</span>
+		break;
+	case WSAEAFNOSUPPORT:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEAFNOSUPPORT - Addresses in the specified family cannot "</span>
+					"be used with this socket." );
+		break;
+	case WSAECONNREFUSED:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAECONNREFUSED - The attempt to connect was forcefully rejected." );</span>
+		break;
+	case WSAEFAULT:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEFAULT - The name or the namelen parameter is not a "</span>
+					"valid part of the user address space, the namelen parameter "
+					"is too small, or the name parameter contains incorrect "
+					"address format for the associated address family." );
+		break;
+	case WSAEINVAL:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEINVAL - The parameter s is a listening socket, or "</span>
+					"the destination address specified is not consistent with "
+					"that of the constrained group the socket belongs to." );
+		break;
+	case WSAEISCONN:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEISCONN - The socket is already connected." );</span>
+		break;
+	case WSAENETUNREACH:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAENETUNREACH - The network cannot be reached "</span>
+					"from this host at this time." );
+		break;
+	case WSAENOBUFS:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAENOBUFS - No buffer space is available.  "</span>
+					"The socket cannot be connected." );
+		break;
+	case WSAENOTSOCK:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAENOTSOCK - The descriptor is not a socket." );</span>
+		break;
+	case WSAETIMEDOUT:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAETIMEDOUT - Attempt to connect timed out without "</span>
+					"establishing a connection." );
+		break;
+	case WSAEWOULDBLOCK:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEWOULDBLOCK - The socket is marked as nonblocking and "</span>
+					"the connection cannot be completed immediately." );
+		break;
+	case WSAEACCES:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAEACCES - Access forbidden." );</span>
+		break;
+	case WSAECONNRESET:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "WSAECONNRESET - Connection reset by peer." );</span>
+		break;
+#endif
+	default:
+<span style = "background-color:#fdd">		wsprintf( errmsg, "Unknown WinSock error: %d.", error_num );</span>
+		break;
+	}
+
+<span style = "background-color:#fdd">	return errmsg;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

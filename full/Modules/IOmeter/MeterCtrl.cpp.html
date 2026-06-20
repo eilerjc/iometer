@@ -1,0 +1,600 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>MeterCtrl.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / MeterCtrl.cpp                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CMeterCtrl class, which         ## */
+/* ##               provides the "speedometer" control in the             ## */
+/* ##               "Presentation Meter" dialog.                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2006-08-04 (vedrand@yahoo.com)                        ## */
+/* ##               - misc syntactical -- explicit pow() arg typecasts    ## */
+/* ##               2004-09-01 (henryx.w.tieman@intel.com)                ## */
+/* ##               - Needed to cast parameters to some functions         ## */
+/* ##                 because latest Visual Studio C++ library has        ## */
+/* ##                 multiple entry points for those functions.          ## */
+/* ##               2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include &lt;math.h&gt;
+#include "stdafx.h"
+#include "MeterCtrl.h"
+#include "TextDisplay.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+#define	PI				3.14159265
+
+<span style = "background-color:#fdd">IMPLEMENT_DYNAMIC(CMeterCtrl, CWnd)</span>
+// Message mapping
+<span style = "background-color:#dfd">    BEGIN_MESSAGE_MAP(CMeterCtrl, CWnd)</span>
+    //{{AFX_MSG_MAP(CMeterCtrl)
+    ON_WM_PAINT()
+    ON_WM_CREATE()
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">    END_MESSAGE_MAP()</span>
+
+// Static member initialization
+// (This verifies that the "meter" window class is registered before CMeterCtrl is used.)
+BOOL CMeterCtrl::is_registered = Register();
+
+//////////////////////////////////////////////////////////////////////
+// Construction/Destruction
+//////////////////////////////////////////////////////////////////////
+
+CMeterCtrl::CMeterCtrl()
+<span style = "background-color:#dfd">{</span>
+	// Initialize the meter.
+<span style = "background-color:#dfd">	value = 0;
+	min_range = 0;
+	max_range = 100;
+	auto_range = TRUE;</span>
+
+	// Setting the low watermark to -1 to indicate that it has not been set 
+	// yet.  This prevents the low watermark from always being zero.
+<span style = "background-color:#dfd">	low_value = -1;
+	high_value = 0;
+	show_watermark = FALSE;
+}</span>
+
+//
+// Handles WM_CREATE message (Window is being created)
+//
+int CMeterCtrl::OnCreate(LPCREATESTRUCT lpCreateStruct)
+<span style = "background-color:#dfd">{
+	CRect control_box;</span>
+	POINT temp_point;
+
+	// Allow the framework to create the window
+<span style = "background-color:#dfd">	VERIFY(CWnd::OnCreate(lpCreateStruct) == 0);</span>
+
+	// Store the control's client area rectangle
+<span style = "background-color:#dfd">	GetClientRect(&amp;control_box);</span>
+
+	// Determine where the pivot point should be located.
+	// Get the length of the longest radius that will fit inside the box.
+<span style = "background-color:#dfd">	outer_radius = (int)min(control_box.Width() / 2, control_box.Height()</span>
+				/ (1 + cos(PIVOT_ARC_ANGLE * PI / 180)));
+	inner_radius = (int)(outer_radius * .70);
+	pivot_point.x = (int)(control_box.Width() / 2);
+	pivot_point.y = outer_radius;
+
+	// Set the size of the rectangle containing the dial.
+<span style = "background-color:#dfd">	meter_box.left = pivot_point.x - outer_radius;
+	meter_box.top = pivot_point.y - outer_radius;
+	meter_box.right = pivot_point.x + outer_radius;
+	meter_box.bottom = pivot_point.y + outer_radius;</span>
+
+	// Initialize the needle's center pivot circle.
+<span style = "background-color:#dfd">	pivot_radius = inner_radius / 12;
+	needle_pivot.SetRect(pivot_point.x - pivot_radius,</span>
+			     pivot_point.y - pivot_radius, pivot_point.x + pivot_radius, pivot_point.y + pivot_radius);
+
+	// Set the points for the bounding pie wedge.
+<span style = "background-color:#dfd">	CalculatePoint(0, inner_radius, &amp;(min_point.x), &amp;(min_point.y));
+	max_point.x = pivot_point.x + (pivot_point.x - min_point.x);</span>
+	max_point.y = min_point.y;
+
+	// Now set the needle to the resting position.
+	shown_angle = 0;
+	actual_angle = 0;
+<span style = "background-color:#dfd">	SetNeedlePoints();</span>
+
+	// Create the text box for the scale display.
+<span style = "background-color:#dfd">	CalculatePoint(0, inner_radius, &amp;scale_box.right, &amp;temp_point.y);
+	CalculatePoint(0, outer_radius, &amp;temp_point.x, &amp;scale_box.bottom);
+	CalculatePoint(NEEDLE_SWEEP, inner_radius, &amp;scale_box.left, &amp;scale_box.top);</span>
+
+	// Initialize information needed to display the scale and labels.
+<span style = "background-color:#dfd">	scale_font.CreateFont((int)(outer_radius * .2), 0, 0, 0, FW_NORMAL, FALSE,</span>
+			      FALSE, FALSE, ANSI_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+			      DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+<span style = "background-color:#dfd">	label_font.CreateFont((int)(outer_radius * .18), 0, 0, 0, FW_NORMAL, FALSE,</span>
+			      FALSE, FALSE, ANSI_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+			      DEFAULT_QUALITY, DEFAULT_PITCH, "Arial");
+<span style = "background-color:#dfd">	marker_pen.CreatePen(PS_SOLID, 2, 0x00FFFFFF);</span>
+	label_box_size = (int)(outer_radius * .1);
+	label_radius = (int)(outer_radius * .8275);
+	tick_mark_radius = (int)(outer_radius * .96);
+<span style = "background-color:#dfd">	UpdateScaleInfo();
+	UpdateLabelInfo();</span>
+
+	// Set the points for the rectangle surrounding the watermark arc.
+<span style = "background-color:#dfd">	watermark_box.left = pivot_point.x - inner_radius - 2;
+	watermark_box.top = pivot_point.y - inner_radius - 2;
+	watermark_box.right = pivot_point.x + inner_radius + 2;
+	watermark_box.bottom = pivot_point.y + inner_radius + 2;</span>
+
+<span style = "background-color:#dfd">	return 0;
+}</span>
+
+//
+// Set the range of the meter and updates the display.
+//
+void CMeterCtrl::SetRange(int range1, int range2, BOOL range_auto)
+<span style = "background-color:#dfd">{
+	auto_range = range_auto;</span>
+	// Disallow setting the ranges to the same value.
+<span style = "background-color:#dfd">	if (range1 == range2)</span>
+		return;
+
+	min_range = ((range1 &lt; range2) ? range1 : range2);
+	max_range = ((range1 &gt; range2) ? range1 : range2);
+
+	// Make sure that the needle value is within the new range and update
+	// the actual angle that the needle should be.
+<span style = "background-color:#dfd">	if (value &lt; min_range)</span>
+<span style = "background-color:#fdd">		actual_angle = 0;</span>
+<span style = "background-color:#dfd">	else if (value &gt; max_range)</span>
+<span style = "background-color:#fdd">		actual_angle = NEEDLE_SWEEP;</span>
+	else
+<span style = "background-color:#dfd">		actual_angle = (int)(value / (max_range - min_range) * NEEDLE_SWEEP);</span>
+
+	// Update the displayed scale and marker labels.
+<span style = "background-color:#dfd">	UpdateScaleInfo();
+	UpdateLabelInfo();</span>
+
+<span style = "background-color:#dfd">	RedrawWindow();
+}</span>
+
+//
+// Resetting information used to maintain watermark range.
+//
+void CMeterCtrl::ResetWatermark()
+<span style = "background-color:#dfd">{</span>
+	// Setting the low watermark to -1 to indicate that it has not been set 
+	// yet.  This prevents the low watermark from always being zero.
+<span style = "background-color:#dfd">	low_value = -1;
+	high_value = 0;</span>
+
+<span style = "background-color:#dfd">	RedrawWindow();</span>
+}
+
+//
+// Updating the information used to display the scale at the bottom of the 
+// meter.
+//
+void CMeterCtrl::UpdateScaleInfo()
+<span style = "background-color:#dfd">{</span>
+	int p, scale;
+
+	// Only show text if entire scale cannot be shown by the label markers.
+<span style = "background-color:#dfd">	if (max_range &lt;= 10) {</span>
+<span style = "background-color:#fdd">		scale_text = "";</span>
+		return;
+	}
+	// Calculate the new scale.
+<span style = "background-color:#dfd">	scale = (int)powf(10.0, floorf(log10f((float)max_range)));</span>
+
+<span style = "background-color:#dfd">	if ((max_range == (int)powf(10.0, floorf(log10f((float)max_range))))) {</span>
+		// max_range is a power of 10
+<span style = "background-color:#dfd">		scale /= 10;</span>
+	}
+	// Format the displayed scale text.
+<span style = "background-color:#dfd">	scale_text.Format("x%d", scale);</span>
+
+	// Add commas into the number for easier reading.
+<span style = "background-color:#dfd">	for (p = 3; p &lt; scale_text.GetLength() - 1; p += 4) {
+		scale_text = scale_text.Left(scale_text.GetLength() - p)</span>
+		    + "," + scale_text.Right(p);
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Updating the information used to display the marker labels along the 
+// outer edge of the meter.  Because a scale is used, we are ensured that
+// marker labels will only display values from 0 to 10, inclusive.
+//
+void CMeterCtrl::UpdateLabelInfo()
+<span style = "background-color:#dfd">{</span>
+	float range_diff;
+	float display_range;	// range normalized to ##.##### for ranges &gt; 10
+	float label_increment;
+	float display_value;
+	int label_angle;
+	LONG x, y;		// temporary point coordinates
+
+	// Sets the range that the marker labels will span.
+<span style = "background-color:#dfd">	range_diff = (float) (max_range - min_range);
+	if ((range_diff == powf(10.0, floorf(log10f(range_diff)))) &amp;&amp; (range_diff != 1)) {</span>
+		// range_diff is a power of 10, but is not exactly 1
+<span style = "background-color:#dfd">		display_range = 10;
+	} else {</span>
+<span style = "background-color:#fdd">		display_range = range_diff / powf(10.0, floorf(log10f(range_diff)));</span>
+	}
+
+	// Set the increment from one label to the next.
+<span style = "background-color:#fdd">	if (display_range &lt;= 1)
+		label_increment = (float) .1;
+	else if (display_range &lt;= 2)
+		label_increment = (float) .2;
+	else if (display_range &lt;= 5)
+		label_increment = (float) .5;
+	else if (display_range &lt;= 10)</span>
+		label_increment = 1;
+
+	// Update the marker label text boxes.
+	label_count = 0;
+<span style = "background-color:#dfd">	display_value = (float) min_range;
+	while (display_value &lt;= display_range) {</span>
+		// Set the position of the text boxes.
+		label_angle = (int)(display_value / display_range * NEEDLE_SWEEP);
+<span style = "background-color:#dfd">		CalculatePoint(label_angle, label_radius, &amp;x, &amp;y);
+		label_box[label_count].left = x - label_box_size;</span>
+		label_box[label_count].top = y - label_box_size;
+		label_box[label_count].right = x + label_box_size;
+		label_box[label_count].bottom = y + label_box_size;
+
+		// Format the label's text.  
+<span style = "background-color:#dfd">		if (display_value &gt; 0.0 &amp;&amp; display_value &lt;= 0.9)</span>
+<span style = "background-color:#fdd">			label[label_count].Format(".%.1g\n", display_value * 10.0);</span>
+		else
+<span style = "background-color:#dfd">			label[label_count].Format("%.2g\n", display_value);</span>
+
+		// Set the location for the tick marks.
+<span style = "background-color:#dfd">		CalculatePoint(label_angle, tick_mark_radius,</span>
+			       &amp;tick_mark[label_count][0].x, &amp;tick_mark[label_count][0].y);
+<span style = "background-color:#dfd">		CalculatePoint(label_angle, outer_radius, &amp;tick_mark[label_count][1].x, &amp;tick_mark[label_count][1].y);</span>
+
+<span style = "background-color:#dfd">		label_count++;
+		display_value += label_increment;</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Set the value being displayed by the meter.  It also checks to see if the
+// display needs to be updated and does so.
+//
+void CMeterCtrl::SetValue(double new_value)
+<span style = "background-color:#dfd">{</span>
+	BOOL update_watermark = FALSE;
+	int temp_value;
+
+	// If the value is the same as what we had, we don't need to do anything.
+<span style = "background-color:#dfd">	if (new_value == value)</span>
+		return;
+
+	// See if the new value falls outside the current watermark ranges.
+<span style = "background-color:#dfd">	if (new_value &lt; low_value || low_value == -1) {
+		low_value = new_value;
+		update_watermark = TRUE;</span>
+	}
+<span style = "background-color:#dfd">	if (new_value &gt; high_value) {
+		high_value = new_value;
+		update_watermark = TRUE;</span>
+	}
+
+	value = new_value;
+
+
+<span style = "background-color:#dfd">	if (auto_range) // VLD: autoscale the meter</span>
+	{
+		// Derive a new range based on the new_value above
+<span style = "background-color:#dfd">		temp_value = (int)powf(10.0, floorf(log10f((float)value * 10)));</span>
+
+		// Determine if we need to reset the range up or down
+<span style = "background-color:#dfd">		if (temp_value &gt; max_range)
+			SetRange(min_range, temp_value, TRUE);
+		else if (temp_value &lt;= max_range/10)</span>
+<span style = "background-color:#fdd">			SetRange(min_range, max_range/10, TRUE); // will ratchet down by a decade each time</span>
+
+		// Calculate the needle angle
+<span style = "background-color:#dfd">		actual_angle = (int)(value / (max_range - min_range) * NEEDLE_SWEEP);
+	}</span>
+	else
+	{
+		// Make sure that the new value is within the current range and update
+		// the actual angle that the needle should be.
+<span style = "background-color:#fdd">		if (new_value &lt; min_range)
+			actual_angle = 0;
+		else if (new_value &gt; max_range)
+			actual_angle = NEEDLE_SWEEP;</span>
+		else
+<span style = "background-color:#fdd">			actual_angle = (int)(value / (max_range - min_range) * NEEDLE_SWEEP);</span>
+	}
+
+	// See if the needle would move significantly.  If not, we're done.
+<span style = "background-color:#dfd">	if (fabs((double)actual_angle - shown_angle) &lt; NEEDLE_SENSITIVITY)</span>
+		return;
+
+	// Update the location and angle of the needle's point.
+<span style = "background-color:#fdd">	DrawNeedle();
+	if (show_watermark &amp;&amp; update_watermark)
+		DrawWatermark();</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Calculate a point on the display given an angle (in degrees) and the 
+// length of the radius.  The point is offset based on the pivot point.
+//
+void CMeterCtrl::CalculatePoint(int angle, int radius, LONG * x, LONG * y)
+<span style = "background-color:#dfd">{</span>
+	// The given angle is from the minimum value and does not include the
+	// rotation in the display.
+<span style = "background-color:#dfd">	angle += 90 + PIVOT_ARC_ANGLE;
+	*x = pivot_point.x + (int)(cos(angle * PI / 180) * radius);
+	*y = pivot_point.y + (int)(sin(angle * PI / 180) * radius);
+}</span>
+
+//
+// Sets the three points needed to draw the needle.
+//
+void CMeterCtrl::SetNeedlePoints()
+<span style = "background-color:#dfd">{
+	CalculatePoint(actual_angle, inner_radius, &amp;(needle[0].x), &amp;(needle[0].y));
+	CalculatePoint(180 + actual_angle - 20, pivot_radius + 5, &amp;(needle[1].x), &amp;(needle[1].y));
+	CalculatePoint(180 + actual_angle + 20, pivot_radius + 5, &amp;(needle[2].x), &amp;(needle[2].y));</span>
+
+	// Update the angle that the needle now shows.
+<span style = "background-color:#dfd">	shown_angle = actual_angle;
+}</span>
+
+//
+// Updating the display of the needle image.
+//
+void CMeterCtrl::DrawNeedle()
+<span style = "background-color:#dfd">{
+	CClientDC dc(this);
+	CPen black_pen(PS_SOLID, 1, (COLORREF) 0x00000000);
+	CBrush black_brush((COLORREF) 0x00000000);
+	CPen needle_pen(PS_SOLID, 1, (COLORREF) 0x0000000FF);
+	CBrush needle_brush((COLORREF) 0x0000000FF);
+	CBrush pivot_brush(PALETTERGB(170, 170, 170));</span>
+
+	// Clear the current needle by painting it black.
+<span style = "background-color:#dfd">	dc.SelectObject(black_pen);
+	dc.SelectObject(black_brush);
+	dc.Polygon(needle, 3);</span>
+
+	// Draw the pivot circle.
+<span style = "background-color:#dfd">	dc.SelectObject(black_pen);
+	dc.SelectObject(pivot_brush);
+	dc.Ellipse(&amp;needle_pivot);</span>
+
+	// Draw the new needle.
+<span style = "background-color:#dfd">	SetNeedlePoints();
+	dc.SelectObject(needle_pen);
+	dc.SelectObject(needle_brush);
+	dc.Polygon(needle, 3);
+}</span>
+
+//
+// Update the display of the watermark ranges.
+//
+void CMeterCtrl::DrawWatermark()
+<span style = "background-color:#fdd">{
+	CClientDC dc(this);
+	CPen watermark_pen(PS_SOLID, 2, 0x00FF0000);</span>
+	int low_angle, high_angle;
+	POINT start, end;
+
+	// Calculate the angle that the low watermark makes.
+<span style = "background-color:#fdd">	if (low_value &lt; min_range)
+		low_angle = 0;
+	else if (low_value &gt; max_range)
+		low_angle = NEEDLE_SWEEP;</span>
+	else
+<span style = "background-color:#fdd">		low_angle = (int)(low_value / (max_range - min_range) * NEEDLE_SWEEP);</span>
+
+	// Calculate the angle that the high watermark makes.
+<span style = "background-color:#fdd">	if (high_value &lt; min_range)
+		high_angle = 0;
+	else if (high_value &gt; max_range)</span>
+		high_angle = NEEDLE_SWEEP;
+	else
+<span style = "background-color:#fdd">		high_angle = (int)(high_value / (max_range - min_range) * NEEDLE_SWEEP);</span>
+
+	// If the two angles are the same, don't display the watermark.
+<span style = "background-color:#fdd">	if (low_angle == high_angle)</span>
+		return;
+
+	// Get the endpoints of the watermark arc.  The arc is drawn counter-
+	// clockwise.
+<span style = "background-color:#fdd">	CalculatePoint(high_angle, inner_radius + 2, &amp;start.x, &amp;start.y);
+	CalculatePoint(low_angle, inner_radius + 2, &amp;end.x, &amp;end.y);</span>
+
+	// Draw the watermark range of the currently displayed value.
+<span style = "background-color:#fdd">	dc.SelectObject(watermark_pen);
+	dc.Arc(&amp;watermark_box, start, end);
+}</span>
+
+//
+// Redraws the display from a WM_PAINT message.
+//
+void CMeterCtrl::OnPaint()
+<span style = "background-color:#dfd">{
+	CPaintDC dc(this);</span>
+	int i;
+
+	// Draw the dial.
+<span style = "background-color:#dfd">	dc.SelectStockObject(BLACK_PEN);
+	dc.SelectStockObject(BLACK_BRUSH);
+	dc.Ellipse(&amp;meter_box);</span>
+
+	// Indicate the scale.
+<span style = "background-color:#dfd">	dc.SelectObject(&amp;scale_font);
+	dc.SetBkColor(0x00000000);
+	dc.SetTextColor(0x00FFFFFF);
+	dc.DrawText(scale_text, scale_text.GetLength(), &amp;scale_box, DT_CENTER);</span>
+
+	// Add the labels and tick marks.
+<span style = "background-color:#dfd">	dc.SelectObject(&amp;label_font);
+	dc.SelectObject(&amp;marker_pen);
+	for (i = 0; i &lt; label_count; i++) {
+		dc.DrawText(label[i], label[i].GetLength(), &amp;label_box[i], DT_CENTER | DT_NOCLIP);
+		dc.MoveTo(tick_mark[i][0]);
+		dc.LineTo(tick_mark[i][1]);</span>
+	}
+
+<span style = "background-color:#dfd">	DrawNeedle();
+	if (show_watermark)</span>
+<span style = "background-color:#fdd">		DrawWatermark();</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Removes used memory.  Called after response to WM_NCDESTROY
+//
+void CMeterCtrl::PostNcDestroy()
+<span style = "background-color:#dfd">{
+	delete this;</span>
+<span style = "background-color:#fdd">}</span>
+
+//
+// Registers the "meter" window class
+//
+BOOL CMeterCtrl::Register()
+<span style = "background-color:#dfd">{</span>
+	WNDCLASS wc;
+
+	// See if the class has already been registered.
+<span style = "background-color:#dfd">	if (GetClassInfo(NULL, "CMeterCtrl", &amp;wc)) {</span>
+		// Name already registered - ok if it was us
+<span style = "background-color:#fdd">		return (wc.lpfnWndProc == (WNDPROC) CMeterCtrl::MeterCtrlWndProc);</span>
+	}
+	// Register the window class of the control.
+	wc.style = CS_GLOBALCLASS | CS_OWNDC | CS_BYTEALIGNCLIENT | CS_BYTEALIGNWINDOW;
+	wc.lpfnWndProc = CMeterCtrl::MeterCtrlWndProc;
+<span style = "background-color:#dfd">	wc.cbClsExtra = 0;</span>
+	wc.cbWndExtra = 0;
+	wc.hInstance = NULL;
+	wc.hIcon = NULL;
+<span style = "background-color:#dfd">	wc.hCursor =::LoadCursor(NULL, IDC_ARROW);
+	wc.hbrBackground = (HBRUSH) COLOR_WINDOW;</span>
+	wc.lpszMenuName = NULL;
+	wc.lpszClassName = "CMeterCtrl";
+
+<span style = "background-color:#dfd">	return RegisterClass(&amp;wc);
+}</span>
+
+//
+// Window procedure for the "meter" window class.  This global function handles the
+// creation of new CMeterCtrl objects and subclasses the objects so the MFC framework
+// passes messages along to the CMeterCtrl member functions.
+//
+LRESULT CALLBACK EXPORT CMeterCtrl::MeterCtrlWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+<span style = "background-color:#dfd">{
+	AFX_MANAGE_STATE(AfxGetStaticModuleState());</span>
+
+	CWnd *pWnd;
+
+	// See if we're creating the window.
+<span style = "background-color:#dfd">	if (!(pWnd = CWnd::FromHandlePermanent(hWnd)) &amp;&amp; message == WM_NCCREATE) {</span>
+		// Yes, create the object.
+<span style = "background-color:#dfd">		pWnd = new CMeterCtrl();
+		pWnd-&gt;Attach(hWnd);</span>
+	}
+
+<span style = "background-color:#dfd">	return AfxCallWndProc(pWnd, hWnd, message, wParam, lParam);
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

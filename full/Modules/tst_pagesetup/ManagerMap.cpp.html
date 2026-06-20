@@ -1,0 +1,151 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>ManagerMap.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "ManagerMap.h"
+#include &lt;cctype&gt;
+
+namespace iocore {
+
+const char *const ManagerMap::LocalHostName = "(Local)";
+
+// Case-insensitive string compare (the MFC original used CString::CompareNoCase).
+static bool iequals(const std::string &amp;a, const std::string &amp;b)
+<span style = "background-color:#dfd">{
+    if (a.size() != b.size())</span>
+        return false;
+<span style = "background-color:#dfd">    for (std::size_t i = 0; i &lt; a.size(); ++i) {
+        if (std::tolower(static_cast&lt;unsigned char&gt;(a[i])) !=</span>
+            std::tolower(static_cast&lt;unsigned char&gt;(b[i])))
+<span style = "background-color:#dfd">            return false;</span>
+    }
+<span style = "background-color:#dfd">    return true;
+}</span>
+
+void ManagerMap::reset()
+<span style = "background-color:#dfd">{
+    m_entries.clear();
+}</span>
+
+void ManagerMap::store(const std::string &amp;name, int id, const std::string &amp;address,
+                       Handle handle)
+<span style = "background-color:#dfd">{
+    Entry e;
+    e.name = name;
+    e.id = id;
+    e.address = address;
+    e.handle = handle;
+    m_entries.push_back(e);</span>
+    // NOTE: the MFC original also adds an unassigned entry to its waiting-list
+    // dialog here; that GUI side-effect is the front-end's responsibility.
+<span style = "background-color:#dfd">}</span>
+
+ManagerMap::Handle ManagerMap::retrieve(const std::string &amp;name, int id) const
+<span style = "background-color:#dfd">{
+    for (const auto &amp;e : m_entries) {</span>
+        if ((iequals(name, e.name) &amp;&amp; id == e.id)
+<span style = "background-color:#dfd">            || e.name == LocalHostName)   // "special local host" case
+            return e.handle;</span>
+    }
+<span style = "background-color:#dfd">    return nullptr;
+}</span>
+
+bool ManagerMap::managerLoggedIn(const std::string &amp;name, const std::string &amp;address,
+                                 Handle handle)
+<span style = "background-color:#dfd">{
+    for (auto &amp;e : m_entries) {</span>
+        // Verbatim port of the MFC predicate, including its operator precedence:
+        //   (handle==null &amp;&amp; name&amp;&amp;address match) || (address=="" &amp;&amp; name==LOCAL)
+        // (&amp;&amp; binds tighter than ||, so the local-host clause is independent.)
+        if ((e.handle == nullptr
+             &amp;&amp; (iequals(name, e.name) &amp;&amp; iequals(address, e.address)))
+<span style = "background-color:#dfd">            || (e.address.empty() &amp;&amp; e.name == LocalHostName)) {
+            e.handle = handle;</span>
+            // NOTE: front-end removes (name,address) from its waiting-list dialog.
+<span style = "background-color:#dfd">            return true;</span>
+        }
+    }
+<span style = "background-color:#dfd">    return false;
+}</span>
+
+bool ManagerMap::setIfOneManager(Handle handle)
+<span style = "background-color:#dfd">{
+    if (m_entries.size() != 1)</span>
+        return false;
+<span style = "background-color:#dfd">    if (m_entries[0].handle != nullptr)
+        return false;
+    m_entries[0].handle = handle;
+    return true;
+}</span>
+
+bool ManagerMap::managerLoggedOut(Handle handle)
+<span style = "background-color:#dfd">{
+    for (auto &amp;e : m_entries) {
+        if (e.handle == handle) {
+            e.handle = nullptr;
+            return true;</span>
+        }
+    }
+<span style = "background-color:#dfd">    return false;
+}</span>
+
+bool ManagerMap::isWaitingList() const
+<span style = "background-color:#dfd">{
+    for (const auto &amp;e : m_entries) {
+        if (e.handle == nullptr)
+            return true;</span>
+    }
+<span style = "background-color:#dfd">    return false;
+}</span>
+
+bool ManagerMap::isManagerNeeded(Handle handle) const
+<span style = "background-color:#dfd">{
+    for (const auto &amp;e : m_entries) {
+        if (e.handle == handle)
+            return true;</span>
+    }
+<span style = "background-color:#dfd">    return false;
+}</span>
+
+std::vector&lt;ManagerMap::SpawnRequest&gt; ManagerMap::localManagersToSpawn(
+    const IsLocalFn &amp;isLocal, const std::string &amp;localName) const
+<span style = "background-color:#dfd">{
+    std::vector&lt;SpawnRequest&gt; requests;
+    for (const auto &amp;e : m_entries) {
+        if (e.handle != nullptr)</span>
+            continue;   // already assigned
+        if ((e.address.empty() &amp;&amp; e.name == LocalHostName)
+<span style = "background-color:#dfd">            || iequals(e.name, localName)) {</span>
+            // Spawn a Dynamo with local defaults (no -n).
+<span style = "background-color:#dfd">            requests.push_back(SpawnRequest{ std::string() });
+        } else if (isLocal &amp;&amp; isLocal(e.address)) {</span>
+            // Spawn a local Dynamo with the appropriate -n name.
+<span style = "background-color:#dfd">            requests.push_back(SpawnRequest{ e.name });</span>
+        }
+    }
+<span style = "background-color:#dfd">    return requests;
+}</span>
+
+} // namespace iocore</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

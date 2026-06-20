@@ -1,0 +1,1365 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>AccessDialog.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / AccessDialog.cpp                                       ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: This file is responsible for allowing the access      ## */
+/* ##               specifications to be edited (the little dialog)       ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               2003-03-02 (joe@eiler.net)                            ## */
+/* ##               - Changed LONG_PTR to ULONG_PTR, which is what it is  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "StdAfx.h"
+#include "AccessDialog.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CAccessDialog dialog
+
+CAccessDialog::CAccessDialog(Test_Spec * edit_spec, CWnd * pParent)
+<span style = "background-color:#dfd">:  CDialog(CAccessDialog::IDD, pParent)
+{
+	spec = edit_spec;</span>
+	//{{AFX_DATA_INIT(CAccessDialog)
+<span style = "background-color:#dfd">	access_txt = _T("");
+	random_txt = _T("");
+	read_txt = _T("");
+	sequential_txt = _T("");
+	transfer_txt = _T("");
+	write_txt = _T("");</span>
+	//}}AFX_DATA_INIT
+<span style = "background-color:#dfd">}</span>
+
+void CAccessDialog::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CAccessDialog)
+<span style = "background-color:#dfd">	DDX_Control(pDX, RReplySize, m_RReplySize);
+	DDX_Control(pDX, RNoReply, m_RNoReply);
+	DDX_Control(pDX, RAlignRequestSize, m_RAlignRequestSize);
+	DDX_Control(pDX, RAlignSector, m_RAlignSector);
+	DDX_Control(pDX, RAlignBytes, m_RAlignBytes);
+	DDX_Control(pDX, SReplyMegabytes, m_SReplyMegabytes);
+	DDX_Control(pDX, SReplyKilobytes, m_SReplyKilobytes);
+	DDX_Control(pDX, SReplyBytes, m_SReplyBytes);
+	DDX_Control(pDX, EReplyMegabytes, m_EReplyMegabytes);
+	DDX_Control(pDX, EReplyKilobytes, m_EReplyKilobytes);
+	DDX_Control(pDX, EReplyBytes, m_EReplyBytes);
+	DDX_Control(pDX, SAlignMegabytes, m_SAlignMegabytes);
+	DDX_Control(pDX, SAlignKilobytes, m_SAlignKilobytes);
+	DDX_Control(pDX, SAlignBytes, m_SAlignBytes);
+	DDX_Control(pDX, EAlignMegabytes, m_EAlignMegabytes);
+	DDX_Control(pDX, EAlignKilobytes, m_EAlignKilobytes);
+	DDX_Control(pDX, EAlignBytes, m_EAlignBytes);
+	DDX_Control(pDX, EBytes, m_EBytes);
+	DDX_Control(pDX, EMegabytes, m_EMegabytes);
+	DDX_Control(pDX, EKilobytes, m_EKilobytes);
+	DDX_Control(pDX, SMegabytes, m_SMegabytes);
+	DDX_Control(pDX, SKilobytes, m_SKilobytes);
+	DDX_Control(pDX, SBytes, m_SBytes);
+	DDX_Control(pDX, CDefaultAssignment, m_CDefaultAssignment);
+	DDX_Control(pDX, IDOK, m_BOk);
+	DDX_Control(pDX, EName, m_EName);
+	DDX_Control(pDX, SRead, m_SRead);
+	DDX_Control(pDX, SRandom, m_SRandom);
+	DDX_Control(pDX, SAccess, m_SAccess);
+	DDX_Control(pDX, LAccess, m_LAccess);
+	DDX_Control(pDX, EDelayTime, m_EDelayTime);
+	DDX_Control(pDX, EBurstLength, m_EBurstLength);
+	DDX_Control(pDX, BInsertBefore, m_BInsertBefore);
+	DDX_Control(pDX, BInsertAfter, m_BInsertAfter);
+	DDX_Control(pDX, BDelete, m_BDelete);
+	DDX_Text(pDX, TAccess, access_txt);
+	DDX_Text(pDX, TRandom, random_txt);
+	DDX_Text(pDX, TRead, read_txt);
+	DDX_Text(pDX, TSequential, sequential_txt);
+	DDX_Text(pDX, TWrite, write_txt);</span>
+	//}}AFX_DATA_MAP
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CAccessDialog, CDialog)</span>
+    //{{AFX_MSG_MAP(CAccessDialog)
+    ON_BN_CLICKED(BDelete, OnBDelete)
+    ON_BN_CLICKED(BInsertAfter, OnBInsertAfter)
+    ON_BN_CLICKED(BInsertBefore, OnBInsertBefore)
+    ON_WM_HSCROLL()
+    ON_EN_KILLFOCUS(EBytes, OnKillfocusESizes)
+    ON_EN_KILLFOCUS(EAlignBytes, OnKillfocusEAligns)
+    ON_NOTIFY(UDN_DELTAPOS, SBytes, OnDeltaposSSizes)
+    ON_NOTIFY(UDN_DELTAPOS, SAlignBytes, OnDeltaposSAligns)
+	ON_BN_CLICKED(RAlignRequestSize, OnRAlignRequestSize)
+    ON_BN_CLICKED(RAlignSector, OnRAlignSector)
+    ON_BN_CLICKED(RAlignBytes, OnRAlignBytes)
+    ON_EN_KILLFOCUS(EBurstLength, OnChangeBurst)
+    ON_EN_KILLFOCUS(EDelayTime, OnChangeDelay)
+    ON_NOTIFY(UDN_DELTAPOS, SReplyBytes, OnDeltaposSReply)
+    ON_EN_KILLFOCUS(EReplyBytes, OnKillfocusEReply)
+    ON_BN_CLICKED(RNoReply, OnRNoReply)
+    ON_BN_CLICKED(RReplySize, OnRReplySize)
+    ON_NOTIFY(NM_CLICK, LAccess, OnChangeLAccess)
+    ON_EN_KILLFOCUS(EKilobytes, OnKillfocusESizes)
+    ON_EN_KILLFOCUS(EMegabytes, OnKillfocusESizes)
+    ON_NOTIFY(UDN_DELTAPOS, SKilobytes, OnDeltaposSSizes)
+    ON_NOTIFY(UDN_DELTAPOS, SMegabytes, OnDeltaposSSizes)
+    ON_EN_KILLFOCUS(EAlignKilobytes, OnKillfocusEAligns)
+    ON_EN_KILLFOCUS(EAlignMegabytes, OnKillfocusEAligns)
+    ON_NOTIFY(UDN_DELTAPOS, SAlignKilobytes, OnDeltaposSAligns)
+    ON_NOTIFY(UDN_DELTAPOS, SAlignMegabytes, OnDeltaposSAligns)
+    ON_NOTIFY(UDN_DELTAPOS, SReplyKilobytes, OnDeltaposSReply)
+    ON_NOTIFY(UDN_DELTAPOS, SReplyMegabytes, OnDeltaposSReply)
+    ON_EN_KILLFOCUS(EReplyKilobytes, OnKillfocusEReply)
+    ON_EN_KILLFOCUS(EReplyMegabytes, OnKillfocusEReply)
+    ON_NOTIFY(NM_DBLCLK, LAccess, OnChangeLAccess)
+ON_NOTIFY(LVN_ITEMCHANGED, LAccess, OnChangeLAccess)
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+/////////////////////////////////////////////////////////////////////////////
+// CAccessDialog message handlers
+BOOL CAccessDialog::OnInitDialog()
+<span style = "background-color:#dfd">{
+	CDialog::OnInitDialog();</span>
+
+<span style = "background-color:#dfd">	m_SMegabytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SKilobytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SBytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SAlignMegabytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SAlignKilobytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SAlignKilobytes.SetPos(2);
+	m_SAlignBytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SReplyMegabytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SReplyKilobytes.SetRange(0, MAX_SIZE_RANGE);
+	m_SReplyBytes.SetRange(0, MAX_SIZE_RANGE);</span>
+
+<span style = "background-color:#dfd">	m_SAccess.SetRange(1, 100);
+	m_SAccess.SetPageSize(10);
+	m_SRead.SetRange(0, 100);
+	m_SRead.SetPageSize(10);
+	m_SRandom.SetRange(0, 100);
+	m_SRandom.SetPageSize(10);</span>
+
+	size_controls.EBytesCtrl = &amp;m_EBytes;
+	size_controls.EKilobytesCtrl = &amp;m_EKilobytes;
+	size_controls.EMegabytesCtrl = &amp;m_EMegabytes;
+	size_controls.EBytesID = EBytes;
+	size_controls.EKilobytesID = EKilobytes;
+	size_controls.EMegabytesID = EMegabytes;
+	size_controls.SBytesCtrl = &amp;m_SBytes;
+	size_controls.SKilobytesCtrl = &amp;m_SKilobytes;
+	size_controls.SMegabytesCtrl = &amp;m_SMegabytes;
+	size_controls.SBytesID = SBytes;
+	size_controls.SKilobytesID = SKilobytes;
+	size_controls.SMegabytesID = SMegabytes;
+
+	// 2462 SDK compiler didn't like the "this-&gt;" for Win64 so we'll just remove it
+	//  since it really isn't needed anyway...
+	//size_controls.GetFunc                 = this-&gt;GetSize;
+	//size_controls.SetFunc                 = this-&gt;SetSize;
+<span style = "background-color:#dfd">	size_controls.GetFunc = &amp;CAccessDialog::GetSize;
+	size_controls.SetFunc = &amp;CAccessDialog::SetSize;</span>
+
+<span style = "background-color:#dfd">	align_controls.EBytesCtrl = &amp;m_EAlignBytes;
+	align_controls.EKilobytesCtrl = &amp;m_EAlignKilobytes;
+	align_controls.EMegabytesCtrl = &amp;m_EAlignMegabytes;</span>
+	align_controls.EBytesID = EAlignBytes;
+	align_controls.EKilobytesID = EAlignKilobytes;
+	align_controls.EMegabytesID = EAlignMegabytes;
+<span style = "background-color:#dfd">	align_controls.SBytesCtrl = &amp;m_SAlignBytes;
+	align_controls.SKilobytesCtrl = &amp;m_SAlignKilobytes;
+	align_controls.SMegabytesCtrl = &amp;m_SAlignMegabytes;</span>
+	align_controls.SBytesID = SAlignBytes;
+	align_controls.SKilobytesID = SAlignKilobytes;
+	align_controls.SMegabytesID = SAlignMegabytes;
+
+	// 2462 SDK compiler didn't like the "this-&gt;" for Win64 so we'll just remove it
+	//  since it really isn't needed anyway...
+	//align_controls.GetFunc                        = this-&gt;GetAlign;
+	//align_controls.SetFunc                        = this-&gt;SetAlign;
+<span style = "background-color:#dfd">	align_controls.GetFunc = &amp;CAccessDialog::GetAlign;
+	align_controls.SetFunc = &amp;CAccessDialog::SetAlign;</span>
+
+// RSelectedID MUST be greater than RNotSelectedID, for the sake of GetCheckedRadioButton().
+#if !(RAlignBytes &gt; RAlignSector &amp;&amp; RAlignSector &gt; RAlignRequestSize )
+#error RAlignBytes is not greater than RAlignSector in resource.h!
+#endif
+
+<span style = "background-color:#dfd">	reply_controls.EBytesCtrl = &amp;m_EReplyBytes;
+	reply_controls.EKilobytesCtrl = &amp;m_EReplyKilobytes;
+	reply_controls.EMegabytesCtrl = &amp;m_EReplyMegabytes;</span>
+	reply_controls.EBytesID = EReplyBytes;
+	reply_controls.EKilobytesID = EReplyKilobytes;
+	reply_controls.EMegabytesID = EReplyMegabytes;
+<span style = "background-color:#dfd">	reply_controls.SBytesCtrl = &amp;m_SReplyBytes;
+	reply_controls.SKilobytesCtrl = &amp;m_SReplyKilobytes;
+	reply_controls.SMegabytesCtrl = &amp;m_SReplyMegabytes;</span>
+	reply_controls.SBytesID = SReplyBytes;
+	reply_controls.SKilobytesID = SReplyKilobytes;
+	reply_controls.SMegabytesID = SReplyMegabytes;
+
+	// 2462 SDK compiler didn't like the "this-&gt;" for Win64 so we'll just remove it
+	//  since it really isn't needed anyway...
+	//reply_controls.GetFunc                        = this-&gt;GetReply;
+	//reply_controls.SetFunc                        = this-&gt;SetReply;
+<span style = "background-color:#dfd">	reply_controls.GetFunc = &amp;CAccessDialog::GetReply;</span>
+	reply_controls.SetFunc = &amp;CAccessDialog::SetReply;
+
+// RSelectedID MUST be greater than RNotSelectedID, for the sake of GetCheckedRadioButton().
+#if !(RReplySize &gt; RNoReply)
+#error RReplySize is not greater than RNoReply in resource.h!
+#endif
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);</span>
+
+	// Initialize the listbox object.
+<span style = "background-color:#dfd">	InitializeList();</span>
+
+	// Get listbox display data from AccessSpecList.
+<span style = "background-color:#dfd">	LoadList();</span>
+
+	// If there are any entries in the list, highlight the first one.
+<span style = "background-color:#dfd">	if (m_LAccess.GetItemCount()) {
+		item_being_changed = 0;
+		m_LAccess.SetItemState(m_LAccess.GetItemCount() - 1, !LVIS_SELECTED, LVIS_SELECTED);
+		m_LAccess.SetItemState(0, LVIS_SELECTED, LVIS_SELECTED);
+		SetAll((Access_Spec *) m_LAccess.GetItemData(0));</span>
+	}
+
+<span style = "background-color:#dfd">	UpdateData(TRUE);</span>
+
+	return TRUE;		// return TRUE unless you set the focus to a control
+	// EXCEPTION: OCX Property Pages should return FALSE
+<span style = "background-color:#dfd">}</span>
+
+//
+// Converting a given size (I/O size or byte alignment size) in bytes to a string.
+//
+void CAccessDialog::SizeToText(DWORD size, CString * size_text)
+<span style = "background-color:#dfd">{</span>
+	// Breaking the size down into MBs, KBs, and bytes.
+<span style = "background-color:#dfd">	size_text-&gt;Format("%4d MiB %4d KiB %4d B", size / MEGABYTE_BIN, (size % MEGABYTE_BIN) / KILOBYTE_BIN, size % KILOBYTE_BIN);
+}</span>
+
+//
+// Get the value of a specified Megabytes/Kilobytes/Bytes control for the currently selected 
+// access spec, as shown by the edit boxes (MiB, KiB, bytes).
+//
+DWORD CAccessDialog::GetMKBEditbox(MKBControls * which)
+<span style = "background-color:#dfd">{</span>
+	// If any edit boxes are blank, set their sliders to the appropriate current value 
+	// (which, in turn, sets the edit box).
+<span style = "background-color:#dfd">	if (!which-&gt;EBytesCtrl-&gt;LineLength())</span>
+<span style = "background-color:#fdd">		which-&gt;SBytesCtrl-&gt;SetPos((this-&gt;*(which-&gt;GetFunc)) () % KILOBYTE_BIN);</span>
+
+<span style = "background-color:#dfd">	if (!which-&gt;EKilobytesCtrl-&gt;LineLength())</span>
+<span style = "background-color:#fdd">		which-&gt;SKilobytesCtrl-&gt;SetPos(((this-&gt;*(which-&gt;GetFunc)) () % MEGABYTE_BIN) / KILOBYTE_BIN);</span>
+
+<span style = "background-color:#dfd">	if (!which-&gt;EMegabytesCtrl-&gt;LineLength())</span>
+<span style = "background-color:#fdd">		which-&gt;SMegabytesCtrl-&gt;SetPos((this-&gt;*(which-&gt;GetFunc)) () / MEGABYTE_BIN);</span>
+
+	// Verify that the megabyte value has not overflowed.
+<span style = "background-color:#dfd">	if (GetDlgItemInt(which-&gt;EMegabytesID) &gt; MAX_SIZE_RANGE) {</span>
+<span style = "background-color:#fdd">		which-&gt;SMegabytesCtrl-&gt;SetPos(MAX_SIZE_RANGE);
+		ErrorMessage("The maximum value supported by Iometer for this control "</span>
+			     "is 1023 MiB + 1023 KiB + 1023 B.");
+	}
+
+<span style = "background-color:#dfd">	return GetDlgItemInt(which-&gt;EBytesID)</span>
+	    + GetDlgItemInt(which-&gt;EKilobytesID) * KILOBYTE_BIN + GetDlgItemInt(which-&gt;EMegabytesID) * MEGABYTE_BIN;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Get the value of a specified MiB/KiB/B control for the currently selected 
+// access spec, as shown by the spinner controls.
+//
+DWORD CAccessDialog::GetMKBSpinners(MKBControls * which)
+<span style = "background-color:#fdd">{
+	return (which-&gt;SBytesCtrl-&gt;GetPos() +</span>
+		which-&gt;SKilobytesCtrl-&gt;GetPos() * KILOBYTE_BIN + which-&gt;SMegabytesCtrl-&gt;GetPos() * MEGABYTE_BIN);
+<span style = "background-color:#fdd">}</span>
+
+//
+// Enable or disable a specified MiB/KiB/B control.
+//
+void CAccessDialog::EnableMKBControls(MKBControls * which, BOOL enabled)
+<span style = "background-color:#dfd">{
+	which-&gt;EMegabytesCtrl-&gt;EnableWindow(enabled);
+	which-&gt;EKilobytesCtrl-&gt;EnableWindow(enabled);
+	which-&gt;EBytesCtrl-&gt;EnableWindow(enabled);
+	which-&gt;SMegabytesCtrl-&gt;EnableWindow(enabled);
+	which-&gt;SKilobytesCtrl-&gt;EnableWindow(enabled);
+	which-&gt;SBytesCtrl-&gt;EnableWindow(enabled);
+}</span>
+
+//
+// Update the size of the current access specification line when any of
+// the size edit boxes have lost the focus.
+//
+void CAccessDialog::OnKillfocusESizes()
+<span style = "background-color:#dfd">{
+	SetSize(GetMKBEditbox(&amp;size_controls));
+}</span>
+
+//
+// Update the byte alignment of the current access specification line when any of
+// the alignment edit boxes have lost the focus.
+//
+void CAccessDialog::OnKillfocusEAligns()
+<span style = "background-color:#fdd">{
+	if (GetCheckedRadioButton(RAlignRequestSize, RAlignBytes) == RAlignBytes)
+		SetAlign(GetMKBEditbox(&amp;align_controls));
+}</span>
+
+//
+// Update the reply size of the current access specification line when any of
+// the reply edit boxes have lost the focus.
+//
+void CAccessDialog::OnKillfocusEReply()
+<span style = "background-color:#fdd">{
+	if (GetCheckedRadioButton(RNoReply, RReplySize) == RReplySize)
+		SetReply(GetMKBEditbox(&amp;reply_controls));
+}</span>
+
+//
+// The user has incremented/decremented the access spec size by using
+// one of the spinner controls.
+//
+void CAccessDialog::OnDeltaposSSizes(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	OnDeltaposMKB(&amp;size_controls, pNMHDR);
+	*pResult = TRUE;	// Manually process the spinner movements.
+}</span>
+
+//
+// The user has incremented/decremented the access spec byte alignment by using
+// one of the spinner controls.
+//
+void CAccessDialog::OnDeltaposSAligns(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	OnDeltaposMKB(&amp;align_controls, pNMHDR);
+	*pResult = TRUE;	// Manually process the spinner movements.
+}</span>
+
+//
+// The user has incremented/decremented the access reply size by using
+// one of the spinner controls.
+//
+void CAccessDialog::OnDeltaposSReply(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	OnDeltaposMKB(&amp;reply_controls, pNMHDR);
+	*pResult = TRUE;	// Manually process the spinner movements.
+}</span>
+
+//
+// Handle event when the user has incremented/decremented a Megabytes/Kilobytes/Bytes 
+// control by using one of the spinner controls.
+//
+void CAccessDialog::OnDeltaposMKB(MKBControls * which, NMHDR * pNMHDR)
+<span style = "background-color:#fdd">{</span>
+	NM_UPDOWN *pNMUpDown = (NM_UPDOWN *) pNMHDR;
+	DWORD edited_size;
+
+	// See if the user edited the value directly, then pressed the spin
+	// control.  If so, force an update of the edited value before processing
+	// the up/down spin.
+<span style = "background-color:#fdd">	edited_size = GetMKBEditbox(which);
+	if (GetMKBSpinners(which) != edited_size) {
+		SetMKBSpinners(which, edited_size);</span>
+	}
+	// Adjust the spinner positions based on their movement.
+<span style = "background-color:#fdd">	if (pNMHDR-&gt;idFrom == which-&gt;SBytesID) {
+		which-&gt;SBytesCtrl-&gt;SetPos(which-&gt;SBytesCtrl-&gt;GetPos() + pNMUpDown-&gt;iDelta);
+	} else if (pNMHDR-&gt;idFrom == which-&gt;SKilobytesID) {
+		which-&gt;SKilobytesCtrl-&gt;SetPos(which-&gt;SKilobytesCtrl-&gt;GetPos() + pNMUpDown-&gt;iDelta);
+	} else if (pNMHDR-&gt;idFrom == which-&gt;SMegabytesID) {
+		which-&gt;SMegabytesCtrl-&gt;SetPos(which-&gt;SMegabytesCtrl-&gt;GetPos() + pNMUpDown-&gt;iDelta);</span>
+	} else {
+<span style = "background-color:#fdd">		ErrorMessage("Unexpected value for idFrom in CAccessDialog::OnDeltaposMKB");</span>
+	}
+
+	// Save the new size.
+<span style = "background-color:#fdd">	(this-&gt;*(which-&gt;SetFunc)) (GetMKBSpinners(which));
+}</span>
+
+//
+// Insert a new line into the access spec after or before the current one.
+//
+void CAccessDialog::InsertWrapper(BOOL after)
+<span style = "background-color:#dfd">{</span>
+	int current_line;
+	Access_Spec *spec = NULL;
+
+<span style = "background-color:#dfd">	if (!(spec = new Access_Spec)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Unable to allocate memory to insert new access " "spec line.");</span>
+		return;
+	}
+	// Get the first selected line.
+<span style = "background-color:#dfd">	if (item_being_changed == -1) {</span>
+		// Nothing is selected. Create a default entry.
+<span style = "background-color:#fdd">		item_being_changed = 0;
+		spec-&gt;of_size = 100;
+		spec-&gt;reads = 67;
+		spec-&gt;random = 100;</span>
+		spec-&gt;delay = 0;
+<span style = "background-color:#fdd">		spec-&gt;burst = 1;</span>
+		spec-&gt;align = 0;
+<span style = "background-color:#fdd">		spec-&gt;reply = 0;
+		spec-&gt;size = 2048;
+	} else {</span>
+		// If we're inserting after the current selection, we need to find the
+		// last selected line.
+<span style = "background-color:#dfd">		current_line = m_LAccess.GetNextItem(-1, LVNI_SELECTED);
+		if (after) {</span>
+			// Find the last selected line number.
+<span style = "background-color:#dfd">			while (current_line != -1) {
+				item_being_changed = current_line;
+				current_line = m_LAccess.GetNextItem(current_line, LVNI_SELECTED);</span>
+			}
+
+			// Get the last selected line's information.
+<span style = "background-color:#dfd">			GetAll(spec);
+			item_being_changed++;
+		} else {</span>
+			// We're inserting before the first selected line.
+<span style = "background-color:#fdd">			if (current_line != -1)
+				item_being_changed = current_line;
+			GetAll(spec);</span>
+		}
+	}
+
+	// Insert the new line.
+<span style = "background-color:#dfd">	InsertLine(spec, item_being_changed);
+}</span>
+
+//
+// Inserting a new line into the access spec.
+//
+void CAccessDialog::OnBInsertAfter()
+<span style = "background-color:#dfd">{
+	InsertWrapper(TRUE);</span>
+}
+
+void CAccessDialog::OnBInsertBefore()
+<span style = "background-color:#fdd">{
+	InsertWrapper(FALSE);</span>
+}
+
+//
+// A change has occurred in the access spec list.  Update the GUI
+// to reflect the current selection, if necessary.
+//
+void CAccessDialog::OnChangeLAccess(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#dfd">{</span>
+	// If no item is selected or the same item was reselected, ignore the action.
+<span style = "background-color:#dfd">	int new_selection = m_LAccess.GetNextItem(-1, LVNI_SELECTED);</span>
+
+<span style = "background-color:#dfd">	if ((new_selection == -1) || (new_selection == item_being_changed))</span>
+		return;
+
+	// Updating the last selected access spec line before possibly selecting
+	// a new line.  This is needed or the newly selected item will receive the
+	// same update as the previously selected item.
+<span style = "background-color:#fdd">	if (item_being_changed != -1) {</span>
+		// Force all the other controls' OnKillfocus handlers to be called
+<span style = "background-color:#fdd">		m_LAccess.SetFocus();</span>
+	}
+	// Determine if a new item has been selected.  If not, keep the
+	// currently selected item with the focus.
+<span style = "background-color:#fdd">	if (m_LAccess.GetNextItem(-1, LVNI_SELECTED) != -1)
+		item_being_changed = m_LAccess.GetNextItem(-1, LVNI_SELECTED);</span>
+
+<span style = "background-color:#fdd">	m_LAccess.SetItemState(item_being_changed, LVIS_SELECTED, LVIS_SELECTED);
+	SetAll((Access_Spec *) m_LAccess.GetItemData(item_being_changed));</span>
+
+<span style = "background-color:#fdd">	*pResult = 0;</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Checks for the validity of the entered access spec.
+//
+BOOL CAccessDialog::CheckAccess()
+<span style = "background-color:#dfd">{</span>
+	int line_index;
+<span style = "background-color:#dfd">	int total_access = 0;
+	CString spec_name;</span>
+	Test_Spec *name_spec;
+
+	// There must be no more than 100 entries, the sum of the "% of Access" 
+	// fields for all the entries must equal 100, and all sizes must be &gt; 0.
+<span style = "background-color:#dfd">	for (line_index = 0; line_index &lt; m_LAccess.GetItemCount(); line_index++) {
+		item_being_changed = line_index;
+		if (GetSize() &lt;= 0) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("A line in the access specification is for 0 bytes.  "</span>
+				     "All sizes must be greater than 0.");
+			return FALSE;
+		}
+<span style = "background-color:#dfd">		total_access += GetAccess();</span>
+	}
+<span style = "background-color:#dfd">	if (total_access != 100) {</span>
+		ErrorMessage("Percent of Access Specification values must sum to exactly 100.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// Update the spec's name with the name in the edit box.
+<span style = "background-color:#dfd">	m_EName.GetWindowText(spec_name.GetBuffer(MAX_WORKER_NAME), MAX_WORKER_NAME);
+	spec_name.ReleaseBuffer();
+	spec_name.TrimLeft();	//remove leading &amp; trailing whitespace (bug #363)
+	spec_name.TrimRight();
+	m_EName.SetWindowText(spec_name);	//update edit control</span>
+
+	// Check for a blank name
+<span style = "background-color:#dfd">	if (spec_name.IsEmpty()) {</span>
+		ErrorMessage("You must assign a name to this access specification.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// Check for commas in the name.  Commas invalidate the results file, which is comma separated.
+<span style = "background-color:#dfd">	if (spec_name.Find(',') != -1) {</span>
+		ErrorMessage("Commas are not allowed in access specification names.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// Check for duplicate names.
+<span style = "background-color:#dfd">	name_spec = theApp.access_spec_list.RefByName((LPCTSTR) spec_name);
+	if (name_spec &amp;&amp; name_spec != spec) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("An access specification named \"" + spec_name + "\" already exists.  " +</span>
+			     "Access specification names must be unique.");
+		return FALSE;
+	}
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// The user has moved a scroll bar on the GUI.  Process the update.
+// Typically, this means that the user has changed one of the following
+// values: % reads, % random, % of size, etc.
+//
+void CAccessDialog::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar * pScrollBar)
+<span style = "background-color:#fdd">{
+	int position = ((CSliderCtrl *) pScrollBar)-&gt;GetPos();</span>
+
+	// Modifying access specification based on slider controls.
+<span style = "background-color:#fdd">	if (nSBCode == SB_THUMBTRACK || nSBCode == SB_ENDSCROLL) {
+		if (pScrollBar == (CScrollBar *) &amp; m_SAccess) {
+			SetAccess(position);
+		} else if (pScrollBar == (CScrollBar *) &amp; m_SRead) {
+			SetReads(position);
+		} else if (pScrollBar == (CScrollBar *) &amp; m_SRandom) {
+			SetRandom(position);</span>
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// The user clicked OK.
+// Save the user's changes to the access spec.
+//
+void CAccessDialog::OnOK()
+<span style = "background-color:#dfd">{</span>
+	int line_index;
+
+	// Set the focus to the OK button, to force any appropriate Killfocus handler to run
+	// (handles the case that the user modifies a control and then hits ENTER).
+<span style = "background-color:#dfd">	m_BOk.SetFocus();</span>
+
+<span style = "background-color:#dfd">	if (SaveList()) {</span>
+		// Delete all working copies of Access_Spec list items.
+<span style = "background-color:#dfd">		for (line_index = 0; line_index &lt; m_LAccess.GetItemCount(); line_index++)
+			delete(Access_Spec *) m_LAccess.GetItemData(line_index);</span>
+
+<span style = "background-color:#dfd">		CDialog::OnOK();</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// User selected sector alignment radio button - disable byte align edit box, other stuff
+//
+void CAccessDialog::OnRAlignRequestSize()
+<span style = "background-color:#fdd">{</span>
+	// Get the current alignment setting.
+<span style = "background-color:#fdd">	DWORD old_align = GetAlign();</span>
+
+	// Disable the alignment controls.
+<span style = "background-color:#fdd">	EnableMKBControls(&amp;align_controls, FALSE);</span>
+
+	// Set the alignment in the access spec to "request size".
+<span style = "background-color:#fdd">	SetAlign(GetSize());</span>
+
+	// Set the (disabled) alignment controls to the last value shown.
+<span style = "background-color:#fdd">	SetMKBSpinners(&amp;align_controls, old_align);
+}</span>
+
+//
+// User selected sector alignment radio button - disable byte align edit box, other stuff
+//
+void CAccessDialog::OnRAlignSector()
+<span style = "background-color:#fdd">{</span>
+	// Get the current alignment setting.
+<span style = "background-color:#fdd">	DWORD old_align = GetAlign();</span>
+
+	// Disable the alignment controls.
+<span style = "background-color:#fdd">	EnableMKBControls(&amp;align_controls, FALSE);</span>
+
+	// Set the alignment in the access spec to "sector".
+<span style = "background-color:#fdd">	SetAlign(0);
+}</span>
+
+//
+// User selected byte alignment radio button - enable byte align edit box, other stuff
+//
+void CAccessDialog::OnRAlignBytes()
+<span style = "background-color:#fdd">{</span>
+	// Enable the alignment controls.
+<span style = "background-color:#fdd">	EnableMKBControls(&amp;align_controls, TRUE);</span>
+	// Set the alignment in the access spec to the value shown in the alignment controls.
+<span style = "background-color:#fdd">	SetAlign(GetMKBSpinners(&amp;align_controls));
+}</span>
+
+//
+// User selected "No Reply" radio button - disable reply size edit boxes, other stuff
+//
+void CAccessDialog::OnRNoReply()
+<span style = "background-color:#fdd">{</span>
+	// Get the current reply size.
+<span style = "background-color:#fdd">	DWORD old_reply = GetReply();</span>
+
+	// Disable the reply controls.
+<span style = "background-color:#fdd">	EnableMKBControls(&amp;reply_controls, FALSE);</span>
+	// Set the reply size in the access spec to "none".
+<span style = "background-color:#fdd">	SetReply(0);</span>
+	// Set the (disabled) reply size controls to the last value shown.
+<span style = "background-color:#fdd">	SetMKBSpinners(&amp;reply_controls, old_reply);
+}</span>
+
+//
+// User selected reply size radio button - enable reply size edit boxes, other stuff
+//
+void CAccessDialog::OnRReplySize()
+<span style = "background-color:#fdd">{</span>
+	// Enable the reply size controls.
+<span style = "background-color:#fdd">	EnableMKBControls(&amp;reply_controls, TRUE);</span>
+	// Set the reply size in the access spec to the value shown in the reply size controls.
+<span style = "background-color:#fdd">	SetReply(GetMKBSpinners(&amp;reply_controls));
+}</span>
+
+//
+// Setting the controls that display the size of the access spec.
+//
+void CAccessDialog::SetMKBSpinners(MKBControls * which, DWORD new_value)
+<span style = "background-color:#dfd">{</span>
+	// The byte alignment and reply size spinners should never show zero.
+<span style = "background-color:#dfd">	if (((which == &amp;align_controls) || (which == &amp;reply_controls)) &amp;&amp; new_value == 0) {</span>
+		return;
+	}
+	// Updating the display.  Since the spin controls are linked to the
+	// edit boxes, we only need to update the spinners.
+<span style = "background-color:#dfd">	if (GetFocus() != which-&gt;EBytesCtrl)
+		which-&gt;SBytesCtrl-&gt;SetPos(new_value % KILOBYTE_BIN);
+	if (GetFocus() != which-&gt;EKilobytesCtrl)
+		which-&gt;SKilobytesCtrl-&gt;SetPos((new_value % MEGABYTE_BIN) / KILOBYTE_BIN);
+	if (GetFocus() != which-&gt;EMegabytesCtrl)
+		which-&gt;SMegabytesCtrl-&gt;SetPos(new_value / MEGABYTE_BIN);
+}</span>
+
+//
+// Initialize the listbox.
+//
+void CAccessDialog::InitializeList()
+<span style = "background-color:#dfd">{</span>
+	// Set the list control column names and widths
+<span style = "background-color:#dfd">	m_LAccess.ModifyStyle(NULL, LVS_SHOWSELALWAYS);</span>
+
+<span style = "background-color:#dfd">	m_LAccess.InsertColumn(LAccessSize, "Size", LVCFMT_CENTER, 121);
+	m_LAccess.InsertColumn(LAccessOfSize, "% Access", LVCFMT_CENTER, 58, LAccessOfSize);
+	m_LAccess.InsertColumn(LAccessReads, "% Read", LVCFMT_CENTER, 49, LAccessReads);
+	m_LAccess.InsertColumn(LAccessRandom, "% Random", LVCFMT_CENTER, 63, LAccessRandom);
+	m_LAccess.InsertColumn(LAccessDelay, "Delay", LVCFMT_CENTER, 43, LAccessDelay);
+	m_LAccess.InsertColumn(LAccessBurst, "Burst", LVCFMT_CENTER, 36, LAccessBurst);
+	m_LAccess.InsertColumn(LAccessAlignment, "Alignment", LVCFMT_CENTER, 114, LAccessAlignment);
+	m_LAccess.InsertColumn(LAccessReply, "Reply", LVCFMT_CENTER, 114, LAccessReply);
+}</span>
+
+//
+// Loads the access spec lines from the application's test spec structure
+// into an MFC list control and into working space in memory.  By using working
+// space, we allow the user to abort all changes by hitting cancel.
+//
+void CAccessDialog::LoadList()
+<span style = "background-color:#dfd">{
+	int spec_line_no = 0;</span>
+	Access_Spec *new_spec;
+
+	// Abort if we encounter an error.
+<span style = "background-color:#dfd">	if (spec == NULL) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Unexpectedly found spec == NULL in CAccessDialog::LoadList()");
+		CDialog::OnOK();</span>
+		return;
+	}
+	// Clear display before loading accesses.
+<span style = "background-color:#dfd">	m_LAccess.DeleteAllItems();</span>
+
+	// Update the name edit box with the spec's name.
+<span style = "background-color:#dfd">	m_EName.SetWindowText(spec-&gt;name);</span>
+
+	// Update the default assignment settings.
+<span style = "background-color:#dfd">	m_CDefaultAssignment.SetCurSel(spec-&gt;default_assignment);</span>
+
+	// Fill in the access spec list.
+	// An "of_size" of IOERROR indicates the end of the list if the list isn't full.
+	item_being_changed = 0;
+<span style = "background-color:#dfd">	while (spec-&gt;access[spec_line_no].of_size != IOERROR &amp;&amp; item_being_changed &lt; MAX_ACCESS_SPECS) {</span>
+		// Allocate memory for a new access spec line.
+<span style = "background-color:#dfd">		if (!(new_spec = new Access_Spec)) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("Unable to allocate memory to insert new access " "spec line.");</span>
+			return;
+		}
+		// Add the new access spec line to the display.
+<span style = "background-color:#dfd">		memcpy((void *)new_spec, (void *)&amp;(spec-&gt;access[spec_line_no++]), sizeof(Access_Spec));
+		if (InsertLine(new_spec, item_being_changed)) {
+			item_being_changed++;</span>
+			new_spec = NULL;
+<span style = "background-color:#dfd">		} else {</span>
+			// Remove the memory for the new spec.  It was not used.
+			// (This should rarely happen.)
+<span style = "background-color:#fdd">			delete new_spec;</span>
+		}
+	}
+
+	// The last line successfully inserted will be the one available for 
+	// editing.  This line number is one less than where we tried to insert at.
+<span style = "background-color:#dfd">	--item_being_changed;</span>
+
+	// If there are no entries in the access spec, disable the OK button.  This 
+	// avoids the error message about incomplete access specs for this special 
+	// case.
+<span style = "background-color:#dfd">	if (item_being_changed &lt; 0)</span>
+<span style = "background-color:#fdd">		m_BOk.EnableWindow(FALSE);</span>
+
+<span style = "background-color:#dfd">	m_LAccess.SetFocus();
+}</span>
+
+//
+// Copies the working access spec to a spot in the application's test spec structure.
+// (Saves the changes the user has made to the access spec.)
+//
+BOOL CAccessDialog::SaveList()
+<span style = "background-color:#dfd">{</span>
+	int line_index;
+
+	// Abort if we encounter an error.
+<span style = "background-color:#dfd">	if (spec == NULL) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Unexpectedly found spec == NULL in CAccessDialog::SaveList()");
+		CDialog::OnOK();</span>
+	}
+	// Check to make sure the spec is filled in correctly.
+<span style = "background-color:#dfd">	if (!CheckAccess())</span>
+		return FALSE;
+
+	// Update the spec's name with the name edit box's contents.
+<span style = "background-color:#dfd">	m_EName.GetWindowText(spec-&gt;name, MAX_WORKER_NAME);</span>
+
+	// Store the default assignment setting.
+<span style = "background-color:#dfd">	spec-&gt;default_assignment = m_CDefaultAssignment.GetCurSel();</span>
+
+	// Fill in the access spec from the entries in the GUI list.
+<span style = "background-color:#dfd">	for (line_index = 0; line_index &lt; m_LAccess.GetItemCount(); line_index++) {</span>
+		item_being_changed = line_index;
+<span style = "background-color:#dfd">		GetAll(&amp;(spec-&gt;access[line_index]));</span>
+	}
+
+	// If all the spec's lines have not been filled, mark
+	// the last one as the end.
+<span style = "background-color:#dfd">	if (line_index &lt; MAX_ACCESS_SPECS)
+		spec-&gt;access[line_index].of_size = IOERROR;</span>
+
+	// Indicate that the access was saved properly.
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Inserting a line into the access specification list.
+//
+BOOL CAccessDialog::InsertLine(Access_Spec * access_spec, int line_no)
+<span style = "background-color:#dfd">{</span>
+	int current_line;
+
+	// Verify that we can handle a new line into the access spec.
+<span style = "background-color:#dfd">	if (m_LAccess.GetItemCount() == MAX_ACCESS_SPECS) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Can not add another entry to the access spec: the access spec is full");
+		return FALSE;</span>
+	}
+	// Unselect all selected lines to select only the new line.
+<span style = "background-color:#dfd">	current_line = m_LAccess.GetNextItem(-1, LVNI_SELECTED);
+	while (current_line != -1) {
+		m_LAccess.SetItemState(current_line, !LVIS_SELECTED, LVIS_SELECTED);
+		current_line = m_LAccess.GetNextItem(current_line, LVNI_SELECTED);</span>
+	}
+
+	// Insert the new spec line and mark it as selected.
+	item_being_changed = line_no;
+<span style = "background-color:#dfd">	m_LAccess.InsertItem(LVIF_IMAGE | LVIF_STATE | LVIF_PARAM,</span>
+			     item_being_changed, NULL, LVIS_SELECTED | LVIS_FOCUSED,
+			     LVIS_SELECTED | LVIS_FOCUSED, 1, (ULONG_PTR) access_spec);
+
+	// Update the controls to reflect the newly inserted line.
+<span style = "background-color:#dfd">	SetAll(access_spec);</span>
+
+<span style = "background-color:#dfd">	m_LAccess.EnsureVisible(item_being_changed, FALSE);</span>
+
+	// Re-enable all of the controls if this is the first item added to the list.
+<span style = "background-color:#dfd">	if (m_LAccess.GetItemCount() == 1) {
+		m_EMegabytes.EnableWindow(TRUE);
+		m_EKilobytes.EnableWindow(TRUE);
+		m_EBytes.EnableWindow(TRUE);
+		m_SMegabytes.EnableWindow(TRUE);
+		m_SKilobytes.EnableWindow(TRUE);
+		m_SBytes.EnableWindow(TRUE);
+		m_SAccess.EnableWindow(TRUE);
+		m_SRead.EnableWindow(TRUE);
+		m_SRandom.EnableWindow(TRUE);
+		m_EDelayTime.EnableWindow(TRUE);
+		m_EBurstLength.EnableWindow(TRUE);
+		m_RAlignBytes.EnableWindow(TRUE);
+		m_RAlignSector.EnableWindow(TRUE);
+		m_RAlignRequestSize.EnableWindow(TRUE);
+		m_RReplySize.EnableWindow(TRUE);
+		m_RNoReply.EnableWindow(TRUE);
+		m_BInsertBefore.EnableWindow(TRUE);
+		m_BDelete.EnableWindow(TRUE);
+		m_BOk.EnableWindow(TRUE);</span>
+
+<span style = "background-color:#dfd">		if (GetCheckedRadioButton(RAlignRequestSize, RAlignBytes) == RAlignBytes) {</span>
+<span style = "background-color:#fdd">			m_EAlignMegabytes.EnableWindow(TRUE);
+			m_EAlignKilobytes.EnableWindow(TRUE);
+			m_EAlignBytes.EnableWindow(TRUE);
+			m_SAlignMegabytes.EnableWindow(TRUE);
+			m_SAlignKilobytes.EnableWindow(TRUE);
+			m_SAlignBytes.EnableWindow(TRUE);</span>
+		}
+
+<span style = "background-color:#dfd">		if (GetCheckedRadioButton(RNoReply, RReplySize) == RReplySize) {</span>
+<span style = "background-color:#fdd">			m_EReplyMegabytes.EnableWindow(TRUE);
+			m_EReplyKilobytes.EnableWindow(TRUE);
+			m_EReplyBytes.EnableWindow(TRUE);
+			m_SReplyMegabytes.EnableWindow(TRUE);
+			m_SReplyKilobytes.EnableWindow(TRUE);
+			m_SReplyBytes.EnableWindow(TRUE);</span>
+		}
+	}
+
+	return TRUE;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Deletes a line in the access spec.
+//
+BOOL CAccessDialog::DeleteLine()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve the access spec pointer from the list and deallocate the object.
+<span style = "background-color:#dfd">	delete(Access_Spec *) m_LAccess.GetItemData(item_being_changed);</span>
+
+	// Remove the line from the listbox.
+<span style = "background-color:#dfd">	m_LAccess.DeleteItem(item_being_changed);</span>
+
+	// All the entries have been removed.  Disable all related controls.
+<span style = "background-color:#dfd">	if (!m_LAccess.GetItemCount()) {</span>
+<span style = "background-color:#fdd">		m_EMegabytes.EnableWindow(FALSE);
+		m_EKilobytes.EnableWindow(FALSE);
+		m_EBytes.EnableWindow(FALSE);
+		m_SMegabytes.EnableWindow(FALSE);
+		m_SKilobytes.EnableWindow(FALSE);
+		m_SBytes.EnableWindow(FALSE);
+		m_SAccess.EnableWindow(FALSE);
+		m_SRead.EnableWindow(FALSE);
+		m_SRandom.EnableWindow(FALSE);
+		m_EDelayTime.EnableWindow(FALSE);
+		m_EBurstLength.EnableWindow(FALSE);
+		m_RAlignBytes.EnableWindow(FALSE);
+		m_RAlignSector.EnableWindow(FALSE);
+		m_RAlignRequestSize.EnableWindow(FALSE);
+		m_EAlignMegabytes.EnableWindow(FALSE);
+		m_EAlignKilobytes.EnableWindow(FALSE);
+		m_EAlignBytes.EnableWindow(FALSE);
+		m_SAlignMegabytes.EnableWindow(FALSE);
+		m_SAlignKilobytes.EnableWindow(FALSE);
+		m_SAlignBytes.EnableWindow(FALSE);
+		m_RReplySize.EnableWindow(FALSE);
+		m_RNoReply.EnableWindow(FALSE);
+		m_SReplyMegabytes.EnableWindow(FALSE);
+		m_SReplyKilobytes.EnableWindow(FALSE);
+		m_SReplyBytes.EnableWindow(FALSE);
+		m_EReplyMegabytes.EnableWindow(FALSE);
+		m_EReplyKilobytes.EnableWindow(FALSE);
+		m_EReplyBytes.EnableWindow(FALSE);
+		m_BInsertBefore.EnableWindow(FALSE);
+		m_BDelete.EnableWindow(FALSE);
+		m_BOk.EnableWindow(FALSE);</span>
+	}
+
+	return TRUE;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Calls each of the Set functions.
+//
+void CAccessDialog::SetAll(Access_Spec * spec)
+<span style = "background-color:#dfd">{</span>
+	// setup the align radio controls
+<span style = "background-color:#dfd">	if (!spec-&gt;align)</span>
+	{
+<span style = "background-color:#dfd">		EnableMKBControls(&amp;align_controls, FALSE);</span>
+
+		// Set the (disabled) alignment controls to 512 bytes (standard sector size).
+<span style = "background-color:#dfd">		SetMKBSpinners(&amp;align_controls, 512);</span>
+
+<span style = "background-color:#dfd">		CheckRadioButton(RAlignRequestSize, RAlignBytes, RAlignSector);
+	}
+	else if(spec-&gt;align == spec-&gt;size)</span>
+	{
+<span style = "background-color:#dfd">		EnableMKBControls(&amp;align_controls, FALSE);</span>
+
+<span style = "background-color:#dfd">		CheckRadioButton(RAlignRequestSize, RAlignBytes, RAlignRequestSize);
+	}</span>
+	else
+	{
+<span style = "background-color:#fdd">		EnableMKBControls(&amp;align_controls, TRUE);</span>
+
+<span style = "background-color:#fdd">		CheckRadioButton(RAlignRequestSize, RAlignBytes, RAlignBytes);</span>
+	}
+
+<span style = "background-color:#dfd">	EnableMKBControls(&amp;reply_controls, spec-&gt;reply);
+	if (!spec-&gt;reply)</span>
+	{
+		// Set the (disabled) reply size controls to the current transfer size.
+<span style = "background-color:#dfd">		SetMKBSpinners(&amp;reply_controls, spec-&gt;size);</span>
+
+<span style = "background-color:#dfd">		CheckRadioButton(RNoReply, RReplySize, RNoReply);
+	}</span>
+	else
+	{
+<span style = "background-color:#fdd">		CheckRadioButton(RNoReply, RReplySize, RReplySize);</span>
+	}
+
+<span style = "background-color:#dfd">	SetSize(spec-&gt;size);
+	SetAccess(spec-&gt;of_size);
+	SetReads(spec-&gt;reads);
+	SetRandom(spec-&gt;random);
+	SetDelay(spec-&gt;delay);
+	SetBurst(spec-&gt;burst);
+	SetAlign(spec-&gt;align);
+	SetReply(spec-&gt;reply);
+}</span>
+
+//
+// Calls each of the Get functions.
+//
+void CAccessDialog::GetAll(Access_Spec * spec)
+<span style = "background-color:#dfd">{
+	spec-&gt;size = GetSize();
+	spec-&gt;of_size = GetAccess();
+	spec-&gt;reads = GetReads();
+	spec-&gt;random = GetRandom();
+	spec-&gt;delay = GetDelay();
+	spec-&gt;burst = GetBurst();
+	spec-&gt;align = GetAlign();
+	spec-&gt;reply = GetReply();
+}</span>
+
+void CAccessDialog::SetAccess(int of_size)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;of_size = of_size;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	buffer.Format("%d", of_size);
+	m_LAccess.SetItemText(item_being_changed, LAccessOfSize, buffer);</span>
+
+	// Update the control.
+<span style = "background-color:#dfd">	m_SAccess.SetPos(of_size);
+	access_txt.Format("%d Percent", of_size);</span>
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+int CAccessDialog::GetAccess()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;of_size;
+}</span>
+
+void CAccessDialog::SetReads(int reads)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;reads = reads;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	buffer.Format("%d", reads);
+	m_LAccess.SetItemText(item_being_changed, LAccessReads, buffer);</span>
+
+	// Update the control.
+<span style = "background-color:#dfd">	m_SRead.SetPos(reads);
+	read_txt.Format("%d%%\nRead", reads);
+	write_txt.Format("%d%%\nWrite", 100 - reads);</span>
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+int CAccessDialog::GetReads()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;reads;
+}</span>
+
+void CAccessDialog::SetRandom(int random)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;random = random;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	buffer.Format("%d", random);
+	m_LAccess.SetItemText(item_being_changed, LAccessRandom, buffer);</span>
+
+	// Update the control.
+<span style = "background-color:#dfd">	m_SRandom.SetPos(random);
+	random_txt.Format("%d%%\nRandom", random);
+	sequential_txt.Format("%d%%\nSequential", 100 - random);</span>
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+int CAccessDialog::GetRandom()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;random;
+}</span>
+
+void CAccessDialog::SetDelay(int delay)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;delay = delay;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	buffer.Format("%d", delay);
+	m_LAccess.SetItemText(item_being_changed, LAccessDelay, buffer);</span>
+
+	// Update the control.
+<span style = "background-color:#dfd">	SetDlgItemInt(EDelayTime, delay, FALSE);</span>
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+int CAccessDialog::GetDelay()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;delay;
+}</span>
+
+void CAccessDialog::SetBurst(int burst)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;burst = burst;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	buffer.Format("%d", burst);
+	m_LAccess.SetItemText(item_being_changed, LAccessBurst, buffer);</span>
+
+	// Update the control.
+<span style = "background-color:#dfd">	SetDlgItemInt(EBurstLength, burst, FALSE);</span>
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+int CAccessDialog::GetBurst()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;burst;
+}</span>
+
+void CAccessDialog::SetAlign(DWORD align)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;align = align;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	if (align)
+		SizeToText(align, &amp;buffer);</span>
+	else
+<span style = "background-color:#dfd">		buffer.Format("sector");</span>
+
+<span style = "background-color:#dfd">	m_LAccess.SetItemText(item_being_changed, LAccessAlignment, buffer);</span>
+
+<span style = "background-color:#dfd">	if(m_RAlignBytes.GetCheck() == BST_CHECKED)</span>
+	{
+		// Update the controls.
+<span style = "background-color:#fdd">		SetMKBSpinners(&amp;align_controls, align);</span>
+	}
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+DWORD CAccessDialog::GetAlign()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;align;
+}</span>
+
+void CAccessDialog::SetReply(DWORD reply)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;reply = reply;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	if (reply)</span>
+<span style = "background-color:#fdd">		SizeToText(reply, &amp;buffer);</span>
+	else
+<span style = "background-color:#dfd">		buffer.Format("none");</span>
+
+<span style = "background-color:#dfd">	m_LAccess.SetItemText(item_being_changed, LAccessReply, buffer);</span>
+
+	// Update the controls.
+<span style = "background-color:#dfd">	SetMKBSpinners(&amp;reply_controls, reply);</span>
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+DWORD CAccessDialog::GetReply()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;reply;
+}</span>
+
+void CAccessDialog::SetSize(DWORD size)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Change the value in the access spec.
+<span style = "background-color:#dfd">	((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;size = size;</span>
+
+	// Display the change.
+<span style = "background-color:#dfd">	SizeToText(size, &amp;buffer);
+	m_LAccess.SetItemText(item_being_changed, LAccessSize, buffer);</span>
+
+	// Update the controls.
+<span style = "background-color:#dfd">	SetMKBSpinners(&amp;size_controls, size);</span>
+
+	// If reply size is not currently selected, also set the (disabled) reply size controls
+	// to the new transfer size.
+<span style = "background-color:#dfd">	if ((UINT) GetCheckedRadioButton(RNoReply, RReplySize) != RReplySize)
+		SetMKBSpinners(&amp;reply_controls, size);</span>
+
+	// if aligning on request size, change the alignment
+<span style = "background-color:#dfd">	if(m_RAlignRequestSize.GetCheck() == BST_CHECKED)</span>
+	{
+<span style = "background-color:#dfd">		SetAlign(size);</span>
+	}
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);
+}</span>
+
+DWORD CAccessDialog::GetSize()
+<span style = "background-color:#dfd">{</span>
+	// Retrieve a pointer to the access spec for the requested line
+	// and return the requested member of the spec.
+<span style = "background-color:#dfd">	return ((Access_Spec *) m_LAccess.GetItemData(item_being_changed))-&gt;size;
+}</span>
+
+//
+// Called when the user clicks the Delete button.
+// Removes all selected lines from the access spec.
+//
+void CAccessDialog::OnBDelete()
+<span style = "background-color:#dfd">{</span>
+	int first_highlighted_item;
+
+	// Return immediately if nothing is selected.
+<span style = "background-color:#dfd">	if ((first_highlighted_item = m_LAccess.GetNextItem(-1, LVNI_SELECTED)) == -1)</span>
+		return;
+
+	// Loop through all selected items and delete them.
+<span style = "background-color:#dfd">	while ((item_being_changed = m_LAccess.GetNextItem(-1, LVNI_SELECTED)) != -1)
+		DeleteLine();</span>
+
+<span style = "background-color:#dfd">	item_being_changed = first_highlighted_item;</span>
+
+<span style = "background-color:#dfd">	if (item_being_changed != -1 &amp;&amp; item_being_changed &lt; m_LAccess.GetItemCount()) {</span>
+		m_LAccess.SetItemState(item_being_changed, LVIS_SELECTED, LVIS_SELECTED);
+		SetAll((Access_Spec *) m_LAccess.GetItemData(item_being_changed));
+<span style = "background-color:#dfd">	} else if (m_LAccess.GetItemCount()) {
+		item_being_changed = m_LAccess.GetItemCount() - 1;
+		m_LAccess.SetItemState(item_being_changed, LVIS_SELECTED, LVIS_SELECTED);
+		SetAll((Access_Spec *) m_LAccess.GetItemData(item_being_changed));</span>
+	} else {
+		// No more items left in the list.
+<span style = "background-color:#fdd">		item_being_changed = -1;</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Called when the contents of the delay editbox change
+//
+void CAccessDialog::OnChangeDelay()
+<span style = "background-color:#dfd">{</span>
+	// Update the delay time if it's not blank.
+<span style = "background-color:#dfd">	if (m_EDelayTime.LineLength()) {
+		SetDelay(GetDlgItemInt(EDelayTime));</span>
+<span style = "background-color:#fdd">	} else if (GetFocus() != &amp;m_EDelayTime) {</span>
+		// Entry box is empty and it no longer has focus.
+		// Revert to the value in the access spec.
+<span style = "background-color:#fdd">		SetDelay(GetDelay());</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Called when the contents of the burst rate editbox change
+//
+void CAccessDialog::OnChangeBurst()
+<span style = "background-color:#dfd">{</span>
+	// Update the burst rate if it's not blank.
+<span style = "background-color:#dfd">	if (m_EBurstLength.LineLength()) {</span>
+		// Prevent a burst length of 0.
+<span style = "background-color:#dfd">		if (!GetDlgItemInt(EBurstLength)) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("Burst length cannot be set to 0.");</span>
+
+			// Revert to the old value.
+<span style = "background-color:#fdd">			if (GetBurst())
+				SetBurst(GetBurst());</span>
+			else
+				SetBurst(1);
+		} else {
+<span style = "background-color:#dfd">			SetBurst(GetDlgItemInt(EBurstLength));</span>
+		}
+<span style = "background-color:#dfd">	} else if (GetFocus() != &amp;m_EBurstLength) {</span>
+		// Entry box is empty and it no longer has focus.
+		// Revert to the old value.
+<span style = "background-color:#fdd">		SetBurst(GetBurst());</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Called when the user clicks cancel or otherwise closes the window
+// (Alt-F4, clicking the top right X)
+// This throws away any changes by deleting the working access spec
+// without copying them to the main access spec structure.
+//
+void CAccessDialog::OnCancel()
+<span style = "background-color:#fdd">{</span>
+	int line_index;
+
+	// Delete all working copies of Access_Spec list items.
+<span style = "background-color:#fdd">	for (line_index = 0; line_index &lt; m_LAccess.GetItemCount(); line_index++)
+		delete(Access_Spec *) m_LAccess.GetItemData(line_index);</span>
+
+<span style = "background-color:#fdd">	CDialog::OnCancel();
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,564 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOTargetVI.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / IOTargetVI.cpp                                            ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the Target class for Virtual        ## */
+/* ##               Interface Architecture (VI) targets.                  ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOTargetVI.h"
+
+#define TARGETVI_DETAILS 0	// Set to 1 for debug messages.
+
+//
+// Initializing member variables.
+//
+TargetVI::TargetVI()
+<span style = "background-color:#fdd">{
+	descriptors = NULL;
+	descriptor_handle = 0;
+	send_descriptors = NULL;
+	recv_descriptors = NULL;</span>
+
+	descriptor_count = 0;
+<span style = "background-color:#fdd">	send_count = 0;</span>
+	recv_count = 0;
+<span style = "background-color:#fdd">	next_send_index = 0;
+	next_recv_index = 0;</span>
+
+<span style = "background-color:#fdd">	data_buffer = NULL;
+	data_buffer_handle = 0;
+}</span>
+
+//
+// Cleaning up VI target memory.
+//
+TargetVI::~TargetVI()
+<span style = "background-color:#fdd">{</span>
+	// Release resources registered with VI NIC.
+<span style = "background-color:#fdd">	if (descriptors &amp;&amp; descriptor_handle)
+		vi_nic.DeregisterMemory(descriptors, descriptor_handle);</span>
+
+<span style = "background-color:#fdd">	if (data_buffer &amp;&amp; data_buffer_handle)
+		vi_nic.DeregisterMemory(data_buffer, data_buffer_handle);</span>
+
+	// Release descriptor memory.
+<span style = "background-color:#fdd">	if (descriptors)</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">		VirtualFree(descriptors, 0, MEM_RELEASE);</span>
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+		free(descriptors);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+		// Close the VI NIC.
+<span style = "background-color:#fdd">		vi_nic.Close();
+}</span>
+
+//
+// Initialize a VI target.  This allocates and registers the descriptors,
+// opens the VI NIC, and associates the completion queue with the NIC.
+//
+BOOL TargetVI::Initialize(Target_Spec * target_info, CQ * completion_queue)
+<span style = "background-color:#fdd">{</span>
+#ifdef _DEBUG
+	cout &lt;&lt; "Initializing VI target on NIC " &lt;&lt; target_info-&gt;name &lt;&lt; endl;
+#endif
+
+	// Open the VI NIC.
+<span style = "background-color:#fdd">	if (!vi_nic.Open(target_info-&gt;name)) {
+		cout &lt;&lt; "*** VI target unable to open VI NIC." &lt;&lt; endl;
+		return FALSE;</span>
+	}
+	// Allocate I/O descriptors for VI requests and align them on a page
+	// boundary.
+
+	// First free the descriptors.
+<span style = "background-color:#fdd">	if (descriptors)</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">		VirtualFree(descriptors, 0, MEM_RELEASE);</span>
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+		free(descriptors);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+		// Allocate enough descriptors to meet requested queue depth setting.
+		// We need the requested number of receives, plus one send and two for
+		// control for each queue depth specified
+<span style = "background-color:#fdd">		descriptor_count = (target_info-&gt;vi_info.outstanding_ios + 1) * target_info-&gt;queue_depth + 2;</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">	if (!(descriptors = (VIP_DESCRIPTOR *) VirtualAlloc(NULL, descriptor_count *</span>
+							    sizeof(VIP_DESCRIPTOR), MEM_COMMIT, PAGE_READWRITE)))
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+	if (!(descriptors = (VIP_DESCRIPTOR *) valloc(descriptor_count * sizeof(VIP_DESCRIPTOR))))
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		// Could not allocate descriptors.  Signal failure.
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** VI target could not allocate memory for descriptors." &lt;&lt; endl;
+		descriptors = NULL;</span>
+		descriptor_count = 0;
+		send_count = 0;
+		recv_count = 0;
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+
+	// Register descriptors with VI NIC.
+<span style = "background-color:#fdd">	if (!vi_nic.RegisterMemory(descriptors, descriptor_count * sizeof(VIP_DESCRIPTOR), &amp;descriptor_handle)) {
+		cout &lt;&lt; "*** VI target unable to register descriptors with VI NIC." &lt;&lt; endl;
+		return FALSE;</span>
+	}
+	// Allocate descriptors for sends and receives.
+<span style = "background-color:#fdd">	send_count = target_info-&gt;queue_depth + 1;</span>
+	recv_count = descriptor_count - send_count;
+	send_descriptors = descriptors;
+	recv_descriptors = &amp;descriptors[send_count];
+
+	// Initialize information needed to maintain connection management.  See
+	// VI specification for pre-posting requirements.  Send control information
+	// after receiving just over half of the total queue depth.  This way, we
+	// know that the remote side has enough pre-posted receives available to
+	// continue receiving data messages (up to the queue depth), plus one more
+	// to handle the control information.  And we have enough send descriptors
+	// available to send enough data messages, plus the control message.
+	control_countdown_start = (target_info-&gt;vi_info.outstanding_ios &gt;&gt; 1) + 1;
+	outstanding_ios = descriptor_count;
+
+	// Register data buffer with VI NIC.
+<span style = "background-color:#fdd">	if (!vi_nic.RegisterMemory(data_buffer, data_buffer_size, &amp;data_buffer_handle)) {
+		cout &lt;&lt; "*** Unable to register data buffer with VI NIC." &lt;&lt; endl;
+		return FALSE;</span>
+	}
+	// Return a pointer to the VI completion queue used by this VI connection.
+	completion_queue = &amp;(vi.vi_cq);
+<span style = "background-color:#fdd">	memcpy(&amp;spec, target_info, sizeof(Target_Spec));</span>
+
+	// Record whether this is the server or client side of the connection.
+	// It is the opposite of what the target is!
+<span style = "background-color:#fdd">	if ((is_server = IsType(target_info-&gt;type, VIClientType))) {</span>
+		// If this is the server side of the connection, initialize the last
+		// I/O to be a read.  This way, if no I/Os are ever done, the server
+		// will be the one who initializes the close and does not need to
+		// wait on the client.
+		lastIO = READ;
+#if TARGETVI_DETAILS
+		cout &lt;&lt; "Initialized VI server." &lt;&lt; endl;
+#endif
+	} else {
+		lastIO = WRITE;
+#if TARGETVI_DETAILS
+		cout &lt;&lt; "Initialized VI client." &lt;&lt; endl;
+#endif
+	}
+
+<span style = "background-color:#fdd">	return TRUE;
+}</span>
+
+//
+// Opening a VI connection using the pre-specified NIC interface.  This is a
+// blocking call.  Note data buffer to use for transfers and data buffer 
+// handle returned from registering the data buffer with the VI NIC must have 
+// been set before making this call.
+//
+BOOL TargetVI::Open(volatile TestState * test_state, int open_flag)
+<span style = "background-color:#fdd">{</span>
+	int i;
+	ReturnVal result;
+
+	// Initialize information needed to maintain connection management.  See
+	// VI specification for pre-posting requirements.
+<span style = "background-color:#fdd">	control_countdown = control_countdown_start;
+	available_receives = 0;</span>
+	more_sends_available = FALSE;
+	requested_receives = 0;
+<span style = "background-color:#fdd">	available_sends = spec.vi_info.outstanding_ios;</span>
+	next_send_index = 0;
+	next_recv_index = 0;
+
+<span style = "background-color:#fdd">	if (vi.Create(&amp;vi_nic, this) != ReturnSuccess) {
+		cout &lt;&lt; "*** Unable to create VI on opened nic." &lt;&lt; endl;
+		return FALSE;</span>
+	}
+	// Pre-post enough receives to ensure remote side can send immediately
+	// after making the connection.
+<span style = "background-color:#fdd">	for (i = 0; i &lt; recv_count; i++) {
+		if (PostRecv() != ReturnSuccess) {
+			cout &lt;&lt; "*** Unable to pre-post receives while opening VI." &lt;&lt; endl;
+			return FALSE;</span>
+		}
+	}
+
+#if TARGETVI_DETAILS
+	int ii;
+
+	cout &lt;&lt; "In TargetVI::Open():" &lt;&lt; endl;
+	cout &lt;&lt; "    is_server = " &lt;&lt; is_server &lt;&lt; endl;
+
+	cout &lt;&lt; "    spec.vi_info.local_address.HostAddressLen = " &lt;&lt; spec.vi_info.local_address.HostAddressLen &lt;&lt; endl;
+	cout &lt;&lt; "    spec.vi_info.local_address.HostAddress[0.." &lt;&lt; spec.vi_info.local_address.HostAddressLen -
+	    1 &lt;&lt; "] = ";
+	for (ii = 0; ii &lt; spec.vi_info.local_address.HostAddressLen; ii++) {
+		cout &lt;&lt; hex &lt;&lt; (int)spec.vi_info.local_address.HostAddress[ii] &lt;&lt; dec &lt;&lt; " ";
+	}
+	cout &lt;&lt; endl;
+	cout &lt;&lt; "    spec.vi_info.local_address.DiscriminatorLen = " &lt;&lt; spec.vi_info.local_address.
+	    DiscriminatorLen &lt;&lt; endl;
+	cout &lt;&lt; "    spec.vi_info.local_address.HostAddress[" &lt;&lt; spec.vi_info.local_address.
+	    HostAddressLen &lt;&lt; ".." &lt;&lt; spec.vi_info.local_address.HostAddressLen +
+	    spec.vi_info.local_address.DiscriminatorLen - 1 &lt;&lt; "] = ";
+	for (ii = spec.vi_info.local_address.HostAddressLen;
+	     ii &lt; spec.vi_info.local_address.HostAddressLen + spec.vi_info.local_address.DiscriminatorLen; ii++) {
+		cout &lt;&lt; hex &lt;&lt; (int)spec.vi_info.local_address.HostAddress[ii] &lt;&lt; dec &lt;&lt; " ";
+	}
+	cout &lt;&lt; endl;
+
+	cout &lt;&lt; "    spec.vi_info.remote_address.HostAddressLen = " &lt;&lt; spec.vi_info.remote_address.
+	    HostAddressLen &lt;&lt; endl;
+	cout &lt;&lt; "    spec.vi_info.remote_address.HostAddress[0.." &lt;&lt; spec.vi_info.remote_address.HostAddressLen -
+	    1 &lt;&lt; "] = ";
+	for (ii = 0; ii &lt; spec.vi_info.remote_address.HostAddressLen; ii++) {
+		cout &lt;&lt; hex &lt;&lt; (int)spec.vi_info.remote_address.HostAddress[ii] &lt;&lt; dec &lt;&lt; " ";
+	}
+	cout &lt;&lt; endl;
+	cout &lt;&lt; "    spec.vi_info.remote_address.DiscriminatorLen = " &lt;&lt; spec.vi_info.remote_address.
+	    DiscriminatorLen &lt;&lt; endl;
+	cout &lt;&lt; "    spec.vi_info.remote_address.HostAddress[" &lt;&lt; spec.vi_info.remote_address.
+	    HostAddressLen &lt;&lt; ".." &lt;&lt; spec.vi_info.remote_address.HostAddressLen +
+	    spec.vi_info.remote_address.DiscriminatorLen - 1 &lt;&lt; "] = ";
+	for (ii = spec.vi_info.remote_address.HostAddressLen;
+	     ii &lt; spec.vi_info.remote_address.HostAddressLen + spec.vi_info.remote_address.DiscriminatorLen; ii++) {
+		cout &lt;&lt; hex &lt;&lt; (int)spec.vi_info.remote_address.HostAddress[ii] &lt;&lt; dec &lt;&lt; " ";
+	}
+	cout &lt;&lt; endl;
+#endif
+
+	// Open VI connection depending on whether this is the client or server
+	// side of the connection.
+<span style = "background-color:#fdd">	if (is_server) {</span>
+		// Accept an incomming connection until either the accept completes 
+		// successfully or the test state is idle.
+		do {
+<span style = "background-color:#fdd">			result = vi.Accept(&amp;spec.vi_info.local_address);
+		} while (result == ReturnRetry &amp;&amp; *test_state != TestIdle);</span>
+
+<span style = "background-color:#fdd">		if (result == ReturnError) {
+			cout &lt;&lt; "*** Unable to accept connection opening VI target." &lt;&lt; endl;
+			return FALSE;</span>
+		}
+	} else {
+		// Connect to the specified VI connection on the server.
+		do {
+<span style = "background-color:#fdd">			result = vi.Connect(&amp;spec.vi_info.local_address, &amp;spec.vi_info.remote_address);
+		} while (result == ReturnRetry &amp;&amp; *test_state != TestIdle);</span>
+
+<span style = "background-color:#fdd">		if (result == ReturnError) {
+			cout &lt;&lt; "*** Unable to connect to server opening VI target." &lt;&lt; endl;
+			return FALSE;</span>
+		}
+	}
+<span style = "background-color:#fdd">	return TRUE;
+}</span>
+
+//
+// Closing a VI connection.
+//
+BOOL TargetVI::Close(volatile TestState * test_state)
+<span style = "background-color:#fdd">{</span>
+	// Allow the receiving side to disconnect first.
+<span style = "background-color:#fdd">	if (lastIO == WRITE) {
+		while (vi.CheckForDisconnect() == ReturnRetry &amp;&amp; *test_state != TestIdle) ;</span>
+	}
+
+<span style = "background-color:#fdd">	return (vi.Close() == ReturnSuccess);
+}</span>
+
+//
+// Performing read operation.  Note that for clients, the call is actually a 
+// write.  The data buffer to use for I/O transfers has already been set, so
+// we ignore the buffer passed in.
+//
+ReturnVal TargetVI::Read(LPVOID buffer, Transaction * trans)
+<span style = "background-color:#fdd">{</span>
+	// Clients perform a write.
+<span style = "background-color:#fdd">	if (!is_server)</span>
+		return Send(trans);
+
+	// Servers perform a read.
+<span style = "background-color:#fdd">	return Receive(trans);</span>
+}
+
+//
+// Performing an actual receive (read) from the VI connection.
+//
+ReturnVal TargetVI::Receive(Transaction * trans)
+<span style = "background-color:#fdd">{</span>
+	lastIO = READ;
+#if TARGETVI_DETAILS
+	cout &lt;&lt; "Performing I/O read request for transaction " &lt;&lt; trans-&gt;request_number &lt;&lt; endl;
+#endif
+
+	// If any receives are available, pre-post one.
+<span style = "background-color:#fdd">	if (available_receives) {</span>
+		// Posting an additional receive.
+<span style = "background-color:#fdd">		if (PostRecv() != ReturnSuccess) {
+			cout &lt;&lt; "*** Failed to pre-post a receive over VI." &lt;&lt; endl;
+			return ReturnError;</span>
+		}
+<span style = "background-color:#fdd">		available_receives--;</span>
+
+		// See if we should send notification to remote side that we have posted 
+		// additional receives.
+<span style = "background-color:#fdd">		if (--control_countdown &lt;= 0) {
+			if (SendControl() != ReturnSuccess) {
+				cout &lt;&lt; "*** Failed to send control message over VI." &lt;&lt; endl;
+				return ReturnError;</span>
+			}
+<span style = "background-color:#fdd">			control_countdown = control_countdown_start;</span>
+		}
+	}
+	// We need to check on the read that we entered this function to 
+	// actually perform.  Due to pre-posting requirements, we need to see 
+	// if the remote side has already sent the data before we called this.  
+	// If so, then the receive could have been processed by the completion 
+	// queue *before* we requested it.  The completion queue will have 
+	// trapped this and modified the number of requested receives.
+<span style = "background-color:#fdd">	if (requested_receives++ &lt; 0) {</span>
+		// Receive is already done and has already posted to the completion
+		// queue.  Return immediate success to signal that the I/O should be
+		// processed immediately and will not appear in the completion queue.
+#if TARGETVI_DETAILS
+		cout &lt;&lt; "Receive was already done." &lt;&lt; endl;
+#endif
+		return ReturnSuccess;
+	}
+	// Receive has not yet completed, and its completion will still go to the
+	// completion queue.
+	return ReturnPending;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Performing write operation.  Note that for clients, the call is actually a
+// read.  The data buffer to use for I/O transfers has already been set, so
+// we ignore the buffer passed in.
+//
+ReturnVal TargetVI::Write(LPVOID buffer, Transaction * trans)
+<span style = "background-color:#fdd">{</span>
+	// Servers perform a write.
+<span style = "background-color:#fdd">	if (is_server)</span>
+		return Send(trans);
+
+	// Clients perform a read.
+<span style = "background-color:#fdd">	return Receive(trans);</span>
+}
+
+//
+// Post a receive.
+//
+ReturnVal TargetVI::PostRecv()
+<span style = "background-color:#fdd">{</span>
+	// Format the receive descriptor for the maximum transfer size possible.
+	// Not all of this formatting may be necessary.
+<span style = "background-color:#fdd">	recv_descriptors[next_recv_index].CS.SegCount = 1;
+	recv_descriptors[next_recv_index].CS.Control = VIP_CONTROL_OP_SENDRECV &amp; VIP_CONTROL_IMMEDIATE;
+	recv_descriptors[next_recv_index].CS.Reserved = 0;
+	recv_descriptors[next_recv_index].CS.ImmediateData = 0;
+	recv_descriptors[next_recv_index].CS.Length = data_buffer_size;
+	recv_descriptors[next_recv_index].CS.Status = 0;</span>
+
+<span style = "background-color:#fdd">	recv_descriptors[next_recv_index].DS[0].Local.Data.Address = data_buffer;
+	recv_descriptors[next_recv_index].DS[0].Local.Handle = data_buffer_handle;
+	recv_descriptors[next_recv_index].DS[0].Local.Length = data_buffer_size;</span>
+
+	if (vi.Receive(&amp;recv_descriptors[next_recv_index], descriptor_handle)
+<span style = "background-color:#fdd">	    != ReturnSuccess) {
+		cout &lt;&lt; "*** Failed to post a receive for VI connection." &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+	// Receives complete in the order posted, so update index of next one
+	// available using a circular queue.
+<span style = "background-color:#fdd">	if (++next_recv_index &gt;= recv_count)
+		next_recv_index = 0;</span>
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Performing an actual write (send) over a VI connection.
+//
+ReturnVal TargetVI::Send(Transaction * trans)
+<span style = "background-color:#fdd">{</span>
+	lastIO = WRITE;
+#if TARGETVI_DETAILS
+	cout &lt;&lt; "Performing I/O write request for transaction " &lt;&lt; trans-&gt;request_number &lt;&lt; endl;
+#endif
+
+	// Check to see if the completion queue has marked that more sends are
+	// available for requesting.
+<span style = "background-color:#fdd">	if (more_sends_available) {</span>
+#if TARGETVI_DETAILS
+		cout &lt;&lt; "Updating number of sends available." &lt;&lt; endl;
+#endif
+
+		more_sends_available = FALSE;
+<span style = "background-color:#fdd">		available_sends += control_countdown_start;</span>
+
+		// We need to repost the receive needed for control flow.
+<span style = "background-color:#fdd">		if (PostRecv() != ReturnSuccess) {
+			cout &lt;&lt; "*** Unable to post send for control flow." &lt;&lt; endl;
+			return ReturnError;</span>
+		}
+	}
+	// We cannot perform the send unless the remote side has pre-posted the
+	// receive.  Checking to make sure that remote side is ready.
+<span style = "background-color:#fdd">	if (!available_sends) {</span>
+#if TARGETVI_DETAILS
+		cout &lt;&lt; "No sends are available." &lt;&lt; endl;
+#endif
+
+		// Remote side is not ready.  Abort the operation to signal that the
+		// send failed and should be retried.
+<span style = "background-color:#fdd">		return ReturnRetry;</span>
+	}
+
+	available_sends--;
+
+	// Format descriptor.  Not all of this formatting may be necessary.
+<span style = "background-color:#fdd">	send_descriptors[next_send_index].CS.SegCount = 1;
+	send_descriptors[next_send_index].CS.Control = VIP_CONTROL_OP_SENDRECV &amp; VIP_CONTROL_IMMEDIATE;
+	send_descriptors[next_send_index].CS.Reserved = 0;
+	send_descriptors[next_send_index].CS.ImmediateData = trans-&gt;request_number;
+	send_descriptors[next_send_index].CS.Length = trans-&gt;size;
+	send_descriptors[next_send_index].CS.Status = 0;</span>
+
+<span style = "background-color:#fdd">	send_descriptors[next_send_index].DS[0].Local.Data.Address = data_buffer;
+	send_descriptors[next_send_index].DS[0].Local.Handle = data_buffer_handle;
+	send_descriptors[next_send_index].DS[0].Local.Length = trans-&gt;size;</span>
+
+	if (vi.Send(&amp;send_descriptors[next_send_index], descriptor_handle)
+<span style = "background-color:#fdd">	    != ReturnSuccess) {
+		cout &lt;&lt; "*** VI send failed to remote VI target." &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+	// Sends complete in the order posted, so update index of next
+	// available using a circular queue.
+<span style = "background-color:#fdd">	if (++next_send_index &gt;= send_count)
+		next_send_index = 0;</span>
+
+<span style = "background-color:#fdd">	return ReturnPending;
+}</span>
+
+//
+// Send a control message to the remote side informing it that additional
+// receives are now available.
+//
+ReturnVal TargetVI::SendControl()
+<span style = "background-color:#fdd">{</span>
+	// Format the descriptor to send with the control information.
+	// Not all of this formatting may be necessary.
+<span style = "background-color:#fdd">	send_descriptors[next_send_index].CS.SegCount = 1;</span>
+	send_descriptors[next_send_index].CS.Control = VIP_CONTROL_OP_SENDRECV | VIP_CONTROL_IMMEDIATE;
+<span style = "background-color:#fdd">	send_descriptors[next_send_index].CS.Reserved = 0;
+	send_descriptors[next_send_index].CS.ImmediateData = CONTROL_MESSAGE;
+	send_descriptors[next_send_index].CS.Length = 0;
+	send_descriptors[next_send_index].CS.Status = 0;</span>
+
+<span style = "background-color:#fdd">	send_descriptors[next_send_index].DS[0].Local.Data.Address = data_buffer;
+	send_descriptors[next_send_index].DS[0].Local.Handle = data_buffer_handle;
+	send_descriptors[next_send_index].DS[0].Local.Length = 0;</span>
+
+#if TARGETVI_DETAILS
+	cout &lt;&lt; "Sending control message to remote VI connection." &lt;&lt; endl;
+#endif
+
+	if (vi.Send(&amp;send_descriptors[next_send_index], descriptor_handle)
+<span style = "background-color:#fdd">	    != ReturnSuccess) {
+		cout &lt;&lt; "*** Failed to send VI control message." &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+	// Sends complete in the order posted, so update index of next
+	// available using a circular queue.
+<span style = "background-color:#fdd">	if (++next_send_index &gt;= send_count)
+		next_send_index = 0;</span>
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

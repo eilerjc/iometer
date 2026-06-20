@@ -1,0 +1,156 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>AccessSpecLibrary.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "AccessSpecLibrary.h"
+#include "AccessSpecCatalog.h"
+#include &lt;cctype&gt;
+
+namespace iocore {
+
+// Case-insensitive compare (MFC used strcasecmp on the spec names).
+static bool iequals(const std::string &amp;a, const std::string &amp;b)
+<span style = "background-color:#dfd">{
+    if (a.size() != b.size())</span>
+        return false;
+<span style = "background-color:#dfd">    for (std::size_t i = 0; i &lt; a.size(); ++i) {
+        if (std::tolower(static_cast&lt;unsigned char&gt;(a[i])) !=</span>
+            std::tolower(static_cast&lt;unsigned char&gt;(b[i])))
+<span style = "background-color:#dfd">            return false;</span>
+    }
+<span style = "background-color:#dfd">    return true;
+}</span>
+
+AccessSpecLine AccessSpecLibrary::defaultLine()
+<span style = "background-color:#dfd">{</span>
+    // MFC InitAccessSpecLine: size 2048, of_size 100, random 100, reads 67,
+    // delay 0, burst 1, align = size (explicit 2048 on the wire), reply 0.
+    AccessSpecLine l;
+    l.sizeBytes   = 2048;
+    l.ofSize      = 100;
+    l.readPercent = 67;
+<span style = "background-color:#dfd">    l.seqPercent  = 0;      // random 100
+    l.delayMs     = 0.0;</span>
+    l.burstLength = 1;
+    l.alignBytes  = 2048;   // align = size
+    l.replyBytes  = 0;
+<span style = "background-color:#dfd">    return l;
+}</span>
+
+void AccessSpecLibrary::loadDefaults()
+<span style = "background-color:#dfd">{
+    m_specs = defaultAccessSpecs();   // Idle + Default + matrix + "All in one"
+}</span>
+
+int AccessSpecLibrary::newSpec()
+<span style = "background-color:#dfd">{
+    AccessSpec s;
+    s.name        = nextUntitledName();
+    s.defaultSpec = false;
+    s.lines.push_back(defaultLine());
+    m_specs.push_back(std::move(s));
+    return count() - 1;
+}</span>
+
+int AccessSpecLibrary::copySpec(int index)
+<span style = "background-color:#dfd">{
+    if (index &lt; 0 || index &gt;= count())
+        return -1;</span>
+
+<span style = "background-color:#dfd">    AccessSpec copy = m_specs[index];   // copy BEFORE push_back may reallocate</span>
+
+    // "Copy of &lt;name&gt; (n)" with the first free n (MFC always suffixes "(1)" up).
+<span style = "background-color:#dfd">    const std::string base = "Copy of " + copy.name;
+    int n = 1;
+    std::string name;</span>
+    do {
+<span style = "background-color:#dfd">        name = base + " (" + std::to_string(n++) + ")";
+    } while (indexByName(name) != -1);
+    copy.name = name;</span>
+
+<span style = "background-color:#dfd">    m_specs.push_back(std::move(copy));
+    return count() - 1;
+}</span>
+
+bool AccessSpecLibrary::removeAt(int index)
+<span style = "background-color:#dfd">{
+    if (index &lt; 0 || index &gt;= count())
+        return false;
+    m_specs.erase(m_specs.begin() + index);
+    return true;
+}</span>
+
+int AccessSpecLibrary::indexByName(const std::string &amp;name) const
+<span style = "background-color:#dfd">{
+    for (int i = 0; i &lt; count(); ++i) {
+        if (iequals(m_specs[i].name, name))</span>
+            return i;
+    }
+<span style = "background-color:#dfd">    return -1;
+}</span>
+
+std::string AccessSpecLibrary::nextUntitledName() const
+<span style = "background-color:#dfd">{</span>
+    // Count existing "Untitled*" specs, then keep incrementing until unique
+    // (exactly the MFC NextUntitled algorithm).
+<span style = "background-color:#dfd">    int next_number = 0;
+    for (const auto &amp;s : m_specs) {
+        if (s.name.rfind("Untitled", 0) == 0)
+            ++next_number;</span>
+    }
+<span style = "background-color:#dfd">    std::string name;</span>
+    do {
+<span style = "background-color:#dfd">        name = "Untitled " + std::to_string(++next_number);
+    } while (indexByName(name) != -1);
+    return name;
+}</span>
+
+void AccessSpecLibrary::smartName(int index)
+<span style = "background-color:#dfd">{
+    if (index &lt; 0 || index &gt;= count())</span>
+        return;
+<span style = "background-color:#dfd">    AccessSpec &amp;spec = m_specs[index];</span>
+
+    // Smart naming is only possible for single-line specs (MFC checks
+    // access[1].of_size == IOERROR); otherwise the existing name stays.
+<span style = "background-color:#dfd">    if (spec.lines.size() != 1)</span>
+        return;
+    const AccessSpecLine &amp;l = spec.lines[0];
+
+    // Shared formatting (also used by the MFC SmartName on the wire model).
+<span style = "background-color:#dfd">    std::string name = smartNameText(l.sizeBytes, 100 - l.seqPercent, l.readPercent);</span>
+
+    // Ensure uniqueness with a " 2", " 3", ... suffix (a spec keeping its own
+    // name is fine - skip itself in the collision check).
+<span style = "background-color:#dfd">    const std::string base = name;
+    int spec_number = 1;</span>
+    int hit;
+<span style = "background-color:#dfd">    while ((hit = indexByName(name)) != -1 &amp;&amp; hit != index)
+        name = base + " " + std::to_string(++spec_number);</span>
+
+<span style = "background-color:#dfd">    spec.name = name;
+}</span>
+
+} // namespace iocore</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

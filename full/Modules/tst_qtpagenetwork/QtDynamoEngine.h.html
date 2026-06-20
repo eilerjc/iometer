@@ -1,0 +1,323 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtDynamoEngine.h</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtDynamoEngine.h - Real Iometer engine: TCP server on port 1066 + Dynamo protocol
+#pragma once
+
+#include "QtIometerEngine.h"
+#include "QtDyProto.h"
+#include "../core/WorkerPool.h"
+#include "../core/TestRunner.h"
+#include "../core/IcfFile.h"
+#include "../core/ManagerMap.h"
+#include &lt;QObject&gt;
+#include &lt;QList&gt;
+#include &lt;QVector&gt;
+#include &lt;QByteArray&gt;
+#include &lt;QTimer&gt;
+
+class QTcpServer;
+class QTcpSocket;
+
+// -----------------------------------------------------------------------------
+// QtDySession - manages the protocol exchange with one connected Dynamo instance
+// -----------------------------------------------------------------------------
+class QtDySession : public QObject
+{
+    Q_OBJECT
+
+public:
+    enum class State {
+        WaitLoginMsg,       // expecting 8-byte Message (LOGIN + version)
+        WaitLoginData,      // expecting full DyDataMessage (Manager_Info)
+        Connecting,         // connecting main socket to Dynamo
+        WaitTargetsDisk,    // sent REPORT_TARGETS, awaiting disk Data_Message
+        WaitTargetsTcp,     // awaiting TCP targets Data_Message
+        WaitTargetsVi,      // awaiting VI targets Data_Message
+        WaitAddWorkers,     // sent ADD_WORKERS, awaiting 8-byte confirmation
+        Ready,              // connected, idle - test not started
+        SetupAccess,        // sending SET_ACCESS for workers, awaiting reply
+        SetupTargetsReply,  // sent SET_TARGETS, awaiting 8-byte reply
+        SetupTargetsData,   // awaiting SET_TARGETS reply Data_Message
+        WaitStartReply,     // sent START, awaiting 8-byte reply
+        WaitBeginIoReply,   // sent BEGIN_IO, awaiting 8-byte reply
+        Running,            // RECORD_ON sent, update timer ticking
+        WaitUpdateMgr,      // sent REPORT_UPDATE, awaiting Manager_Results
+        WaitUpdateWorker,   // awaiting Worker_Results [n]
+        WaitRecordOff,      // sent RECORD_OFF, awaiting reply
+        WaitStop,           // sent STOP, awaiting reply
+        WaitFinalMgr,       // sent REPORT_RESULTS, awaiting Manager_Results
+        WaitFinalWorker,    // awaiting final Worker_Results [n]
+        Error,
+        Disconnected
+    };
+
+    explicit QtDySession(QTcpSocket *loginSocket, QObject *parent = nullptr);
+    ~QtDySession() override;
+
+<span style = "background-color:#fdd">    State    state()       const { return m_state; }
+    QString  managerName() const { return m_managerName; }
+    QString  address()     const { return m_address; }</span>
+    bool     isReady()     const { return m_state == State::Ready; }
+<span style = "background-color:#fdd">    bool     isRunning()   const { return m_state == State::Running</span>
+                                        || m_state == State::WaitUpdateMgr
+<span style = "background-color:#fdd">                                        || m_state == State::WaitUpdateWorker; }</span>
+    double   timerRes()    const { return m_timerResolution; }
+
+<span style = "background-color:#fdd">    int      processorCount() const { return m_processorCount; }
+    const QList&lt;WorkerInfo&gt;&amp; workers() const { return m_workers; }
+    const QList&lt;DyTargetSpec&gt;&amp; discoveredTargets() const { return m_diskTargets; }</span>
+
+    // Returns typed descriptors for all discovered disk targets
+<span style = "background-color:#dfd">    QList&lt;TargetInfo&gt; diskTargetInfos() const {
+        QList&lt;TargetInfo&gt; infos;
+        for (const auto &amp;t : m_diskTargets) {
+            TargetInfo ti;
+            ti.name = QString::fromLocal8Bit(t.name).toStdString();
+            if (t.type == DY_PHYSICAL_DISK) {</span>
+<span style = "background-color:#fdd">                ti.kind  = TargetKind::PhysicalDisk;
+                ti.ready = true;   // physical disks are always directly testable
+            } else {</span>
+<span style = "background-color:#dfd">                ti.kind  = TargetKind::LogicalDisk;
+                ti.ready = (t.disk_info.ready != 0);</span>
+            }
+<span style = "background-color:#dfd">            infos.append(ti);
+        }
+        return infos;
+    }</span>
+
+    // -- Test control (called by QtDynamoEngine after state==Ready) -------------
+    void startTest(const QList&lt;WorkerInfo&gt; &amp;workers, const QList&lt;AccessSpec&gt; &amp;specs);
+    void stopTest();
+    void stopAll();
+
+    // -- Incremental result vectors (updated after each REPORT_UPDATE) --------
+<span style = "background-color:#fdd">    const QVector&lt;WorkerResult&gt;&amp; pendingResults() const { return m_pendingResults; }</span>
+
+signals:
+    void managerConnected(QtDySession *self);
+    void managerDisconnected(QtDySession *self);
+    void resultsReady(QtDySession *self);
+    void errorOccurred(QtDySession *self, const QString &amp;msg);
+
+private slots:
+    void onLoginData();
+    void onMainConnected();
+    void onMainData();
+    void onMainDisconnected();
+    void onUpdateTimer();
+
+private:
+    // Socket helpers
+    void         expect(int bytes, State nextState);
+    bool         consume(int bytes);   // returns true when m_buf.size() &gt;= bytes
+    QByteArray   take(int bytes);      // take exactly N bytes from front of m_buf
+    void         sendMsg(int32_t purpose, int32_t data);
+    void         sendDataMsg(DyDataMessage *dm);
+
+    // State handlers
+    void processLoginMsg();
+    void processLoginData();
+    void processTargetList(int phase);   // disk=0, tcp=1, vi=2
+    void processAddWorkersReply();
+    void processSetAccessReply();
+    void processSetTargetsReply();
+    void processSetTargetsData();
+    void processStartReply();
+    void processBeginIoReply();
+    void processUpdateMgr();
+    void processUpdateWorker();
+    void processRecordOffReply();
+    void processStopReply();
+    void processFinalMgr();
+    void processFinalWorker();
+    void dispatchMainData();
+
+    // Setup helpers
+    void beginSetupWorker(int idx);
+    void advanceSetupWorkers();
+    void beginStartSequence();
+    void buildTestSpec(DyDataMessage *dm, const AccessSpec &amp;spec);
+    void buildTargetMsg(DyDataMessage *dm, const WorkerInfo &amp;w);
+
+    // Result helpers
+    WorkerResult decodeWorkerResults(const DyWorkerResults &amp;wr,
+                                     const QString &amp;mgrName,
+                                     const QString &amp;workerName);
+
+    // State
+<span style = "background-color:#dfd">    State          m_state         = State::WaitLoginMsg;</span>
+    QTcpSocket    *m_loginSocket   = nullptr;   // only during login phase
+<span style = "background-color:#dfd">    QTcpSocket    *m_mainSocket    = nullptr;   // main command channel</span>
+    QByteArray     m_buf;                        // receive accumulator
+<span style = "background-color:#dfd">    int            m_expecting     = 0;          // bytes needed for current operation</span>
+    State          m_afterExpect   = State::WaitLoginMsg;
+
+    // Manager info from login
+    QString  m_managerName;
+    QString  m_address;           // names[1] = main-port host
+<span style = "background-color:#dfd">    uint16_t m_mainPort      = 0;
+    double   m_timerResolution = 1.0;
+    int      m_processorCount = 1;   // CPU count sent by Dynamo at login</span>
+
+    // Discovered targets
+    QList&lt;DyTargetSpec&gt; m_diskTargets;
+    QList&lt;DyTargetSpec&gt; m_tcpTargets;
+    QList&lt;DyTargetSpec&gt; m_viTargets;
+
+    // Workers configured for current test
+    QList&lt;WorkerInfo&gt;  m_workers;
+    QList&lt;AccessSpec&gt;  m_accessSpecs;
+<span style = "background-color:#dfd">    int                m_setupWorkerIdx   = 0;  // current worker in setup loop</span>
+    int                m_activeWorkerCount = 0;
+<span style = "background-color:#dfd">    int                m_workerResultIdx  = 0;</span>
+
+    // Update timer (REPORT_UPDATE polling)
+    QTimer             m_updateTimer;
+    static constexpr int k_updateIntervalMs = 1000;
+
+    // Pending results assembled during one update cycle
+    QVector&lt;WorkerResult&gt; m_pendingResults;
+<span style = "background-color:#dfd">    DyManagerResults      m_pendingMgrResults{};</span>
+
+    // Stopping flag
+<span style = "background-color:#dfd">    bool m_stopRequested = false;</span>
+};
+
+// -----------------------------------------------------------------------------
+// QtDynamoEngine - QtIometerEngine implementation backed by real Dynamo processes
+// Uses WorkerPool to manage manager/worker lifecycle
+// -----------------------------------------------------------------------------
+
+class WorkerPool;  // Forward declaration
+
+class QtDynamoEngine : public QtIometerEngine
+{
+    Q_OBJECT
+
+public:
+    // startListening=false skips binding port 1066 (used by unit tests)
+    explicit QtDynamoEngine(bool startListening = true, QObject *parent = nullptr);
+    ~QtDynamoEngine() override;
+
+    // -- QtIometerEngine interface -----------------------------------------------
+    void startTest() override;
+    void stopTest()  override;
+    void stopAll()   override;
+<span style = "background-color:#fdd">    bool isRunning() const override { return m_running; }</span>
+
+    bool loadConfig(const QString &amp;filepath) override;
+    bool saveConfig(const QString &amp;filepath) override;
+    bool saveBatchResults(const QString &amp;filepath) override;
+
+    // Static helper - delegates to ResultsWriter for CSV generation.
+    // Used by saveBatchResults() and directly by unit tests.
+    // Kept here for backward compatibility.
+    static bool writeBatchResultsCsv(const QString &amp;filepath,
+                                     const QVector&lt;WorkerResult&gt; &amp;results,
+                                     const TestConfig &amp;cfg);
+    void newConfig()  override;
+
+    QList&lt;ManagerInfo&gt;   managers()     const override;  // Conversion from std::vector to QList
+    void connectManager(const QString &amp;address, const QString &amp;name = {}) override;
+    void disconnectManager(const QString &amp;mgrName)                        override;
+    void addWorker(const QString &amp;mgrName, const WorkerInfo &amp;w)           override;
+    void removeWorker(const QString &amp;mgrName, const QString &amp;workerId)    override;
+    void updateWorker(const WorkerInfo &amp;w)                                override;
+
+<span style = "background-color:#dfd">    QList&lt;AccessSpec&gt;   accessSpecs()  const override { return m_specs; }</span>
+    void setAccessSpecs(const QList&lt;AccessSpec&gt; &amp;specs) override;
+<span style = "background-color:#dfd">    void setCurrentTestSpec(const AccessSpec &amp;spec) override {
+        m_currentTestSpec = spec; m_hasCurrentTestSpec = true;
+    }</span>
+
+<span style = "background-color:#fdd">    TestConfig testConfig()                     const override { return m_testConfig; }
+    void setTestConfig(const TestConfig &amp;cfg)         override { m_testConfig = cfg; }</span>
+
+<span style = "background-color:#fdd">    QVector&lt;WorkerResult&gt; currentResults() const override { return m_currentResults; }
+    QVector&lt;WorkerResult&gt; savedResults()   const override { return m_savedResults;   }
+    void clearSavedResults() override { m_savedResults.clear(); }</span>
+
+    int listenPort() const { return DY_PORT; }
+
+    // -- Manager restore (shared iocore::ManagerMap) -----------------------------
+    // Build a restore map from a parsed ICF's batch workers: one entry per
+    // distinct manager named in the MANAGER LIST, unassigned (waiting). Pure and
+    // static so it can be unit-tested without a live engine.
+    static iocore::ManagerMap buildRestoreMap(
+        const std::vector&lt;IcfFile::BatchWorker&gt; &amp;workers);
+
+    // The distinct manager names the loaded ICF expects (in first-seen order).
+    QStringList expectedManagers() const override;
+    // True while any ICF-named manager has not yet connected (logged in).
+<span style = "background-color:#fdd">    bool        isWaitingForManagers() const override { return m_restoreMap.isWaitingList(); }</span>
+    // How many of the expected managers are currently connected.
+    int         connectedManagerCount() const override;
+
+private slots:
+    void onNewConnection();
+    void onSessionConnected(QtDySession *s);
+    void onSessionDisconnected(QtDySession *s);
+    void onSessionResults(QtDySession *s);
+    void onSessionError(QtDySession *s, const QString &amp;msg);
+
+private:
+    void rebuildManagers();
+    void computeAggregate();
+
+<span style = "background-color:#dfd">    QTcpServer                *m_server        = nullptr;</span>
+    QList&lt;QtDySession*&gt;         m_sessions;
+    WorkerPool                m_workerPool;   // core domain model (manager/worker lifecycle)
+    TestRunner                m_testRunner;   // core domain model (test state machine)
+    iocore::ManagerMap        m_restoreMap;   // ICF manager restore (match/wait), shared core logic
+    QList&lt;AccessSpec&gt;         m_specs;
+    AccessSpec            m_currentTestSpec;
+<span style = "background-color:#dfd">    bool                  m_hasCurrentTestSpec = false;</span>
+    // Per-worker configuration loaded from ICF for batch mode
+    struct BatchWorkerConfig {
+        QString     name;
+        QString     type = "DISK";   // DISK / TCP / VI, from the ICF 'Worker type
+        QStringList assignedSpecs;
+        QStringList targets;
+        QString     managerName;     // ICF manager this worker belongs to
+    };
+    QList&lt;BatchWorkerConfig&gt; m_batchWorkers;
+
+public:
+    // Convenience: first worker's first spec / targets (used by batch main)
+<span style = "background-color:#fdd">    QString     batchAssignedSpec() const {
+        return m_batchWorkers.isEmpty() ? QString{}</span>
+               : m_batchWorkers[0].assignedSpecs.value(0);
+<span style = "background-color:#fdd">    }
+    QList&lt;BatchWorkerConfig&gt; batchWorkers() const { return m_batchWorkers; }</span>
+    // The batch workers belonging to a given ICF manager (per-manager restore).
+    QList&lt;BatchWorkerConfig&gt; workersForManager(const QString &amp;mgrName) const;
+private:
+    TestConfig            m_testConfig;
+    QVector&lt;WorkerResult&gt; m_currentResults;
+    QVector&lt;WorkerResult&gt; m_savedResults;
+<span style = "background-color:#dfd">    bool                  m_running  = false;</span>
+};</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

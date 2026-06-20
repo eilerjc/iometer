@@ -1,0 +1,116 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtIometerEngine.h</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtIometerEngine.h -- Abstract interface between the Qt GUI and the I/O engine.
+//
+// The GUI binds to this interface exclusively; concrete implementations are
+// QtDemoEngine (simulated data) and QtDynamoEngine (real Dynamo.exe).
+#pragma once
+
+#include "QtIometerTypes.h"
+#include &lt;QObject&gt;
+#include &lt;QVector&gt;
+#include &lt;QList&gt;
+
+class QtIometerEngine : public QObject
+{
+    Q_OBJECT
+
+public:
+<span style = "background-color:#fdd">    explicit QtIometerEngine(QObject *parent = nullptr) : QObject(parent) {}
+    virtual ~QtIometerEngine() = default;</span>
+
+    // ---- Test control -------------------------------------------------------
+    virtual void startTest()          = 0;
+    virtual void stopTest()           = 0;
+    virtual void stopAll()            = 0;
+    virtual bool isRunning()    const = 0;
+
+    // ---- Configuration ------------------------------------------------------
+    virtual bool loadConfig(const QString &amp;filepath) = 0;
+    virtual bool saveConfig(const QString &amp;filepath) = 0;
+    virtual void newConfig()          = 0;
+
+    // ---- Managers &amp; workers -------------------------------------------------
+    virtual QList&lt;ManagerInfo&gt; managers()                                        const = 0;
+    virtual void connectManager(const QString &amp;address, const QString &amp;name = {})     = 0;
+    virtual void disconnectManager(const QString &amp;mgrName)                            = 0;
+    virtual void addWorker(const QString &amp;mgrName, const WorkerInfo &amp;w)               = 0;
+    virtual void removeWorker(const QString &amp;mgrName, const QString &amp;workerId)        = 0;
+    virtual void updateWorker(const WorkerInfo &amp;w)                                    = 0;
+
+    // -- Manager restore (from a loaded ICF) -------------------------------------
+    // The managers a loaded config expects, and how many have connected. Engines
+    // that don't do ICF-based restore (e.g. the demo engine) use the defaults.
+<span style = "background-color:#dfd">    virtual QStringList expectedManagers()      const { return {}; }</span>
+<span style = "background-color:#fdd">    virtual bool        isWaitingForManagers()  const { return false; }
+    virtual int         connectedManagerCount() const { return 0; }</span>
+
+    // ---- Access specifications ----------------------------------------------
+    virtual QList&lt;AccessSpec&gt; accessSpecs()                          const = 0;
+    virtual void setAccessSpecs(const QList&lt;AccessSpec&gt; &amp;specs)           = 0;
+
+    // Override which spec is used for the next startTest() without modifying
+    // the global library.  Pass a null/default spec to clear the override.
+    virtual void setCurrentTestSpec(const AccessSpec &amp;spec)               = 0;
+
+    // ---- Test Setup configuration -------------------------------------------
+    virtual TestConfig testConfig()                     const = 0;
+    virtual void setTestConfig(const TestConfig &amp;cfg)         = 0;
+
+    // ---- Results ------------------------------------------------------------
+    virtual QVector&lt;WorkerResult&gt; currentResults()      const = 0;
+    virtual QVector&lt;WorkerResult&gt; savedResults()        const = 0;
+    virtual void clearSavedResults()                          = 0;
+
+    // Write results to a CSV in the original Iometer format (batch mode output).
+    virtual bool saveBatchResults(const QString &amp;filepath)    = 0;
+
+    // ---- Built-in spec library (shared by all engines) ----------------------
+    // Mirrors the original AccessSpecList::InsertIdleSpec() + InsertDefaultSpecs().
+    // Mirrors InsertIdleSpec() + InsertDefaultSpecs() exactly, including the
+    // IOMTR_SETTING_USE_NEW_ACCESS_SPEC and NO_OLD_ACCESS_SPEC groups plus
+    // the multi-line "All in one" combined spec.
+    static QList&lt;AccessSpec&gt; builtinAccessSpecs()
+<span style = "background-color:#dfd">    {</span>
+        // Delegates to the shared core catalog (iocore::defaultAccessSpecs) so
+        // both GUIs use one definition of the built-in specs.
+<span style = "background-color:#dfd">        QList&lt;AccessSpec&gt; out;
+        for (const auto &amp;s : iocore::defaultAccessSpecs())
+            out.append(s);
+        return out;
+    }</span>
+
+signals:
+    void resultsUpdated(QVector&lt;WorkerResult&gt; results);
+    void testStarted();
+    void testStopped();
+    void managerConnected(ManagerInfo mgr);
+    void managerDisconnected(QString mgrName);
+    void configChanged();
+    void statusMessage(QString msg);
+    void errorOccurred(QString msg);
+};</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

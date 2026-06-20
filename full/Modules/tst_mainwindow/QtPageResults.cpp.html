@@ -1,0 +1,246 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtPageResults.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtPageResults.cpp -- "Test Setup" tab
+#include "QtPageResults.h"
+#include "QtIometerEngine.h"
+#include &lt;QVBoxLayout&gt;
+#include &lt;QHBoxLayout&gt;
+#include &lt;QGridLayout&gt;
+#include &lt;QGroupBox&gt;
+#include &lt;QLineEdit&gt;
+#include &lt;QSpinBox&gt;
+#include &lt;QComboBox&gt;
+#include &lt;QRadioButton&gt;
+#include &lt;QLabel&gt;
+#include &lt;QCheckBox&gt;
+#include &lt;QFrame&gt;
+
+// =============================================================================
+
+QtPageResults::QtPageResults(QtIometerEngine *engine, QWidget *parent)
+<span style = "background-color:#dfd">    : QWidget(parent), m_engine(engine)
+{
+    setupUi();
+    loadConfig();
+    connect(engine, &amp;QtIometerEngine::configChanged, this, &amp;QtPageResults::onConfigChanged);
+}</span>
+
+// =============================================================================
+// UI construction -- matches the original Test Setup tab exactly
+// =============================================================================
+
+void QtPageResults::setupUi()
+<span style = "background-color:#dfd">{
+    auto *root = new QVBoxLayout(this);
+    root-&gt;setContentsMargins(6, 6, 6, 6);
+    root-&gt;setSpacing(6);</span>
+
+    // ---- Test Description ---------------------------------------------------
+<span style = "background-color:#dfd">    auto *descGroup = new QGroupBox("Test Description");
+    auto *descLay   = new QHBoxLayout(descGroup);
+    m_description = new QLineEdit;
+    descLay-&gt;addWidget(m_description);
+    root-&gt;addWidget(descGroup);</span>
+
+    // ---- Row: Run Time | Ramp Up Time | Number of Workers -------------------
+<span style = "background-color:#dfd">    auto *row1 = new QHBoxLayout;
+    row1-&gt;setSpacing(8);</span>
+
+    // Run Time
+<span style = "background-color:#dfd">    auto *runGroup = new QGroupBox("Run Time");
+    auto *runLay   = new QGridLayout(runGroup);
+    runLay-&gt;setSpacing(4);
+    m_runHours   = new QSpinBox; m_runHours-&gt;setRange(0, 99);    m_runHours-&gt;setFixedWidth(40);
+    m_runMinutes = new QSpinBox; m_runMinutes-&gt;setRange(0, 59);  m_runMinutes-&gt;setFixedWidth(40);
+    m_runSeconds = new QSpinBox; m_runSeconds-&gt;setRange(0, 59);  m_runSeconds-&gt;setFixedWidth(40);
+    runLay-&gt;addWidget(m_runHours,   0, 0); runLay-&gt;addWidget(new QLabel("Hours"),   0, 1);
+    runLay-&gt;addWidget(m_runMinutes, 1, 0); runLay-&gt;addWidget(new QLabel("Minutes"), 1, 1);
+    runLay-&gt;addWidget(m_runSeconds, 2, 0); runLay-&gt;addWidget(new QLabel("Seconds"), 2, 1);
+    row1-&gt;addWidget(runGroup);</span>
+
+    // Ramp Up Time + Record Results (combined column)
+<span style = "background-color:#dfd">    auto *rampCol = new QVBoxLayout;
+    rampCol-&gt;setSpacing(4);
+    auto *rampGroup = new QGroupBox("Ramp Up Time");
+    auto *rampLay   = new QHBoxLayout(rampGroup);
+    m_rampSeconds = new QSpinBox; m_rampSeconds-&gt;setRange(0, 9999); m_rampSeconds-&gt;setFixedWidth(50);
+    rampLay-&gt;addWidget(m_rampSeconds);
+    rampLay-&gt;addWidget(new QLabel("Seconds"));
+    rampLay-&gt;addStretch();
+    rampCol-&gt;addWidget(rampGroup);
+    auto *recGroup = new QGroupBox("Record Results");
+    auto *recLay   = new QHBoxLayout(recGroup);
+    m_recordResults = new QComboBox;
+    m_recordResults-&gt;addItems({"All", "First Run", "Last Run", "None"});
+    recLay-&gt;addWidget(m_recordResults);
+    recLay-&gt;addStretch();
+    rampCol-&gt;addWidget(recGroup);
+    row1-&gt;addLayout(rampCol);</span>
+
+<span style = "background-color:#dfd">    row1-&gt;addStretch(1);
+    root-&gt;addLayout(row1);</span>
+
+    // ---- Cycling Options ---------------------------------------------------
+<span style = "background-color:#dfd">    auto *cycGroup = new QGroupBox("Cycling Options");
+    auto *cycLay   = new QVBoxLayout(cycGroup);
+    cycLay-&gt;setSpacing(4);</span>
+
+<span style = "background-color:#dfd">    m_cyclingMode = new QComboBox;
+    m_cyclingMode-&gt;addItems({</span>
+        "Normal -- run all selected targets for all workers.",
+        "Cycle worker count",
+        "Cycle target count",
+        "Cycle outstanding I/Os"
+    });
+<span style = "background-color:#dfd">    cycLay-&gt;addWidget(m_cyclingMode);</span>
+
+    // Sub-row: Workers | Targets | # Outstanding I/Os
+<span style = "background-color:#dfd">    auto *cycRow = new QHBoxLayout;
+    cycRow-&gt;setSpacing(12);</span>
+
+    // Workers sub-group
+<span style = "background-color:#dfd">    auto *wGrp = new QGroupBox("Workers");
+    auto *wLay = new QGridLayout(wGrp);
+    wLay-&gt;setSpacing(3);
+    m_workerStart    = new QSpinBox; m_workerStart-&gt;setRange(1, 9999);    m_workerStart-&gt;setFixedWidth(50);
+    m_workerStep     = new QSpinBox; m_workerStep-&gt;setRange(1, 9999);     m_workerStep-&gt;setFixedWidth(50);
+    m_workerStepping = new QComboBox; m_workerStepping-&gt;addItems({"Linear Stepping", "Exponential Stepping"});
+    wLay-&gt;addWidget(new QLabel("Start"), 0, 0);
+    wLay-&gt;addWidget(m_workerStart,       0, 1);
+    wLay-&gt;addWidget(new QLabel("Step"),  1, 0);
+    wLay-&gt;addWidget(m_workerStep,        1, 1);
+    wLay-&gt;addWidget(m_workerStepping,    2, 0, 1, 2);
+    cycRow-&gt;addWidget(wGrp);</span>
+
+    // Targets sub-group
+<span style = "background-color:#dfd">    auto *tGrp = new QGroupBox("Targets");
+    auto *tLay = new QGridLayout(tGrp);
+    tLay-&gt;setSpacing(3);
+    m_targetStart    = new QSpinBox; m_targetStart-&gt;setRange(1, 9999);    m_targetStart-&gt;setFixedWidth(50);
+    m_targetStep     = new QSpinBox; m_targetStep-&gt;setRange(1, 9999);     m_targetStep-&gt;setFixedWidth(50);
+    m_targetStepping = new QComboBox; m_targetStepping-&gt;addItems({"Linear Stepping", "Exponential Stepping"});
+    tLay-&gt;addWidget(new QLabel("Start"), 0, 0);
+    tLay-&gt;addWidget(m_targetStart,       0, 1);
+    tLay-&gt;addWidget(new QLabel("Step"),  1, 0);
+    tLay-&gt;addWidget(m_targetStep,        1, 1);
+    tLay-&gt;addWidget(m_targetStepping,    2, 0, 1, 2);
+    cycRow-&gt;addWidget(tGrp);</span>
+
+    // # Outstanding I/Os sub-group
+<span style = "background-color:#dfd">    auto *iGrp = new QGroupBox("# of Outstanding I/Os");
+    auto *iLay = new QGridLayout(iGrp);
+    iLay-&gt;setSpacing(3);
+    m_ioqStart   = new QSpinBox; m_ioqStart-&gt;setRange(1, 9999);   m_ioqStart-&gt;setFixedWidth(50);
+    m_ioqEnd     = new QSpinBox; m_ioqEnd-&gt;setRange(1, 9999);     m_ioqEnd-&gt;setFixedWidth(50);
+    m_ioqPower   = new QSpinBox; m_ioqPower-&gt;setRange(1, 64);     m_ioqPower-&gt;setFixedWidth(50);
+    m_ioqStepping= new QComboBox; m_ioqStepping-&gt;addItems({"Linear Stepping", "Exponential Stepping"});
+    iLay-&gt;addWidget(new QLabel("Start"), 0, 0); iLay-&gt;addWidget(m_ioqStart,   0, 1);
+    iLay-&gt;addWidget(new QLabel("End"),   1, 0); iLay-&gt;addWidget(m_ioqEnd,     1, 1);
+    iLay-&gt;addWidget(new QLabel("Power"), 2, 0); iLay-&gt;addWidget(m_ioqPower,   2, 1);
+    iLay-&gt;addWidget(m_ioqStepping, 3, 0, 1, 2);
+    cycRow-&gt;addWidget(iGrp);
+    cycRow-&gt;addStretch();</span>
+
+<span style = "background-color:#dfd">    cycLay-&gt;addLayout(cycRow);
+    root-&gt;addWidget(cycGroup);</span>
+
+<span style = "background-color:#dfd">    root-&gt;addStretch();</span>
+
+    // ---- Wire up all controls -----------------------------------------------
+<span style = "background-color:#fdd">    auto save = [this](){ saveConfig(); };</span>
+<span style = "background-color:#dfd">    connect(m_description, &amp;QLineEdit::editingFinished, this, save);
+    connect(m_runHours,    QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_runMinutes,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_runSeconds,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_rampSeconds, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_recordResults, QOverload&lt;int&gt;::of(&amp;QComboBox::currentIndexChanged), this, save);
+    connect(m_cyclingMode,   QOverload&lt;int&gt;::of(&amp;QComboBox::currentIndexChanged), this, save);
+    connect(m_workerStart,   QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_workerStep,    QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_workerStepping,QOverload&lt;int&gt;::of(&amp;QComboBox::currentIndexChanged), this, save);
+    connect(m_targetStart,   QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_targetStep,    QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_targetStepping,QOverload&lt;int&gt;::of(&amp;QComboBox::currentIndexChanged), this, save);
+    connect(m_ioqStart,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_ioqEnd,    QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_ioqPower,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), this, save);
+    connect(m_ioqStepping, QOverload&lt;int&gt;::of(&amp;QComboBox::currentIndexChanged), this, save);
+}</span>
+
+// =============================================================================
+// Config load/save
+// =============================================================================
+
+void QtPageResults::loadConfig()
+<span style = "background-color:#dfd">{
+    m_updating = true;
+    const TestConfig &amp;c = m_engine-&gt;testConfig();
+    m_description-&gt;setText(QString::fromStdString(c.description));
+    m_runHours-&gt;setValue(c.runHours);
+    m_runMinutes-&gt;setValue(c.runMinutes);
+    m_runSeconds-&gt;setValue(c.runSeconds);
+    m_rampSeconds-&gt;setValue(c.rampSeconds);
+    m_recordResults-&gt;setCurrentIndex(c.recordResults);
+    m_cyclingMode-&gt;setCurrentIndex(c.cyclingMode);
+    m_workerStart-&gt;setValue(c.workerStart);
+    m_workerStep-&gt;setValue(c.workerStep);
+    m_workerStepping-&gt;setCurrentIndex(c.workerStepping);
+    m_targetStart-&gt;setValue(c.targetStart);
+    m_targetStep-&gt;setValue(c.targetStep);
+    m_targetStepping-&gt;setCurrentIndex(c.targetStepping);
+    m_ioqStart-&gt;setValue(c.ioqStart);
+    m_ioqEnd-&gt;setValue(c.ioqEnd);
+    m_ioqPower-&gt;setValue(c.ioqPower);
+    m_ioqStepping-&gt;setCurrentIndex(c.ioqStepping);
+    m_updating = false;
+}</span>
+
+void QtPageResults::saveConfig()
+<span style = "background-color:#dfd">{
+    if (m_updating) return;
+    TestConfig c;
+    c.description   = m_description-&gt;text().toStdString();
+    c.runHours      = m_runHours-&gt;value();
+    c.runMinutes    = m_runMinutes-&gt;value();
+    c.runSeconds    = m_runSeconds-&gt;value();
+    c.rampSeconds   = m_rampSeconds-&gt;value();
+    c.recordResults = m_recordResults-&gt;currentIndex();
+    c.cyclingMode   = m_cyclingMode-&gt;currentIndex();
+    c.workerStart   = m_workerStart-&gt;value();
+    c.workerStep    = m_workerStep-&gt;value();
+    c.workerStepping= m_workerStepping-&gt;currentIndex();
+    c.targetStart   = m_targetStart-&gt;value();
+    c.targetStep    = m_targetStep-&gt;value();
+    c.targetStepping= m_targetStepping-&gt;currentIndex();
+    c.ioqStart      = m_ioqStart-&gt;value();
+    c.ioqEnd        = m_ioqEnd-&gt;value();
+    c.ioqPower      = m_ioqPower-&gt;value();
+    c.ioqStepping   = m_ioqStepping-&gt;currentIndex();
+    m_engine-&gt;setTestConfig(c);
+}</span>
+
+<span style = "background-color:#dfd">void QtPageResults::onConfigChanged() { loadConfig(); }</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,771 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>PageSetup.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / PageSetup.cpp                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CPageSetup class, which is      ## */
+/* ##               responsible for the "Test Setup" tab in Iometer's     ## */
+/* ##               main window.                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-05-07 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Modified output of the current timestamp to         ## */
+/* ##                 contain milliseconds as well.                       ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "PageSetup.h"
+#include "GalileoView.h"
+#include "core/IcfDocument.h"
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CPageSetup property page
+
+<span style = "background-color:#dfd">IMPLEMENT_DYNCREATE(CPageSetup, CPropertyPage)</span>
+
+<span style = "background-color:#dfd">CPageSetup::CPageSetup():CPropertyPage(CPageSetup::IDD)
+{</span>
+	//{{AFX_DATA_INIT(CPageSetup)
+	//}}AFX_DATA_INIT
+<span style = "background-color:#dfd">}</span>
+
+CPageSetup::~CPageSetup()
+<span style = "background-color:#dfd">{
+}</span>
+
+void CPageSetup::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CPropertyPage::DoDataExchange(pDX);
+<span style = "background-color:#dfd">	DDX_Control(pDX, EWorkerStart, worker_cycling.start_box);
+	DDX_Control(pDX, EWorkerStep, worker_cycling.step_box);
+	DDX_Control(pDX, CWStepType, worker_cycling.step_sel_box);</span>
+
+<span style = "background-color:#dfd">	DDX_Control(pDX, EDiskStart, target_cycling.start_box);
+	DDX_Control(pDX, EDiskStep, target_cycling.step_box);
+	DDX_Control(pDX, CDStepType, target_cycling.step_sel_box);</span>
+
+<span style = "background-color:#dfd">	DDX_Control(pDX, EQueueStart, queue_cycling.start_box);
+	DDX_Control(pDX, EQueueEnd, queue_cycling.end_box);
+	DDX_Control(pDX, EQueueStep, queue_cycling.step_box);
+	DDX_Control(pDX, CQStepType, queue_cycling.step_sel_box);</span>
+	//{{AFX_DATA_MAP(CPageSetup)
+<span style = "background-color:#dfd">	DDX_Control(pDX, CResultType, m_CResultType);
+	DDX_Control(pDX, EDiskWorkerCount, m_EDiskWorkerCount);
+	DDX_Control(pDX, ENetWorkerCount, m_ENetWorkerCount);
+	DDX_Control(pDX, ETestName, m_ETestName);
+	DDX_Control(pDX, ERunTimeSeconds, m_ERunTimeSeconds);
+	DDX_Control(pDX, ERunTimeMinutes, m_ERunTimeMinutes);
+	DDX_Control(pDX, ERunTimeHours, m_ERunTimeHours);
+	DDX_Control(pDX, ERampTime, m_ERampTime);
+	DDX_Control(pDX, CTestType, m_CTestType);</span>
+	//}}AFX_DATA_MAP
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CPageSetup, CPropertyPage)</span>
+    //{{AFX_MSG_MAP(CPageSetup)
+    ON_EN_CHANGE(EDiskWorkerCount, OnChangeEDiskWorkerCount)
+    ON_EN_CHANGE(ENetWorkerCount, OnChangeENetWorkerCount)
+    ON_CBN_SELCHANGE(CDStepType, OnSelchangeCDStepType)
+    ON_CBN_SELCHANGE(CWStepType, OnSelchangeCWStepType)
+    ON_CBN_SELCHANGE(CQStepType, OnSelchangeCQStepType)
+    ON_EN_KILLFOCUS(EDiskStart, OnKillfocusEDiskStart)
+    ON_EN_KILLFOCUS(EDiskStep, OnKillfocusEDiskStep)
+    ON_EN_KILLFOCUS(EQueueEnd, OnKillfocusEQueueEnd)
+    ON_EN_KILLFOCUS(EQueueStart, OnKillfocusEQueueStart)
+    ON_EN_KILLFOCUS(EQueueStep, OnKillfocusEQueueStep)
+    ON_EN_KILLFOCUS(ERampTime, OnKillfocusERampTime)
+    ON_EN_KILLFOCUS(ERunTimeHours, OnKillfocusERunTimeHours)
+    ON_EN_KILLFOCUS(ERunTimeMinutes, OnKillfocusERunTimeMinutes)
+    ON_EN_KILLFOCUS(ERunTimeSeconds, OnKillfocusERunTimeSeconds)
+    ON_EN_KILLFOCUS(EDiskWorkerCount, OnKillfocusEDiskWorkerCount)
+    ON_EN_KILLFOCUS(ENetWorkerCount, OnKillfocusENetWorkerCount)
+    ON_EN_KILLFOCUS(EWorkerStart, OnKillfocusEWorkerStart)
+    ON_EN_KILLFOCUS(EWorkerStep, OnKillfocusEWorkerStep)
+    ON_CBN_SELCHANGE(CResultType, OnSelchangeCResultType)
+    ON_CBN_SELCHANGE(CTestType, OnSelchangeCTestType)
+    ON_BN_CLICKED(RDiskSpawnCPUs, OnRDiskSpawnCPUs)
+    ON_BN_CLICKED(RDiskSpawnUser, OnRDiskSpawnUser)
+    ON_BN_CLICKED(RNetSpawnCPUs, OnRNetSpawnCPUs)
+ON_BN_CLICKED(RNetSpawnUser, OnRNetSpawnUser)
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+/////////////////////////////////////////////////////////////////////////////
+// CPageSetup message handlers
+BOOL CPageSetup::OnInitDialog()
+<span style = "background-color:#dfd">{
+	CPropertyPage::OnInitDialog();</span>
+
+	// Set run time.
+<span style = "background-color:#dfd">	minutes = 0;</span>
+	seconds = 0;
+<span style = "background-color:#dfd">	hours = 0;</span>
+	ramp_time = 0;
+
+<span style = "background-color:#dfd">	test_name = _T("");	// blank test description</span>
+
+<span style = "background-color:#dfd">	SetDlgItemInt(EDiskWorkerCount, 0);	// Display a number.
+	SetDlgItemInt(ENetWorkerCount, 0);	// Display a number.</span>
+	disk_worker_count = -1;	// default number of disk workers               
+#ifdef _DEBUG
+	net_worker_count = -1;	// create network workers for debug
+#else
+	net_worker_count = 0;	// default number of network workers
+#endif
+	test_type = 0;		// normal test by default, disable cycling info below
+
+	// Set worker cycling stepping.
+<span style = "background-color:#dfd">	SetCyclingInfo(&amp;worker_cycling, FALSE, 1, IOERROR, 1, StepLinear);
+	OnSelchangeCWStepType();
+	SetCyclingInfo(&amp;target_cycling, FALSE, 1, IOERROR, 1, StepLinear);
+	OnSelchangeCDStepType();
+	SetCyclingInfo(&amp;queue_cycling, FALSE, 1, 32, 2, StepExponential);
+	OnSelchangeCQStepType();</span>
+
+#ifdef _DEBUG
+	result_type = RecordNone;	// don't save results for debug code
+#else
+	result_type = RecordAll;	// save all results for release code
+#endif
+
+<span style = "background-color:#dfd">	UpdateData(FALSE);</span>
+
+	return TRUE;		// return TRUE unless you set the focus to a control
+	// EXCEPTION: OCX Property Pages should return FALSE
+<span style = "background-color:#dfd">}</span>
+
+//
+// Enable or disable the display for user access.
+//
+void CPageSetup::EnableWindow(BOOL enable)
+<span style = "background-color:#dfd">{</span>
+	// All the windows are enabled or disabled at the same time.
+	// Don't bother enabling the windows if they allready are.
+<span style = "background-color:#dfd">	if ((theApp.test_state != TestIdle) || (m_CResultType.IsWindowEnabled() == enable))</span>
+		return;
+
+<span style = "background-color:#dfd">	m_CResultType.EnableWindow(enable);
+	m_CResultType.RedrawWindow();
+	m_CTestType.EnableWindow(enable);
+	m_CTestType.RedrawWindow();</span>
+
+<span style = "background-color:#dfd">	EnableCyclingInfo(&amp;worker_cycling, enable);
+	EnableCyclingInfo(&amp;target_cycling, enable);
+	EnableCyclingInfo(&amp;queue_cycling, enable);</span>
+
+<span style = "background-color:#dfd">	m_ERampTime.EnableWindow(enable);
+	m_ERunTimeHours.EnableWindow(enable);
+	m_ERunTimeMinutes.EnableWindow(enable);
+	m_ERunTimeSeconds.EnableWindow(enable);
+	m_EDiskWorkerCount.EnableWindow(enable);
+	m_ENetWorkerCount.EnableWindow(enable);
+	m_ETestName.EnableWindow(enable);</span>
+
+<span style = "background-color:#dfd">	GetDlgItem(RDiskSpawnCPUs)-&gt;EnableWindow(enable);
+	GetDlgItem(RDiskSpawnUser)-&gt;EnableWindow(enable);
+	GetDlgItem(RNetSpawnCPUs)-&gt;EnableWindow(enable);
+	GetDlgItem(RNetSpawnUser)-&gt;EnableWindow(enable);</span>
+
+<span style = "background-color:#dfd">	UpdateWindow();
+}</span>
+
+//
+// Enable or disable cycling information on the GUI.  This is usually done as a result 
+// of the selected test type. 
+//
+void CPageSetup::EnableCyclingInfo(Cycling_Info * cycling_info, BOOL enable)
+<span style = "background-color:#dfd">{</span>
+	// Do not enable the GUI unless its cycling type is selected.
+<span style = "background-color:#dfd">	if (enable &amp;&amp; !cycling_info-&gt;selected)</span>
+		return;
+
+<span style = "background-color:#dfd">	cycling_info-&gt;start_box.EnableWindow(enable);
+	cycling_info-&gt;start_box.RedrawWindow();</span>
+
+	// Make sure that an end cycling number is supported.
+<span style = "background-color:#dfd">	if (cycling_info-&gt;end != IOERROR) {</span>
+		// End edit box exists, so update it.
+<span style = "background-color:#dfd">		cycling_info-&gt;end_box.EnableWindow(enable);
+		cycling_info-&gt;end_box.RedrawWindow();</span>
+	}
+
+<span style = "background-color:#dfd">	cycling_info-&gt;step_box.EnableWindow(enable);
+	cycling_info-&gt;step_box.RedrawWindow();</span>
+
+<span style = "background-color:#dfd">	cycling_info-&gt;step_sel_box.EnableWindow(enable);
+	cycling_info-&gt;step_sel_box.RedrawWindow();
+}</span>
+
+//
+// Set cycling information.
+//
+void CPageSetup::SetCyclingInfo(Cycling_Info * cycle_info, BOOL selected, int start, int end, int step, int cycle_type)
+<span style = "background-color:#dfd">{</span>
+	cycle_info-&gt;selected = selected;
+<span style = "background-color:#dfd">	cycle_info-&gt;start = start;
+	cycle_info-&gt;end = end;
+	cycle_info-&gt;step = step;
+	cycle_info-&gt;step_type = cycle_type;
+	cycle_info-&gt;step_sel_box.SetCurSel(cycle_type);</span>
+
+<span style = "background-color:#dfd">	EnableCyclingInfo(cycle_info, selected);</span>
+
+<span style = "background-color:#dfd">	UpdateWindow();
+}</span>
+
+//
+// Saving test setup and its starting time to a file.
+//
+void CPageSetup::SaveResults(ostream * file)
+<span style = "background-color:#dfd">{</span>
+	struct _timeb tb;
+	struct tm *ptm;
+	char acDummy[64];
+
+<span style = "background-color:#dfd">	(*file) &lt;&lt; "'Test Type,Test Description" &lt;&lt; endl</span>
+	    &lt;&lt; m_CTestType.GetCurSel() &lt;&lt; "," &lt;&lt; (LPCTSTR) test_name &lt;&lt; endl;
+
+<span style = "background-color:#dfd">	(*file) &lt;&lt; "'Version" &lt;&lt; endl &lt;&lt; theApp.GetVersionString(TRUE) &lt;&lt; endl;</span>
+
+	// Write current timestamp into the result file
+<span style = "background-color:#dfd">	(*file) &lt;&lt; "'Time Stamp" &lt;&lt; endl;
+	_ftime(&amp;tb);
+	ptm = localtime(&amp;tb.time);
+	snprintf(acDummy, 64, "%04d-%02d-%02d %02d:%02d:%02d:%003d", ptm-&gt;tm_year + 1900,</span>
+		ptm-&gt;tm_mon + 1, ptm-&gt;tm_mday, ptm-&gt;tm_hour, ptm-&gt;tm_min, ptm-&gt;tm_sec, tb.millitm);
+<span style = "background-color:#dfd">	(*file) &lt;&lt; acDummy &lt;&lt; endl;
+}</span>
+
+//
+// Saving test setup information to a file.
+//
+BOOL CPageSetup::SaveConfig(ostream &amp; outfile)
+<span style = "background-color:#dfd">{</span>
+	// Update memory variables with data located on GUI.
+<span style = "background-color:#dfd">	UpdateData(TRUE);</span>
+
+	// The 'TEST SETUP byte format is the shared writer (iocore::IcfWriter); this
+	// adapter gathers the page members into the struct and keeps the validations
+	// (and their exact error dialogs) the old in-place writer performed.
+<span style = "background-color:#dfd">	if (result_type &lt; RecordAll || result_type &gt; RecordNone) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Error while saving test setup information.  "</span>
+			     "Record Results setting in Test Setup tab is invalid.  "
+			     "Please report this as an Iometer bug.");
+		return FALSE;
+	}
+<span style = "background-color:#dfd">	if (worker_cycling.step_type != StepLinear &amp;&amp; worker_cycling.step_type != StepExponential) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Error saving test setup data.  Worker cycling step type "</span>
+			     "is neither StepLinear nor StepExponential.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+<span style = "background-color:#dfd">	if (target_cycling.step_type != StepLinear &amp;&amp; target_cycling.step_type != StepExponential) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Error saving test setup data.  Disk cycling step type "</span>
+			     "is neither StepLinear nor StepExponential.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+<span style = "background-color:#dfd">	if (queue_cycling.step_type != StepLinear &amp;&amp; queue_cycling.step_type != StepExponential) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Error saving test setup data.  Queue depth cycling step type "</span>
+			     "is neither LINEAR nor EXPONENTIAL.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	iocore::IcfTestSetup ts;
+	ts.testName        = (LPCTSTR) test_name;
+	ts.hours           = hours;
+	ts.minutes         = minutes;
+	ts.seconds         = seconds;
+	ts.rampTime        = ramp_time;
+	ts.diskWorkerCount = disk_worker_count;
+	ts.netWorkerCount  = net_worker_count;
+	ts.resultType      = result_type;
+	ts.workerCycling.start = worker_cycling.start;
+	ts.workerCycling.step  = worker_cycling.step;
+	ts.workerCycling.stepType = worker_cycling.step_type;
+	ts.targetCycling.start = target_cycling.start;
+	ts.targetCycling.step  = target_cycling.step;
+	ts.targetCycling.stepType = target_cycling.step_type;
+	ts.queueCycling.start = queue_cycling.start;
+	ts.queueCycling.end   = queue_cycling.end;
+	ts.queueCycling.step  = queue_cycling.step;
+	ts.queueCycling.stepType = queue_cycling.step_type;
+	ts.testType        = test_type;</span>
+
+<span style = "background-color:#dfd">	iocore::IcfWriter::writeTestSetup(outfile, ts);</span>
+
+<span style = "background-color:#dfd">	return TRUE;		// no errors (FALSE indicates an error)</span>
+<span style = "background-color:#fdd">}</span>
+
+//
+// Loading test setup information.
+//
+BOOL CPageSetup::LoadConfig(const CString &amp; infilename)
+<span style = "background-color:#dfd">{</span>
+	// The 'TEST SETUP parsing is shared core logic (iocore::IcfDocument, a
+	// faithful port of the parser that used to live here). This adapter
+	// pre-fills the struct with the page's current values (the loader only
+	// overwrites keys present in the file, like the old member writes did),
+	// replays the recorded MFC error texts as dialogs, and copies back.
+<span style = "background-color:#dfd">	iocore::IcfDocument doc((LPCTSTR) infilename);
+	iocore::IcfTestSetup ts;</span>
+
+<span style = "background-color:#dfd">	ts.testName   = (LPCTSTR) test_name;
+	ts.hours      = hours;
+	ts.minutes    = minutes;
+	ts.seconds    = seconds;
+	ts.rampTime   = ramp_time;
+	ts.diskWorkerCount = disk_worker_count;
+	ts.netWorkerCount  = net_worker_count;
+	ts.resultType = result_type;
+	ts.testType   = test_type;
+	ts.workerCycling.start    = worker_cycling.start;
+	ts.workerCycling.end      = worker_cycling.end;
+	ts.workerCycling.step     = worker_cycling.step;
+	ts.workerCycling.stepType = worker_cycling.step_type;
+	ts.targetCycling.start    = target_cycling.start;
+	ts.targetCycling.end      = target_cycling.end;
+	ts.targetCycling.step     = target_cycling.step;
+	ts.targetCycling.stepType = target_cycling.step_type;
+	ts.queueCycling.start     = queue_cycling.start;
+	ts.queueCycling.end       = queue_cycling.end;
+	ts.queueCycling.step      = queue_cycling.step;
+	ts.queueCycling.stepType  = queue_cycling.step_type;</span>
+
+<span style = "background-color:#dfd">	const bool ok = doc.loadTestSetup(ts);</span>
+
+	// Show the error dialogs exactly as the old in-place parser did.
+<span style = "background-color:#dfd">	for (size_t i = 0; i &lt; doc.errors().size(); i++)</span>
+<span style = "background-color:#fdd">		ErrorMessage(CString(doc.errors()[i].c_str()));</span>
+
+<span style = "background-color:#dfd">	if (!ok)</span>
+		return FALSE;
+
+<span style = "background-color:#dfd">	test_name = ts.testName.c_str();
+	hours     = ts.hours;
+	minutes   = ts.minutes;
+	seconds   = ts.seconds;
+	ramp_time = ts.rampTime;
+	disk_worker_count = ts.diskWorkerCount;
+	net_worker_count  = ts.netWorkerCount;
+	result_type = ts.resultType;
+	test_type   = ts.testType;
+	worker_cycling.start     = ts.workerCycling.start;
+	worker_cycling.end       = ts.workerCycling.end;
+	worker_cycling.step      = ts.workerCycling.step;
+	worker_cycling.step_type = ts.workerCycling.stepType;
+	target_cycling.start     = ts.targetCycling.start;
+	target_cycling.end       = ts.targetCycling.end;
+	target_cycling.step      = ts.targetCycling.step;
+	target_cycling.step_type = ts.targetCycling.stepType;
+	queue_cycling.start      = ts.queueCycling.start;
+	queue_cycling.end        = ts.queueCycling.end;
+	queue_cycling.step       = ts.queueCycling.step;
+	queue_cycling.step_type  = ts.queueCycling.stepType;</span>
+
+	// Update the GUI with the values read in from the file.
+<span style = "background-color:#dfd">	UpdateData(FALSE);</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Retrieve the specified run time from the GUI and return it (in ms).
+//
+int CPageSetup::GetRunTime()
+<span style = "background-color:#dfd">{
+	return (1000 *		// ms per second x </span>
+		(hours * 3600	// ( seconds per hour
+		 + minutes * 60	// + seconds per minute
+		 + seconds));	// + seconds )
+<span style = "background-color:#dfd">}</span>
+
+//
+//      Updating either the GUI with data in memory or vice versa.
+//
+void CPageSetup::UpdateData(BOOL save_from_window)
+<span style = "background-color:#dfd">{
+	if (save_from_window) {</span>
+		// Update all the combo box selections.
+<span style = "background-color:#dfd">		result_type = m_CResultType.GetCurSel();
+		test_type = m_CTestType.GetCurSel();
+		worker_cycling.step_type = worker_cycling.step_sel_box.GetCurSel();
+		target_cycling.step_type = target_cycling.step_sel_box.GetCurSel();
+		queue_cycling.step_type = queue_cycling.step_sel_box.GetCurSel();</span>
+
+<span style = "background-color:#dfd">		CheckData(ERunTimeHours, &amp;hours);
+		CheckData(ERunTimeMinutes, &amp;minutes);
+		CheckData(ERunTimeSeconds, &amp;seconds);
+		CheckData(ERampTime, &amp;ramp_time);
+		CheckData(EWorkerStep, &amp;(worker_cycling.step), TRUE);
+		CheckData(EDiskStep, &amp;(target_cycling.step), TRUE);
+		CheckData(EQueueStep, &amp;(queue_cycling.step), TRUE);
+		CheckData(EWorkerStart, &amp;(worker_cycling.start), TRUE);
+		CheckData(EDiskStart, &amp;(target_cycling.start), TRUE);
+		CheckData(EQueueStart, &amp;(queue_cycling.start), TRUE);
+		CheckData(EQueueEnd, &amp;(queue_cycling.end), TRUE);</span>
+
+<span style = "background-color:#dfd">		if (GetCheckedRadioButton(RDiskSpawnCPUs, RDiskSpawnUser) == RDiskSpawnCPUs)
+			disk_worker_count = -1;</span>
+		else
+<span style = "background-color:#dfd">			CheckData(EDiskWorkerCount, &amp;disk_worker_count, FALSE);</span>
+
+<span style = "background-color:#dfd">		if (GetCheckedRadioButton(RNetSpawnCPUs, RNetSpawnUser) == RNetSpawnCPUs)</span>
+<span style = "background-color:#fdd">			net_worker_count = -1;</span>
+		else
+<span style = "background-color:#dfd">			CheckData(ENetWorkerCount, &amp;net_worker_count, FALSE);</span>
+
+<span style = "background-color:#dfd">		GetDlgItemText(ETestName, test_name);</span>
+		// Find all commas and replace with '-'
+<span style = "background-color:#dfd">		test_name.Replace(',', '-');</span>
+	} else {
+		// Update all the combo box selections.
+<span style = "background-color:#dfd">		m_CResultType.SetCurSel(result_type);
+		m_CTestType.SetCurSel(test_type);
+		worker_cycling.step_sel_box.SetCurSel(worker_cycling.step_type);
+		target_cycling.step_sel_box.SetCurSel(target_cycling.step_type);
+		queue_cycling.step_sel_box.SetCurSel(queue_cycling.step_type);</span>
+
+		// Enable/disable and label cycling controls.
+<span style = "background-color:#dfd">		OnSelchangeCTestType();
+		SetStepTypeLabel(TWorkerStep, worker_cycling.step_type);
+		SetStepTypeLabel(TDiskStep, target_cycling.step_type);
+		SetStepTypeLabel(TQueueStep, queue_cycling.step_type);</span>
+
+		// Update the run time and other default information.
+<span style = "background-color:#dfd">		SetDlgItemInt(ERunTimeHours, hours, FALSE);
+		SetDlgItemInt(ERunTimeMinutes, minutes, FALSE);
+		SetDlgItemInt(ERunTimeSeconds, seconds, FALSE);</span>
+
+<span style = "background-color:#dfd">		if (disk_worker_count == -1) {
+			CheckRadioButton(RDiskSpawnCPUs, RDiskSpawnUser, RDiskSpawnCPUs);
+			m_EDiskWorkerCount.EnableWindow(FALSE);
+		} else {
+			CheckRadioButton(RDiskSpawnCPUs, RDiskSpawnUser, RDiskSpawnUser);
+			m_EDiskWorkerCount.EnableWindow(TRUE);
+			SetDlgItemInt(EDiskWorkerCount, disk_worker_count, FALSE);</span>
+		}
+
+<span style = "background-color:#dfd">		if (net_worker_count == -1) {</span>
+<span style = "background-color:#fdd">			CheckRadioButton(RNetSpawnCPUs, RNetSpawnUser, RNetSpawnCPUs);
+			m_ENetWorkerCount.EnableWindow(FALSE);
+		} else {</span>
+<span style = "background-color:#dfd">			CheckRadioButton(RNetSpawnCPUs, RNetSpawnUser, RNetSpawnUser);
+			m_ENetWorkerCount.EnableWindow(TRUE);
+			SetDlgItemInt(ENetWorkerCount, net_worker_count, FALSE);</span>
+		}
+
+<span style = "background-color:#dfd">		SetDlgItemInt(ERampTime, ramp_time, FALSE);</span>
+
+		// Set the displayed value for the step size and start values.
+<span style = "background-color:#dfd">		SetDlgItemInt(EWorkerStep, worker_cycling.step, FALSE);
+		SetDlgItemInt(EDiskStep, target_cycling.step, FALSE);
+		SetDlgItemInt(EQueueStep, queue_cycling.step, FALSE);
+		SetDlgItemInt(EWorkerStart, worker_cycling.start, FALSE);
+		SetDlgItemInt(EDiskStart, target_cycling.start, FALSE);
+		SetDlgItemInt(EQueueStart, queue_cycling.start, FALSE);
+		SetDlgItemInt(EQueueEnd, queue_cycling.end, FALSE);</span>
+
+		// Set the test name.
+<span style = "background-color:#dfd">		SetDlgItemText(ETestName, test_name);</span>
+
+<span style = "background-color:#dfd">		UpdateWindow();</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+void CPageSetup::CheckData(UINT item_id, int *var, BOOL no_zero)
+<span style = "background-color:#dfd">{
+	if ((*var == 0) &amp;&amp; no_zero) {</span>
+<span style = "background-color:#fdd">		*var = 1;
+		SetDlgItemInt(item_id, *var, FALSE);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+void CPageSetup::OnChangeEDiskWorkerCount()
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+<span style = "background-color:#dfd">	m_EDiskWorkerCount.GetWindowText(buffer);
+	if (!buffer.IsEmpty())
+		disk_worker_count = GetDlgItemInt(EDiskWorkerCount, NULL, FALSE);
+}</span>
+
+void CPageSetup::OnChangeENetWorkerCount()
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+<span style = "background-color:#dfd">	m_ENetWorkerCount.GetWindowText(buffer);
+	if (!buffer.IsEmpty())
+		net_worker_count = GetDlgItemInt(ENetWorkerCount, NULL, FALSE);
+}</span>
+
+//
+// Set the label for the step edit box based on the step type.
+//
+void CPageSetup::SetStepTypeLabel(int text_id, int step_type)
+<span style = "background-color:#dfd">{</span>
+	if (step_type == StepLinear)
+		SetDlgItemText(text_id, "Step");
+	else
+		SetDlgItemText(text_id, "Power of");
+<span style = "background-color:#dfd">	UpdateWindow();
+}</span>
+
+// Worker step type has changed.
+void CPageSetup::OnSelchangeCWStepType()
+<span style = "background-color:#dfd">{
+	worker_cycling.step_type = worker_cycling.step_sel_box.GetCurSel();
+	SetStepTypeLabel(TWorkerStep, worker_cycling.step_type);
+}</span>
+
+// Disk step type has changed.
+void CPageSetup::OnSelchangeCDStepType()
+<span style = "background-color:#dfd">{
+	target_cycling.step_type = target_cycling.step_sel_box.GetCurSel();
+	SetStepTypeLabel(TDiskStep, target_cycling.step_type);
+}</span>
+
+// Queue depth step type has changed.
+void CPageSetup::OnSelchangeCQStepType()
+<span style = "background-color:#dfd">{
+	queue_cycling.step_type = queue_cycling.step_sel_box.GetCurSel();
+	SetStepTypeLabel(TQueueStep, queue_cycling.step_type);
+}</span>
+
+// 
+// When an edit box loses the input focus, reverts to the previous
+// value if left blank, otherwise saves the value.
+//
+void CPageSetup::Killfocus(int edit_ID, int *value)
+<span style = "background-color:#dfd">{
+	CString buffer;</span>
+
+	// Get the window's text to check content.
+<span style = "background-color:#dfd">	GetDlgItem(edit_ID)-&gt;GetWindowText(buffer);
+	if (buffer.IsEmpty())</span>
+		// If blank revert to previous value.
+<span style = "background-color:#fdd">		SetDlgItemInt(edit_ID, *value, FALSE);</span>
+	else
+<span style = "background-color:#dfd">		*value = GetDlgItemInt(edit_ID);
+}</span>
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// The following group of functions are called by the windows framework when
+// the coresponding edit boxes lose the input focus.
+//
+/////////////////////////////////////////////////////////////////////////////
+
+void CPageSetup::OnKillfocusEDiskStart()
+<span style = "background-color:#dfd">{
+	Killfocus(EDiskStart, &amp;(target_cycling.start));</span>
+}
+
+void CPageSetup::OnKillfocusEDiskStep()
+<span style = "background-color:#dfd">{
+	Killfocus(EDiskStep, &amp;(target_cycling.step));</span>
+}
+
+void CPageSetup::OnKillfocusEQueueEnd()
+<span style = "background-color:#fdd">{
+	Killfocus(EQueueEnd, &amp;(queue_cycling.end));</span>
+}
+
+void CPageSetup::OnKillfocusEQueueStart()
+<span style = "background-color:#fdd">{
+	Killfocus(EQueueStart, &amp;(queue_cycling.start));</span>
+}
+
+void CPageSetup::OnKillfocusEQueueStep()
+<span style = "background-color:#fdd">{
+	Killfocus(EQueueStep, &amp;(queue_cycling.step));</span>
+}
+
+void CPageSetup::OnKillfocusERampTime()
+<span style = "background-color:#dfd">{
+	Killfocus(ERampTime, &amp;ramp_time);</span>
+}
+
+void CPageSetup::OnKillfocusERunTimeHours()
+<span style = "background-color:#fdd">{
+	Killfocus(ERunTimeHours, &amp;hours);</span>
+}
+
+void CPageSetup::OnKillfocusERunTimeMinutes()
+<span style = "background-color:#fdd">{
+	Killfocus(ERunTimeMinutes, &amp;minutes);</span>
+}
+
+void CPageSetup::OnKillfocusERunTimeSeconds()
+<span style = "background-color:#dfd">{
+	Killfocus(ERunTimeSeconds, &amp;seconds);</span>
+}
+
+void CPageSetup::OnKillfocusEDiskWorkerCount()
+<span style = "background-color:#fdd">{
+	Killfocus(EDiskWorkerCount, &amp;disk_worker_count);</span>
+}
+
+void CPageSetup::OnKillfocusENetWorkerCount()
+<span style = "background-color:#fdd">{
+	Killfocus(ENetWorkerCount, &amp;net_worker_count);</span>
+}
+
+void CPageSetup::OnKillfocusEWorkerStart()
+<span style = "background-color:#fdd">{
+	Killfocus(EWorkerStart, &amp;(worker_cycling.start));</span>
+}
+
+void CPageSetup::OnKillfocusEWorkerStep()
+<span style = "background-color:#fdd">{
+	Killfocus(EWorkerStep, &amp;(worker_cycling.step));</span>
+}
+
+void CPageSetup::OnSelchangeCResultType()
+<span style = "background-color:#fdd">{
+	result_type = m_CResultType.GetCurSel();
+}</span>
+
+//
+// The desired test cycling type has changed.  Enable/disable the
+// display appropriately.
+//
+void CPageSetup::OnSelchangeCTestType()
+<span style = "background-color:#dfd">{
+	test_type = m_CTestType.GetCurSel();</span>
+
+	// Determine if a particular cycling type is selected.
+<span style = "background-color:#dfd">	worker_cycling.selected = (test_type == CyclingWorkers || test_type == CyclingWorkersTargets);
+	target_cycling.selected = (test_type == CyclingTargets || test_type == CyclingWorkersTargets ||</span>
+				   test_type == CyclingIncTargetsParallel || test_type == CyclingIncTargetsSerial ||
+				   test_type == CyclingQueueTargets);
+<span style = "background-color:#dfd">	queue_cycling.selected = (test_type == CyclingQueue || test_type == CyclingQueueTargets);</span>
+
+	// Enable/disable the display.
+<span style = "background-color:#dfd">	EnableCyclingInfo(&amp;worker_cycling, worker_cycling.selected);
+	EnableCyclingInfo(&amp;target_cycling, target_cycling.selected);
+	EnableCyclingInfo(&amp;queue_cycling, queue_cycling.selected);</span>
+
+	// If queue depth cycling is enabled, disable the target's queue depth and
+	// vice-versa.  Do not enable the queue depth if there are no managers logged
+	// in.
+<span style = "background-color:#dfd">	theApp.pView-&gt;m_pPageDisk-&gt;m_EQueueDepth.EnableWindow(!queue_cycling.selected &amp;&amp;</span>
+							      theApp.manager_list.ManagerCount());
+<span style = "background-color:#dfd">	theApp.pView-&gt;m_pPageDisk-&gt;m_EQueueDepth.RedrawWindow();
+}</span>
+
+void CPageSetup::OnRDiskSpawnCPUs()
+<span style = "background-color:#fdd">{
+	m_EDiskWorkerCount.EnableWindow(FALSE);
+	disk_worker_count = -1;
+}</span>
+
+void CPageSetup::OnRDiskSpawnUser()
+<span style = "background-color:#fdd">{
+	m_EDiskWorkerCount.EnableWindow(TRUE);
+	disk_worker_count = GetDlgItemInt(EDiskWorkerCount, NULL, FALSE);
+}</span>
+
+void CPageSetup::OnRNetSpawnCPUs()
+<span style = "background-color:#fdd">{
+	m_ENetWorkerCount.EnableWindow(FALSE);
+	net_worker_count = -1;
+}</span>
+
+void CPageSetup::OnRNetSpawnUser()
+<span style = "background-color:#fdd">{
+	m_ENetWorkerCount.EnableWindow(TRUE);
+	net_worker_count = GetDlgItemInt(ENetWorkerCount, NULL, FALSE);
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

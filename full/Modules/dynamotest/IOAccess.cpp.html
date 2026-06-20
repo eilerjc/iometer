@@ -1,0 +1,206 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOAccess.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (IOmeter &amp; Dynamo) / IOAccess.cpp                                  ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implements the Access class.  This class represents   ## */
+/* ##               the current access specification for a Grunt in       ## */
+/* ##               Dynamo. It contains an array of ACCESS structures,    ## */
+/* ##               each of which defines one access spec line.           ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2004-03-26 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Code cleanup to ensure common style.                ## */
+/* ##               - Applied Thayne Harmon's patch for supporting        ## */
+/* ##                 Netware support (on I386).                          ## */
+/* ##               2003-07-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOAccess.h"
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+pthread_mutex_t lock_mt;
+#endif
+
+//
+// Setting the access specifications based on the given input.  This will also
+// record the maximum requested transfer size.
+//
+void Access::Initialize(const Access_Specs specs)
+<span style = "background-color:#dfd">{
+	int i, temp_value, start_percent = 0, spec_no = 0;</span>
+
+<span style = "background-color:#dfd">	max_transfer = 0;</span>
+
+	do {
+<span style = "background-color:#dfd">		for (i = start_percent; (i &lt; (start_percent + specs[spec_no].of_size) &amp;&amp; (i &lt; MAX_ACCESS_SPECS)); i++) {
+			access_grid[i].size = specs[spec_no].size;</span>
+			access_grid[i].read = specs[spec_no].reads;
+			access_grid[i].random = specs[spec_no].random;
+			access_grid[i].delay = specs[spec_no].delay;
+			access_grid[i].burst = specs[spec_no].burst;
+<span style = "background-color:#dfd">			access_grid[i].align = specs[spec_no].align;
+			access_grid[i].reply = specs[spec_no].reply;</span>
+
+			temp_value = access_grid[i].align;
+
+<span style = "background-color:#dfd">			if (temp_value != 0) {</span>
+				// See if alignment value is a power of two by repeatedly
+				// dividing it in half (right shifting by 1 bit) and checking
+				// to see if the result is odd at any stage.
+<span style = "background-color:#dfd">				while (temp_value &gt; 1) {
+					if (temp_value % 2)</span>
+						break;
+
+<span style = "background-color:#dfd">					temp_value &gt;&gt;= 1;</span>
+				}
+
+				// If alignment is a power of two, byte alignment can
+				// be speed optimized by using a bit mask like so:
+				//
+				// (access_grid[i].align is abbreviated "align" in examples)
+				//
+				// "&amp; ~((DWORDLONG)align - 1)" masks off lower bits to force
+				//                      sector alignment.  sector_size is cast to a
+				//                      DWORDLONG to force the result to be a 64-bit
+				//                      quantity.
+				//
+				//     For example, if alignment = 512 (0x00000200):
+				//           (DWORDLONG)align      = 0x0000000000000200
+				//          ((DWORDLONG)align - 1) = 0x00000000000001FF
+				//         ~((DWORDLONG)align - 1) = 0xFFFFFFFFFFFFFE00
+
+<span style = "background-color:#dfd">				if (temp_value == 1)
+					access_grid[i].align_mask = ~((DWORDLONG) access_grid[i].align - 1);</span>
+				else
+<span style = "background-color:#fdd">					access_grid[i].align_mask = NOT_POWER_OF_TWO;
+			} else {</span>
+				// assuming sector alignment (mask value is ignored, setting it anyway)
+<span style = "background-color:#fdd">				access_grid[i].align_mask = 0;</span>
+			}
+		}
+		// Checking for new maximum transfer size (request or reply).
+<span style = "background-color:#dfd">		if (i &gt; start_percent) {
+			if (specs[spec_no].size &gt; (DWORD) max_transfer)
+				max_transfer = (int)specs[spec_no].size;
+			if (specs[spec_no].reply &gt; (DWORD) max_transfer)</span>
+<span style = "background-color:#fdd">				max_transfer = (int)specs[spec_no].reply;</span>
+		}
+
+		start_percent = i;	// Begin again where we left off.
+<span style = "background-color:#dfd">		spec_no++;
+	} while (i &lt; MAX_ACCESS_SPECS);
+	cout &lt;&lt; "Access specifications for test defined." &lt;&lt; endl &lt;&lt; flush;
+}</span>
+
+//
+// Gets information from the access spec to prepare the next burst.
+// Doesn't retrieve ALL data from the access spec.
+//
+void Access::GetNextBurst(int access_percent,
+			  int *burst, DWORD * size, int *delay, DWORD * align, DWORDLONG * align_mask, DWORD * reply)
+<span style = "background-color:#dfd">{
+	*burst = access_grid[access_percent].burst;
+	*size = access_grid[access_percent].size;
+	*delay = access_grid[access_percent].delay;
+	*align = access_grid[access_percent].align;
+	*align_mask = access_grid[access_percent].align_mask;
+	*reply = access_grid[access_percent].reply;
+}</span>
+
+//
+// Determines if an access is to be a read.
+//
+BOOL Access::Read(int access_percent, int read_percent)
+<span style = "background-color:#dfd">{
+	return (read_percent &lt; access_grid[access_percent].read);
+}</span>
+
+//
+// Determines is an access is to be random.
+//
+BOOL Access::Random(int access_percent, int random_percent)
+<span style = "background-color:#dfd">{
+	return (random_percent &lt; access_grid[access_percent].random);
+}</span>
+
+BOOL Access::HasWrite()
+<span style = "background-color:#dfd">{
+	for(int i=0; i &lt; MAX_ACCESS_SPECS; i++) {
+		if(access_grid[i].read &lt; 100)
+			return TRUE;</span>
+	}
+
+<span style = "background-color:#dfd">	return FALSE;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,1473 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOManager.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / IOManager.cpp                                             ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: This is Dynamo's main class. It coordinates Dynamo's  ## */
+/* ##               work and handles the communication with IOMeter.      ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2005-04-18 (raltherr@apple.com)                       ## */
+/* ##               - Support for MacOS X                                 ## */
+/* ##               2004-09-28 (mingz@ele.uri.edu)                        ## */
+/* ##               - Added call to syslog.                               ## */
+/* ##               - Added warning for the common login fail error.      ## */
+/* ##               2004-07-26 (mingz@ele.uri.edu)                        ## */
+/* ##               - Added initialization of blkdevlist.                 ## */
+/* ##               2004-04-15 (lamontcranston41@yahoo.com)               ## */
+/* ##               - Moved Report_Disks() over to IOManagerWin.cpp.      ## */
+/* ##               2004-04-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Code cleanup to ensure compiling under Windows.     ## */
+/* ##               2004-03-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Code cleanup to ensure common style.                ## */
+/* ##               - Applied Thayne Harmon's patch for supporting        ## */
+/* ##                 Netware support (on I386).                          ## */
+/* ##               2004-03-05 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved the Dump_*_Results() functions (used for      ## */
+/* ##                 debugging purposes) from here to ByteOrder.cpp      ## */
+/* ##               - Moved the *_double_swap() functions for the         ## */
+/* ##                 Linux/XScale combination into ByteOrder.cpp         ## */
+/* ##               2004-02-19 (mingz@ele.uri.edu)                        ## */
+/* ##               - Rewrote the Report_TCP for linux code,              ## */
+/* ##                 The old one is buggy and if you do not set          ## */
+/* ##                 hostname correctly, it always return a 127.0.0.1    ## */
+/* ##               2004-02-16 (mingz@ele.uri.edu)                        ## */
+/* ##               - Added various double-precision swap for results.    ## */
+/* ##                 With these, IoMeter can run on ARM now              ## */
+/* ##               2004-02-13 (mingz@ele.uri.edu)                        ## */
+/* ##               - Enhanced output information in Add_Workers()        ## */
+/* ##                 and various _DEBUG                                  ## */
+/* ##               2003-12-21 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Changed NO_DYNAMO_VI to IOMTR_SETTING_VI_SUPPORT    ## */
+/* ##               2003-08-05 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Massive cleanup of this file (grouping the          ## */
+/* ##                 different blocks together).                         ## */
+/* ##               2003-07-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Replaced the [BIG|LITTLE]_ENDIAN_ARCH defines by    ## */
+/* ##                 IsBigEndian() function calls.                       ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-05-07 (yakker@aparity.com)                       ## */
+/* ##               - Applied the iometerCIOB5.2003.05.02.patch file      ## */
+/* ##                 (avoiding cache line collisions and performance     ## */
+/* ##                 lock-ups for some chipsets).                        ## */
+/* ##               2003-03-04 (joe@eiler.net)                            ## */
+/* ##               - Changed NO_LINUX_VI to NO_DYNAMO_VI                 ## */
+/* ##               2003-03-01 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Cut out the Windows Pipes support for               ## */
+/* ##                 communication efforts.                              ## */
+/* ##               2003-02-04 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##               - Applied proc-speed-fix.txt patch file               ## */
+/* ##                 (dropping a type cast in the Login() method).       ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOCommon.h"
+#include "IOManager.h"
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#include "winsock2.h"
+#include &lt;ws2tcpip.h&gt;
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+#include &lt;netdb.h&gt;
+#include &lt;arpa/inet.h&gt;
+#include &lt;sys/types.h&gt;
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+#include "IOPortTCP.h"
+#include "IOTargetDisk.h"
+#include "IOTargetVI.h"
+
+#define	KNOWN_VI_NIC_NAMES	3
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+extern int do_syslog;
+#endif
+
+//
+// Initializing manager variables before their first use.
+//
+Manager::Manager()
+<span style = "background-color:#dfd">:  m_pVersionString(NULL), m_pVersionStringWithDebug(NULL)
+{
+	data_size = 0;
+	data = NULL;</span>
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	swap_devices = NULL;
+#endif				// IOMTR_OSFAMILY_UNIX
+<span style = "background-color:#dfd">	SetLastError(0);</span>
+
+	//init file version strings
+<span style = "background-color:#dfd">	GetAppFileVersionString(&amp;m_pVersionString, &amp;m_pVersionStringWithDebug);</span>
+
+<span style = "background-color:#dfd">	prt = new PortTCP;
+	if (!prt-&gt;Create()) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Could not create a TCP/IP Port. exiting....." &lt;&lt; endl;
+		exit(1);</span>
+	}
+
+<span style = "background-color:#dfd">	record = FALSE;
+	grunt_count = 0;
+	memset(blkdevlist, 0, sizeof(char) * MAX_TARGETS * MAX_NAME);</span>
+
+#if defined(IOMTR_OSFAMILY_WINDOWS)
+	//GetSystemInfo(&amp;m_SystemInfo);
+
+<span style = "background-color:#dfd">	m_OsVersionInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);</span>
+
+	// Use RtlGetVersion (via ntdll) instead of the deprecated GetVersionEx.
+	// RtlGetVersion always returns the true OS version (not app-compat-masked).
+	{
+		typedef LONG (WINAPI *RtlGetVersionFunc)(OSVERSIONINFOW *);
+<span style = "background-color:#dfd">		HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+		RtlGetVersionFunc pRtlGetVersion = ntdll ?</span>
+			(RtlGetVersionFunc)GetProcAddress(ntdll, "RtlGetVersion") : NULL;
+<span style = "background-color:#dfd">		if (pRtlGetVersion &amp;&amp; pRtlGetVersion((OSVERSIONINFOW *)&amp;m_OsVersionInfo) == 0)</span>
+		{
+			// success
+		}
+		else
+		{
+			// non-fatal fallback
+		#ifdef _DEBUG
+			cout &lt;&lt; " Could not get Windows version info." &lt;&lt; endl;
+		#endif
+<span style = "background-color:#fdd">			ZeroMemory(&amp;m_OsVersionInfo, sizeof(m_OsVersionInfo));</span>
+		}
+	}
+#endif
+
+<span style = "background-color:#dfd">}</span>
+
+//
+// Destructor
+//
+Manager::~Manager()
+<span style = "background-color:#dfd">{</span>
+	int g;
+
+<span style = "background-color:#dfd">	delete[]m_pVersionString;
+	delete[]m_pVersionStringWithDebug;</span>
+
+<span style = "background-color:#dfd">	prt-&gt;Close();
+	delete prt;</span>
+
+<span style = "background-color:#dfd">	Delete_Random_Data();</span>
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if (data != NULL)
+		free(data);
+	if (swap_devices != NULL)
+		free(swap_devices);
+#elif defined(IOMTR_OS_NETWARE)
+	if (data != NULL)
+		NXMemFree(data);
+	if (swap_devices != NULL)
+		NXMemFree(swap_devices);
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#dfd">	VirtualFree(data, 0, MEM_RELEASE);</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+<span style = "background-color:#dfd">	for (g = 0; g &lt; grunt_count; g++)
+		delete grunts[g];</span>
+<span style = "background-color:#fdd">}</span>
+
+///////////////////////////////////////////////////////////////////////////////
+//      Function Name:
+//              Manager::GetVersionString
+//
+//      Syntax:
+//              const char*             GetVersionString(BOOL fWithDebugIndicator = FALSE);
+//
+//      Processing:
+//              Return version string ptr (m_pVersionString or m_pVersionStringWithDebug).
+///////////////////////////////////////////////////////////////////////////////
+const char *Manager::GetVersionString(BOOL fWithDebugIndicator)
+<span style = "background-color:#fdd">{</span>
+	if (!fWithDebugIndicator)
+		return m_pVersionString;
+	else
+		return m_pVersionStringWithDebug;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Logging into Iometer.  Returns success.
+//
+BOOL Manager::Login(char* port_name, int login_port_number)
+<span style = "background-color:#dfd">{</span>
+	Port *login_port;
+	Message msg, reply;
+	Data_Message *data_msg;
+<span style = "background-color:#dfd">	size_t name_size = MAX_NETWORK_NAME;</span>
+	int major, minor, subminor;
+
+<span style = "background-color:#dfd">	data_msg = new Data_Message;</span>
+	// Creating login messages that include the machine name and Dynamo version.
+	// The version number is included in two places for backward compatibility.
+<span style = "background-color:#dfd">	msg.purpose = LOGIN;
+	strcpy(data_msg-&gt;data.manager_info.version, m_pVersionStringWithDebug);
+	data_msg-&gt;size = DATA_MESSAGE_SIZE;</span>
+
+<span style = "background-color:#dfd">	sscanf(data_msg-&gt;data.manager_info.version, "%d.%d.%d", &amp;major, &amp;minor, &amp;subminor);
+	msg.data = common_encode_version(major, minor, subminor);</span>
+
+<span style = "background-color:#dfd">	if (manager_name[0] != '\0') {</span>
+<span style = "background-color:#fdd">		if (strlen(manager_name) &gt; MAX_NETWORK_NAME) {
+			cout &lt;&lt; "*** Specified manager name cannot be more than "</span>
+			    &lt;&lt; MAX_NETWORK_NAME &lt;&lt; " characters" &lt;&lt; endl;
+<span style = "background-color:#fdd">			exit(1);</span>
+		}
+
+<span style = "background-color:#fdd">		strcpy(data_msg-&gt;data.manager_info.names[0], manager_name);
+		name_size = strlen(manager_name);
+	} else {</span>
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+		// This will not work correctly if hostname length &gt; MAX_NETWORK_NAME
+		if (gethostname(manager_name, name_size) &lt; 0) {
+			cout &lt;&lt; "*** Exiting... gethostname() returned error " &lt;&lt; errno &lt;&lt; endl;
+			exit(1);
+		}
+		name_size = strlen(data_msg-&gt;data.manager_info.names[0]);
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#dfd">		GetComputerName(manager_name, (LPDWORD) &amp; name_size);
+		data_msg-&gt;data.manager_info.timer_resolution = perf_data[WHOLE_TEST_PERF].timer_resolution;</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#dfd">		strcpy(data_msg-&gt;data.manager_info.names[0], manager_name);</span>
+	}
+<span style = "background-color:#dfd">	strcpy(data_msg-&gt;data.manager_info.names[1], prt-&gt;network_name);
+	data_msg-&gt;data.manager_info.port_number = prt-&gt;network_port;
+	data_msg-&gt;data.manager_info.timer_resolution = perf_data[WHOLE_TEST_PERF].timer_resolution;
+	data_msg-&gt;data.manager_info.processors = perf_data[WHOLE_TEST_PERF].processor_count;</span>
+
+#if defined(IOMTR_CPU_SPARC)
+#if defined(IOMTR_OS_SOLARIS)
+	// Calculate processor_speed_to_nsecs for use in rdtsc.c
+	// Note that this works only for MHz CPUs. For GHz CPUs the divisor will change.
+	processor_speed_to_nsecs = (double)perf_data[WHOLE_TEST_PERF].timer_resolution / 1000000000;
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+#endif
+#if defined(IOMTR_CPU_PPC)
+#if defined(IOMTR_OS_OSX)
+	// Calculate processor_speed_to_nsecs for use in rdtsc.c
+	// This is multiplied by the timestamp in nanosecs
+	// That gives (time in ns) * (proc speed in HZ) / 1000000000 = time in cpu cycles
+	processor_speed_to_nsecs = (double)perf_data[WHOLE_TEST_PERF].timer_resolution / 1000000000;
+#elif defined(IOMTR_OS_LINUX)
+	// nop
+#else
+#error ===&gt; ERROR: You have to do some coding here to get the port done!
+#endif
+#endif
+
+#if _DEBUG
+	{
+		Test_Spec ts;
+
+		printf("Debugging structure sizes...\n");
+		printf(" Sizes: data_msg=%d\n",sizeof(Data_Message) );
+		printf(" Sizes: bool=%d, int=%d, long=%d, dword=%d, ulonglong=%d, dwordlong=%d, long*=%d\n", 
+			sizeof (BOOL), sizeof(int), sizeof(LONG), sizeof(DWORD), sizeof(unsigned long long), sizeof(DWORDLONG), sizeof(LONG*));
+		printf(" Sizes: Message_Data=%d, Manager_Info=%d, Target_Spec=%d, Access_Spec=%d,\n"
+			   "        Test_Spec=%d, Manager_Results=%d, Worker_Results=%d\n",
+			sizeof(Message_Data), sizeof(Manager_Info), sizeof(Target_Spec), sizeof(Access_Spec), sizeof(Test_Spec),
+			sizeof(Manager_Results), sizeof(Worker_Results));
+
+		printf(" Test_Spec member offsets: def_assign=%" IOMTR_FORMAT_SPEC_POINTER "d, name=%" IOMTR_FORMAT_SPEC_POINTER "d, access=%" IOMTR_FORMAT_SPEC_POINTER "d\n",
+				(DWORD_PTR) ((unsigned char *) &amp;ts.default_assignment - (unsigned char *) &amp;ts), (DWORD_PTR) ((unsigned char *) &amp;ts.name - (unsigned char *) &amp;ts), (DWORD_PTR) ((unsigned char *)&amp;ts.access - (unsigned char *) &amp;ts));
+
+		printf(" Sizes: Disk_Spec=%d, TCP_Spec=%d, VI_Spec=%d\n", sizeof(Disk_Spec), sizeof(TCP_Spec), sizeof(VI_Spec));
+	}
+#endif
+
+
+
+
+	// Sending login request message.
+<span style = "background-color:#dfd">	cout &lt;&lt; "Sending login request..." &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; data_msg-&gt;data.manager_info.names[0] &lt;&lt; endl;
+	cout &lt;&lt; "   " &lt;&lt; data_msg-&gt;data.manager_info.names[1]</span>
+	    &lt;&lt; " (port " &lt;&lt; data_msg-&gt;data.manager_info.port_number &lt;&lt; ")" &lt;&lt; endl;
+
+<span style = "background-color:#dfd">	if (prt-&gt;type == PORT_TYPE_TCP) {
+		login_port = new PortTCP;</span>
+
+		if (!login_port_number)
+			login_port_number = WELL_KNOWN_TCP_PORT;
+<span style = "background-color:#dfd">		if (!login_port-&gt;Connect(port_name, login_port_number)) {</span>
+<span style = "background-color:#fdd">			cout &lt;&lt; "*** Could not create TCP/IP port to connect with Iometer!" &lt;&lt; endl;
+			return FALSE;</span>
+		}
+	} else {
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Invalid port type in Manager::Login()" &lt;&lt; endl;</span>
+		return FALSE;
+	}
+
+<span style = "background-color:#dfd">	if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">		(void)reorder(msg);
+		(void)reorder(*data_msg, DATA_MESSAGE_MANAGER_INFO, SEND);</span>
+	}
+#if defined (IOMTR_OS_LINUX) &amp;&amp; defined (IOMTR_CPU_XSCALE)
+	Manager_Info_double_swap(&amp;data_msg-&gt;data.manager_info);
+#endif
+<span style = "background-color:#dfd">	login_port-&gt;Send(&amp;msg);
+	login_port-&gt;Send(data_msg, DATA_MESSAGE_SIZE);</span>
+
+<span style = "background-color:#dfd">	delete data_msg;</span>
+
+	// wait to receive reply to login request, then get the incoming message...
+<span style = "background-color:#dfd">	if (login_port-&gt;Receive(&amp;reply) == PORT_ERROR) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; endl &lt;&lt; "*** Unable to receive a reply from Iometer" &lt;&lt; endl;
+		return FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">		(void)reorder(reply);</span>
+	}
+	// Delete login port because we don't need it anymore.
+<span style = "background-color:#dfd">	delete login_port;</span>
+
+	// process the login reply message from Iometer
+<span style = "background-color:#dfd">	switch (reply.data) {</span>
+	case WRONG_VERSION:
+<span style = "background-color:#fdd">		cout &lt;&lt; endl &lt;&lt; "*** Incorrect version of Dynamo for this Iometer" &lt;&lt; endl;
+		return FALSE;</span>
+
+	case LOGIN_OK:
+		//
+		// Waiting for login to be accepted.
+<span style = "background-color:#dfd">		cout &lt;&lt; endl;
+		cout &lt;&lt; "*** If dynamo and iometer hangs here, please make sure" &lt;&lt; endl;
+		cout &lt;&lt; "*** you use a correct -m &lt;manager_computer_name&gt; that" &lt;&lt; endl;
+		cout &lt;&lt; "*** can ping from iometer machine. use IP if need." &lt;&lt; endl;</span>
+
+<span style = "background-color:#dfd">		if (prt-&gt;Accept())
+			cout &lt;&lt; "   Login accepted." &lt;&lt; endl &lt;&lt; flush;
+		return TRUE;</span>
+	default:
+<span style = "background-color:#fdd">		cout &lt;&lt; endl &lt;&lt; "*** Bad login status reply received - don't know what to do" &lt;&lt; endl;
+		return FALSE;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+#if defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS) || defined(IOMTR_OSFAMILY_WINDOWS)
+//
+// Checking for all TCP network interfaces.  Storing them, and returning the number
+// of interfaces found.  
+//
+int Manager::Report_TCP(Target_Spec * tcp_spec)
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_OSFAMILY_WINDOWS)
+	int retval;
+	WSADATA wd;
+#endif
+	struct addrinfo *addrres;
+	char hostname[128];
+<span style = "background-color:#dfd">	int count = 0;</span>
+
+<span style = "background-color:#dfd">	cout &lt;&lt; "Reporting TCP network information..." &lt;&lt; endl;</span>
+
+#if defined(IOMTR_OSFAMILY_WINDOWS)
+	// initialize WinSock version 2.0
+<span style = "background-color:#dfd">	retval = WSAStartup(MAKEWORD(2, 0), &amp;wd);
+	if (retval != 0) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Error " &lt;&lt; retval &lt;&lt; "initializing WinSock." &lt;&lt; endl;
+		return 0;</span>
+	}
+#endif
+
+	// get the unqualified local host name
+<span style = "background-color:#dfd">	if (gethostname(hostname, sizeof(hostname)) == SOCKET_ERROR) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Error " &lt;&lt; WSAGetLastError() &lt;&lt; "getting local host name.\n";
+		return 0;</span>
+	}
+	// now get the host info for that host name
+	{
+		struct addrinfo hints = {};
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+<span style = "background-color:#dfd">		if (getaddrinfo(hostname, NULL, &amp;hints, &amp;addrres) != 0) {</span>
+<span style = "background-color:#fdd">			cout &lt;&lt; "*** Error " &lt;&lt; WSAGetLastError() &lt;&lt; "getting host info for \"" &lt;&lt; hostname &lt;&lt; "\".\n";
+			return 0;</span>
+		}
+	}
+#ifdef _DEBUG
+	printf("   My hostname: \"%s\"\n", hostname);
+#endif
+
+	// report the network addresses.
+<span style = "background-color:#dfd">	for (struct addrinfo *p = addrres; p != NULL; p = p-&gt;ai_next) {
+		inet_ntop(AF_INET, &amp;((struct sockaddr_in *)p-&gt;ai_addr)-&gt;sin_addr,</span>
+		          tcp_spec[count].name, sizeof(tcp_spec[count].name));
+		tcp_spec[count].type = TCPClientType;	// interface to access a client
+
+#ifdef _DEBUG
+		cout &lt;&lt; "   Found " &lt;&lt; tcp_spec[count].name &lt;&lt; "." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#dfd">		if (++count &gt;= MAX_NUM_INTERFACES) {</span>
+<span style = "background-color:#fdd">			cout &lt;&lt; "*** Found the maximum number of supported network interfaces: "</span>
+			    &lt;&lt; endl &lt;&lt; "Only returning the first " &lt;&lt; MAX_NUM_INTERFACES &lt;&lt; "." &lt;&lt; endl;
+			count = MAX_NUM_INTERFACES;
+			break;
+		}
+	}
+<span style = "background-color:#dfd">	freeaddrinfo(addrres);</span>
+
+#if 0				// for debugging multiple-network-interface GUI; change "#if 0" to "#if 1" to enable
+	strncpy(nets[count], "foo", sizeof(nets[count]) - 1);
+	cout &lt;&lt; "   Added fake entry " &lt;&lt; nets[count] &lt;&lt; "." &lt;&lt; endl &lt;&lt; flush;
+	count++;
+#endif
+
+#if defined(IOMTR_OSFAMILY_WINDOWS)
+	// clean up WinSock
+<span style = "background-color:#dfd">	if (WSACleanup() != 0) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Error " &lt;&lt; WSAGetLastError() &lt;&lt; "cleaning up WinSock." &lt;&lt; endl;
+		return 0;</span>
+	}
+#endif
+
+	// All done.
+<span style = "background-color:#dfd">	cout &lt;&lt; "   done." &lt;&lt; endl;
+	return count;
+}</span>
+#endif
+
+//
+// Checking for all VI network interfaces.  Storing them, and returning the 
+// number of interfaces found.
+//
+int Manager::Report_VIs(Target_Spec * vi_spec)
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_SETTING_VI_SUPPORT)
+	int count = 0, nic_base;
+	VIPL vipl;
+	VINic nic;
+	UINT address_buffer_size, nic_address_size;
+	char vi_nic_name[KNOWN_VI_NIC_NAMES][MAX_NAME];
+	int vi_nic_name_no[KNOWN_VI_NIC_NAMES];
+	char env_var_name[MAX_NAME];
+
+	cout &lt;&lt; "Reporting VI information..." &lt;&lt; endl;
+	// Verify that VI is loaded on this system.
+	if (!vipl.vipl_dll) {
+		cout &lt;&lt; "   VI library is not installed." &lt;&lt; endl;
+		return 0;
+	}
+	// Initialize the base name and number for default VI nic names.
+	strcpy(vi_nic_name[0], "VINIC");
+	vi_nic_name_no[0] = 0;
+	strcpy(vi_nic_name[1], "nic");
+	vi_nic_name_no[1] = 0;
+	strcpy(vi_nic_name[2], "\\\\.\\VI");
+	vi_nic_name_no[2] = 1;
+
+	// Look for VI NIC's.  If no nic's are found matching the default
+	// names, look for system environment variables that 
+	// contain a mapping to the actual name.  (e.g. SET VINIC0=NIC1...)
+	for (nic_base = 0; nic_base &lt; KNOWN_VI_NIC_NAMES; nic_base++) {
+		// Continue using the same base nic name until we've found all the 
+		// nics that are available.
+		while (TRUE) {
+			// Form VI NIC name to open.
+			vi_spec[count].type = VIClientType;
+			snprintf(vi_spec[count].name, MAX_NAME, "%s%i", vi_nic_name[nic_base], vi_nic_name_no[nic_base]++);
+
+			// Try opening VI NIC.
+			if (!nic.Open(vi_spec[count].name)) {
+				// Only search for environment variable mappings using the
+				// first (VINIC) name base.
+				if (nic_base)
+					break;
+
+				// Nic does not exist.  See if there is an environment variable
+				// mapping to another NIC name.
+				strcpy(env_var_name, vi_spec[count].name);
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+				if (!GetEnvironmentVariable(env_var_name, vi_spec[count].name, MAX_NAME)) {
+					break;
+				}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+				if (getenv(env_var_name) == NULL)
+					break;
+
+				strncpy(vi_spec[count].name, getenv(env_var_name), MAX_NAME - 1);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+				// A mapping exists.  Try to open the VI NIC using the 
+				// environment variable setting.
+				if (!nic.Open(vi_spec[count].name))
+					break;
+			}
+			// Determine how many bytes are needed for the NIC address
+			// (not including the discriminator, which is null at this point).
+			nic_address_size = sizeof(*(nic.nic_address)) + nic.nic_attributes.NicAddressLen - 1;
+
+			// Determine the (static) size of the address buffer in the vi_spec structure.
+			address_buffer_size = sizeof(vi_spec[count].vi_info.local_address) +
+			    sizeof(vi_spec[count].vi_info.local_address_fill_bytes);
+
+			// Zero the address buffer.
+			memset(&amp;vi_spec[count].vi_info.local_address, 0, address_buffer_size);
+
+			// Copy the NIC's address into the local_address buffer
+			// (as much as will fit or the whole thing, whichever is less).
+			memcpy(&amp;vi_spec[count].vi_info.local_address, nic.nic_address,
+			       min(address_buffer_size, nic_address_size));
+
+			// Did the address fit, leaving enough room for the discriminator?
+			if (nic_address_size + min(VI_DISCRIMINATOR_SIZE, nic.nic_attributes.MaxDiscriminatorLen)
+			    &gt; address_buffer_size) {
+				cout &lt;&lt; "*** WARNING: VI NIC \"" &lt;&lt; vi_spec[count].name
+				    &lt;&lt; "\"'s address size (" &lt;&lt; nic_address_size
+				    &lt;&lt; ") + discriminator length (" &lt;&lt; min(VI_DISCRIMINATOR_SIZE,
+									   nic.nic_attributes.MaxDiscriminatorLen)
+				    &lt;&lt; ") is larger than address buffer size (" &lt;&lt; address_buffer_size &lt;&lt; ")!" &lt;&lt; endl;
+			}
+
+			vi_spec[count].vi_info.max_transfer_size = nic.nic_attributes.MaxTransferSize;
+
+			// Each connection requires its own completion queue.
+			vi_spec[count].vi_info.max_connections = nic.nic_attributes.MaxCQ;
+
+			// Due to pre-postin requirements, we support only half of the
+			// available queue depth.
+			vi_spec[count].vi_info.outstanding_ios = nic.nic_attributes.MaxDescriptorsPerQueue &gt;&gt; 1;
+
+			nic.Close();
+#ifdef _DEBUG
+			cout &lt;&lt; "   Found " &lt;&lt; vi_spec[count].name &lt;&lt; "." &lt;&lt; endl;
+#endif
+
+			// Prevent reporting more than the maximum number of VIs.
+			if (++count &gt;= MAX_NUM_INTERFACES) {
+				cout &lt;&lt; "*** Found the maximum number of supported VI interfaces: " &lt;&lt; endl
+				    &lt;&lt; "Only returning the first " &lt;&lt; MAX_NUM_INTERFACES &lt;&lt; "." &lt;&lt; endl;
+				return MAX_NUM_INTERFACES;
+			}
+		}
+	}
+
+	// All done.
+	cout &lt;&lt; "   done." &lt;&lt; endl;
+#ifdef _DEBUG
+	cout &lt;&lt; "Find " &lt;&lt; count &lt;&lt; " network interface." &lt;&lt; endl;
+#endif
+	return count;
+#else
+<span style = "background-color:#dfd">	return (0);</span>
+#endif				// IOMTR_SETTING_VI_SUPPORT
+<span style = "background-color:#dfd">}</span>
+
+//
+// Preparing drives for selected grunts.
+//
+void Manager::Prepare_Disks()
+<span style = "background-color:#fdd">{</span>
+	int i, loop_start, loop_finish;
+
+	// Check if the random data buffer has been created. If not, allocate and fill it
+<span style = "background-color:#fdd">	if (randomDataBuffers.empty())</span>
+	{
+<span style = "background-color:#fdd">		GenerateRandomData();</span>
+	}
+
+	// Preparing all grunts at the same time.  This requires a great
+	// amount of coordination on the part of Iometer to ensure that the
+	// grunts do not prepare the same drives.
+<span style = "background-color:#fdd">	for (i = 0; i &lt; grunt_count; i++) {
+		if (!grunts[i]-&gt;Prepare_Disks()) {</span>
+			// Send failure message back to Iometer.
+<span style = "background-color:#fdd">			msg.data = 0;
+			if (IsBigEndian()) {
+				(void)reorder(msg);</span>
+			}
+<span style = "background-color:#fdd">			prt-&gt;Send(&amp;msg);
+			return;</span>
+		}
+	}
+
+	loop_start = 0;
+	loop_finish = grunt_count;
+
+	// Peek to see if the prepare was be canceled by the user.
+<span style = "background-color:#fdd">	for (i = loop_start; i &lt; loop_finish; i++) {
+		while (grunts[i]-&gt;not_ready) {
+			if (prt-&gt;Peek()) {
+				prt-&gt;Receive(&amp;msg);
+				if (IsBigEndian()) {
+					(void)reorder(msg);</span>
+				}
+<span style = "background-color:#fdd">				Process_Message();
+			} else {
+				Sleep(LONG_DELAY);</span>
+			}
+		}
+<span style = "background-color:#fdd">		grunts[i]-&gt;grunt_state = TestIdle;</span>
+	}
+	// Send a message back to Iometer to indicate that we're done preparing.
+<span style = "background-color:#fdd">	msg.data = 1;		// indicates success
+	if (IsBigEndian()) {
+		(void)reorder(msg);</span>
+	}
+<span style = "background-color:#fdd">	prt-&gt;Send(&amp;msg);
+}</span>
+
+//
+// Collecting and extracting system performance data.
+//
+void Manager::Get_Performance(int which_perf, int snapshot)
+<span style = "background-color:#dfd">{</span>
+	if ((which_perf &lt; 0) || (which_perf &gt;= MAX_PERF)
+<span style = "background-color:#dfd">	    || (snapshot &lt; 0) || (snapshot &gt;= MAX_SNAPSHOTS))</span>
+		return;
+
+	// Get all performance data.
+<span style = "background-color:#dfd">	perf_data[which_perf].Get_Perf_Data(PERF_PROCESSOR, snapshot);
+	perf_data[which_perf].Get_Perf_Data(PERF_NETWORK_TCP, snapshot);
+	perf_data[which_perf].Get_Perf_Data(PERF_NETWORK_INTERFACE, snapshot);</span>
+
+	// Record time that performance snapshot was taken.
+<span style = "background-color:#dfd">	manager_performance[which_perf].time_counter[snapshot] = perf_data[which_perf].time_counter[snapshot];</span>
+
+	// If this is the last snapshot to be taken, calculate the performance statistics
+	// to return to Iometer.
+<span style = "background-color:#dfd">	if (snapshot == LAST_SNAPSHOT) {
+		perf_data[which_perf].Calculate_CPU_Stats(&amp;(manager_performance[which_perf].cpu_results));
+		perf_data[which_perf].Calculate_TCP_Stats(&amp;(manager_performance[which_perf].net_results));
+		perf_data[which_perf].Calculate_NI_Stats(&amp;(manager_performance[which_perf].net_results));</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Gathering results from all threads and reporting them back to Iometer.
+//
+void Manager::Report_Results(int which_perf)
+<span style = "background-color:#dfd">{
+	if ((which_perf &lt; 0) || (which_perf &gt;= MAX_PERF))</span>
+		return;
+
+	// Shortcut pointers to where results are stored.
+	Worker_Results *worker_results;
+
+	// If recording, update the ending results for the system performance.
+<span style = "background-color:#dfd">	if (record) {
+		Get_Performance(which_perf, LAST_SNAPSHOT);</span>
+	}
+	// Copy the current system results into a message.
+<span style = "background-color:#dfd">	memcpy((void *)&amp;data_msg.data.manager_results, (void *)</span>
+	       &amp;(manager_performance[which_perf]), sizeof(Manager_Results));
+<span style = "background-color:#dfd">	if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">		(void)reorder(data_msg, DATA_MESSAGE_MANAGER_RESULTS, SEND);</span>
+	}
+#if defined (IOMTR_OS_LINUX) &amp;&amp; defined (IOMTR_CPU_XSCALE)
+	Manager_Results_double_swap(&amp;data_msg.data.manager_results);
+#endif
+<span style = "background-color:#dfd">	prt-&gt;Send(&amp;data_msg, DATA_MESSAGE_SIZE);</span>
+
+	// Sending back a result message for each worker thread.  Using multiple
+	// messages keeps the message size down to a reasonable limit.
+	worker_results = &amp;(data_msg.data.worker_results);
+<span style = "background-color:#dfd">	for (int g = 0; g &lt; grunt_count; g++) {</span>
+		// Only send results for grunts that are running.
+<span style = "background-color:#dfd">		if (grunts[g]-&gt;target_count &amp;&amp; !grunts[g]-&gt;idle) {</span>
+#ifdef _DEBUG
+			cout &lt;&lt; "Reporting results for grunt " &lt;&lt; g &lt;&lt; " ...";
+#endif
+			// Copying worker's results into the message.
+<span style = "background-color:#dfd">			memcpy((void *)worker_results, (void *)&amp;(grunts[g]-&gt;worker_performance),</span>
+			       sizeof(Worker_Results));
+<span style = "background-color:#dfd">			worker_results-&gt;target_results.count = grunts[g]-&gt;target_count;</span>
+
+			// If recording, update the ending results for the worker's drive performance.
+<span style = "background-color:#dfd">			if (grunts[g]-&gt;grunt_state == TestRecording) {
+				worker_results-&gt;time[LAST_SNAPSHOT] = timer_value();</span>
+			}
+
+<span style = "background-color:#dfd">			if (which_perf == LAST_UPDATE_PERF) {</span>
+				// Subtract previous update's results from current results to give 
+				// results since last update.
+
+				Raw_Result *target_result;
+				Raw_Result *prev_target_result;
+				int i;
+
+<span style = "background-color:#dfd">				worker_results-&gt;time[FIRST_SNAPSHOT] =</span>
+				    grunts[g]-&gt;prev_worker_performance.time[LAST_SNAPSHOT];
+
+<span style = "background-color:#dfd">				for (i = 0; i &lt; worker_results-&gt;target_results.count; i++) {</span>
+					target_result = &amp;(worker_results-&gt;target_results.result[i]);
+					prev_target_result
+					    = &amp;(grunts[g]-&gt;prev_worker_performance.target_results.result[i]);
+
+					// Subtract current result from each counter.
+<span style = "background-color:#dfd">					target_result-&gt;bytes_read -= prev_target_result-&gt;bytes_read;</span>
+					target_result-&gt;bytes_written -= prev_target_result-&gt;bytes_written;
+					target_result-&gt;read_count -= prev_target_result-&gt;read_count;
+					target_result-&gt;write_count -= prev_target_result-&gt;write_count;
+					target_result-&gt;transaction_count -= prev_target_result-&gt;transaction_count;
+					target_result-&gt;connection_count -= prev_target_result-&gt;connection_count;
+<span style = "background-color:#dfd">					target_result-&gt;read_errors -= prev_target_result-&gt;read_errors;
+					target_result-&gt;write_errors -= prev_target_result-&gt;write_errors;
+					target_result-&gt;read_latency_sum -= prev_target_result-&gt;read_latency_sum;
+					target_result-&gt;write_latency_sum -= prev_target_result-&gt;write_latency_sum;
+					target_result-&gt;transaction_latency_sum</span>
+					    -= prev_target_result-&gt;transaction_latency_sum;
+<span style = "background-color:#dfd">					target_result-&gt;connection_latency_sum</span>
+					    -= prev_target_result-&gt;connection_latency_sum;
+<span style = "background-color:#dfd">					target_result-&gt;counter_time -= prev_target_result-&gt;counter_time;</span>
+					for(int x = 0; x &lt; LATENCY_BIN_SIZE; x++)
+<span style = "background-color:#dfd">						target_result-&gt;latency_bin[x]  -= prev_target_result-&gt;latency_bin[x];</span>
+
+					// Use values from prev_worker_performance for "max_" values.
+<span style = "background-color:#dfd">					target_result-&gt;max_raw_read_latency = prev_target_result-&gt;max_raw_read_latency;
+					target_result-&gt;max_raw_write_latency</span>
+					    = prev_target_result-&gt;max_raw_write_latency;
+<span style = "background-color:#dfd">					target_result-&gt;max_raw_transaction_latency</span>
+					    = prev_target_result-&gt;max_raw_transaction_latency;
+<span style = "background-color:#dfd">					target_result-&gt;max_raw_connection_latency</span>
+					    = prev_target_result-&gt;max_raw_connection_latency;
+				}
+
+				// Store away a copy of the current results for next time.
+<span style = "background-color:#dfd">				memcpy(&amp;(grunts[g]-&gt;prev_worker_performance), &amp;(grunts[g]-&gt;worker_performance),</span>
+				       sizeof(Worker_Results));
+
+				// Record time of last update.
+<span style = "background-color:#dfd">				grunts[g]-&gt;prev_worker_performance.time[LAST_SNAPSHOT] = timer_value();</span>
+
+				// Clear "max_" values in prev_worker_performance.
+<span style = "background-color:#dfd">				for (i = 0; i &lt; worker_results-&gt;target_results.count; i++) {</span>
+					Raw_Result *prev_target_result
+<span style = "background-color:#dfd">					    = &amp;(grunts[g]-&gt;prev_worker_performance.target_results.result[i]);</span>
+
+<span style = "background-color:#dfd">					prev_target_result-&gt;max_raw_read_latency = 0;
+					prev_target_result-&gt;max_raw_write_latency = 0;
+					prev_target_result-&gt;max_raw_transaction_latency = 0;
+					prev_target_result-&gt;max_raw_connection_latency = 0;</span>
+				}
+			}
+			// Sending results to Iometer.
+<span style = "background-color:#dfd">			if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">				(void)reorder(data_msg, DATA_MESSAGE_WORKER_RESULTS, SEND);</span>
+			}
+<span style = "background-color:#dfd">			prt-&gt;Send(&amp;data_msg, DATA_MESSAGE_SIZE);</span>
+#ifdef _DEBUG
+			cout &lt;&lt; "sent." &lt;&lt; endl;
+#endif
+		}
+	}
+
+<span style = "background-color:#dfd">	if (record &amp;&amp; (which_perf == LAST_UPDATE_PERF)) {</span>
+		// Store current performance counters as baseline for next update.
+<span style = "background-color:#dfd">		Get_Performance(LAST_UPDATE_PERF, FIRST_SNAPSHOT);</span>
+	}
+#ifdef _DEBUG
+	cout &lt;&lt; "   Finished reporting results." &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">}</span>
+
+//
+// Manager runs assuming Iometer control.  Returns TRUE if Dynamo should
+// continue to run, otherwise FALSE.
+//
+BOOL Manager::Run()
+<span style = "background-color:#dfd">{</span>
+	while (TRUE)		// Receive loop.
+	{
+#ifdef _DEBUG
+		cout &lt;&lt; "in while loop : Manager::Run() " &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		if (prt-&gt;Receive(&amp;msg) == PORT_ERROR) {</span>
+			// Error receiving data message, stop running.
+<span style = "background-color:#dfd">			cout &lt;&lt; "Error receiving message." &lt;&lt; endl &lt;&lt; flush;</span>
+			return FALSE;
+		} else {
+<span style = "background-color:#dfd">			if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">				(void)reorder(msg);</span>
+			}
+			// Continue to process messages until manager indicates stopping.
+<span style = "background-color:#dfd">			if (!Process_Message())</span>
+				return FALSE;
+
+			// On a reset, stop then restart running the manager.
+<span style = "background-color:#dfd">			if (msg.purpose == RESET)</span>
+				return TRUE;
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Processing messages from Iometer based on their purpose and
+// returns TRUE if the manager can process additional messages.
+//
+BOOL Manager::Process_Message()
+<span style = "background-color:#dfd">{
+	switch (msg.purpose) {</span>
+	case ADD_WORKERS:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : ADD_WORKERS" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		Add_Workers(msg.data);</span>
+		break;
+
+		// Signaling to reset all workers
+	case RESET:
+		// Remove all workers.
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : RESET" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		Remove_Workers(ALL_WORKERS);
+		prt-&gt;Disconnect();</span>
+		break;
+		// Received call to end program or thread execution.
+	case EXIT:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : EXIT" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		Remove_Workers(msg.data);
+		return (msg.data != MANAGER);</span>
+
+		// Preparing drives for access.
+	case PREP_DISKS:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : PREP_DISKS" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		Prepare_Disks();</span>
+		break;
+
+		// Signalling to stop disk preparation.
+	case STOP_PREPARE:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : STOP_PREPARE" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		Stop_Prepare();</span>
+		break;
+
+		// Reporting all targets accessible by this manager.
+	case REPORT_TARGETS:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : REPORT_TARGETS" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		data_msg.count = Report_Disks(data_msg.data.targets);
+		if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">			(void)reorder(data_msg, DATA_MESSAGE_TARGET_SPEC, SEND);</span>
+		}
+<span style = "background-color:#dfd">		prt-&gt;Send(&amp;data_msg, DATA_MESSAGE_SIZE);</span>
+
+<span style = "background-color:#dfd">		data_msg.count = Report_TCP(data_msg.data.targets);
+		if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">			(void)reorder(data_msg, DATA_MESSAGE_TARGET_SPEC, SEND);</span>
+		}
+<span style = "background-color:#dfd">		prt-&gt;Send(&amp;data_msg, DATA_MESSAGE_SIZE);</span>
+
+<span style = "background-color:#dfd">		data_msg.count = Report_VIs(data_msg.data.targets);
+		if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">			(void)reorder(data_msg, DATA_MESSAGE_TARGET_SPEC, SEND);</span>
+		}
+<span style = "background-color:#dfd">		prt-&gt;Send(&amp;data_msg, DATA_MESSAGE_SIZE);</span>
+		break;
+		// Setting targets for a given grunt and reporting back.
+	case SET_TARGETS:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : SET_TARGETS" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		prt-&gt;Receive(&amp;data_msg, DATA_MESSAGE_SIZE);
+		if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">			(void)reorder(data_msg, DATA_MESSAGE_TARGET_SPEC, RECV);</span>
+		}
+<span style = "background-color:#dfd">		msg.data = Set_Targets(msg.data, data_msg.count, data_msg.data.targets);</span>
+		// Send back success/failure indication along with additional error
+		// information or target settings (such as TCP port).
+<span style = "background-color:#dfd">		if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">			(void)reorder(msg);</span>
+		}
+<span style = "background-color:#dfd">		prt-&gt;Send(&amp;msg);</span>
+		if (IsBigEndian()) {
+<span style = "background-color:#fdd">			(void)reorder(data_msg, DATA_MESSAGE_TARGET_SPEC, SEND);</span>
+		}
+<span style = "background-color:#dfd">		prt-&gt;Send(&amp;data_msg, DATA_MESSAGE_SIZE);</span>
+		break;
+
+		// Setting access specifications for next test.
+	case SET_ACCESS:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : SET_ACCESS" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		prt-&gt;Receive(&amp;data_msg, DATA_MESSAGE_SIZE);
+		if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">			(void)reorder(data_msg, DATA_MESSAGE_TEST_SPEC, RECV);</span>
+		}
+<span style = "background-color:#dfd">		msg.data = (int)Set_Access(msg.data, &amp;(data_msg.data.spec));</span>
+
+		if (IsBigEndian()) {
+<span style = "background-color:#fdd">			(void)reorder(msg);</span>
+		}
+<span style = "background-color:#dfd">		prt-&gt;Send(&amp;msg);	// notify Iometer of success</span>
+		break;
+
+		// Signalling start of test.
+	case START:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : START" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		Start_Test(msg.data);</span>
+		break;
+		// Beginning to perform I/O.
+	case BEGIN_IO:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : BEGIN_IO" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		Begin_IO(msg.data);</span>
+		break;
+		// Beginning recording of test results.
+	case RECORD_ON:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : RECORD_ON" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		Record_On(msg.data);</span>
+		break;
+		// Stopping recording of test results.
+	case RECORD_OFF:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : RECORD_OFF" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		Record_Off(msg.data);</span>
+		break;
+		// Signalling to stop testing.
+	case STOP:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : STOP" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		Stop_Test(msg.data);</span>
+		break;
+
+		// Reporting results of whole test to Iometer.
+	case REPORT_RESULTS:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : REPORT_RESULTS" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		Report_Results(WHOLE_TEST_PERF);</span>
+		break;
+
+		// Reporting results since last update to Iometer.
+	case REPORT_UPDATE:
+#if _DETAILS
+		cout &lt;&lt; "in Process_Message() : REPORT_UPDATE" &lt;&lt; endl;
+#endif
+<span style = "background-color:#dfd">		Report_Results(LAST_UPDATE_PERF);</span>
+		break;
+
+	default:
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Unknown purpose found in message." &lt;&lt; endl &lt;&lt; flush;
+		return FALSE;</span>
+	}
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Signalling all threads to start testing.
+//
+void Manager::Start_Test(int target)
+<span style = "background-color:#dfd">{</span>
+	int g;
+
+	IsWrite = FALSE;
+
+	// Check if the random data buffer has been created. If not, allocate and fill it
+<span style = "background-color:#dfd">	if (randomDataBuffers.empty())</span>
+	{
+<span style = "background-color:#dfd">		GenerateRandomData();</span>
+	}
+
+<span style = "background-color:#dfd">	cout &lt;&lt; "Starting..." &lt;&lt; endl &lt;&lt; flush;</span>
+
+	// Start all the grunts.  This creates the grunt threads.
+	// Pass as argument the index of the Target. Can be used for affinity.
+<span style = "background-color:#dfd">	if (target == ALL_WORKERS) {
+		for (g = 0; g &lt; grunt_count; g++) {
+			grunts[g]-&gt;Start_Test(g);</span>
+		}
+<span style = "background-color:#dfd">	} else {</span>
+<span style = "background-color:#fdd">		grunts[target]-&gt;Start_Test(target);</span>
+	}
+#ifdef _DEBUG
+	cout &lt;&lt; "   Started." &lt;&lt; endl &lt;&lt; flush;
+#endif
+	// Reply that test has started.
+	msg.data = TRUE;
+<span style = "background-color:#dfd">	prt-&gt;Send(&amp;msg);
+}</span>
+
+void Manager::GenerateRandomData() 
+<span style = "background-color:#dfd">{
+	cout &lt;&lt; "   Generating random data..." &lt;&lt; endl;</span>
+
+	//Find the first grunt with a target and use the spec.random from it to seed the PRNG
+	DWORDLONG SeedVal;
+
+<span style = "background-color:#dfd">	Delete_Random_Data();
+	for (int i=0;i&lt;grunt_count;i++)</span>
+	{
+<span style = "background-color:#dfd">		if(grunts[i]-&gt;target_count &gt; 0)</span>
+		{
+<span style = "background-color:#dfd">			if(grunts[i]-&gt;Need_Random_Buffer()) </span>
+			{
+<span style = "background-color:#fdd">				SeedVal = grunts[i]-&gt;Get_Target_Spec_Random_Value(0);
+				cout &lt;&lt; "   Seeding Random Data Random Number Generator from Target Spec to:" &lt;&lt; (unsigned int)SeedVal &lt;&lt; endl;</span>
+
+<span style = "background-color:#dfd">				map&lt;DWORDLONG,unsigned char*&gt;::iterator it = randomDataBuffers.find(SeedVal);</span>
+<span style = "background-color:#fdd">				if(it != randomDataBuffers.end()) </span>
+				{
+<span style = "background-color:#fdd">					cout &lt;&lt; "   Using existing random data." &lt;&lt; endl;
+					grunts[i]-&gt;Set_Random_Data_Buffer(randomDataBuffers[SeedVal], RANDOM_BUFFER_SIZE);
+				} </span>
+				else 
+				{
+<span style = "background-color:#fdd">					srand((unsigned int)SeedVal);</span>
+
+	//random data used for writes
+#if defined(IOMTR_OSFAMILY_NETWARE)
+					randomDataBuffers[SeedVal] = NXMemAlloc(RANDOM_BUFFER_SIZE, 1);
+
+#elif defined(IOMTR_OSFAMILY_UNIX)
+#if defined(IOMTR_OS_LINUX)
+					posix_memalign((void **)&amp;randomDataBuffers[SeedVal], sysconf(_SC_PAGESIZE), RANDOM_BUFFER_SIZE);
+
+#elif defined(IOMTR_OS_SOLARIS) || defined(IOMTR_OS_OSX)
+					randomDataBuffers[SeedVal] = (unsigned char *) valloc(RANDOM_BUFFER_SIZE);
+
+#else
+					#warning ===&gt; WARNING: You have to do some coding here to get the port done! 
+#endif
+
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+<span style = "background-color:#fdd">					randomDataBuffers[SeedVal] = (unsigned char*)VirtualAlloc(NULL, RANDOM_BUFFER_SIZE, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);</span>
+
+#else
+					#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+<span style = "background-color:#fdd">					if (randomDataBuffers[SeedVal] != NULL) </span>
+					{
+<span style = "background-color:#fdd">						for( int x = 0; x &lt; RANDOM_BUFFER_SIZE; x++)
+							randomDataBuffers[SeedVal][x] = (unsigned char)rand();</span>
+
+<span style = "background-color:#fdd">						grunts[i]-&gt;Set_Random_Data_Buffer(randomDataBuffers[SeedVal], RANDOM_BUFFER_SIZE);
+						cout &lt;&lt; "   Done generating random data." &lt;&lt; endl;
+					} </span>
+					else 
+					{
+						// Could not allocate a larger buffer.  Signal failure.
+<span style = "background-color:#fdd">						cout &lt;&lt; "   Error allocating random data buffer..." &lt;&lt; endl;</span>
+					}
+
+				}
+			}
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Deletes all random data buffers
+//
+void Manager::Delete_Random_Data()
+<span style = "background-color:#dfd">{
+	if (!randomDataBuffers.empty())</span>
+	{
+		map&lt;DWORDLONG,unsigned char*&gt;::iterator it;
+
+<span style = "background-color:#fdd">		for ( it=randomDataBuffers.begin() ; it != randomDataBuffers.end(); it++ )</span>
+		{
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+			free((*it).second);
+
+#elif defined(IOMTR_OS_NETWARE)
+			NXMemFree((*it).second);
+
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">			VirtualFree((*it).second, 0, MEM_RELEASE);</span>
+	
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+		}
+
+<span style = "background-color:#fdd">		randomDataBuffers.clear();</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Signalling all threads to begin performing I/O.
+//
+void Manager::Begin_IO(int target)
+<span style = "background-color:#dfd">{</span>
+	msg.data = TRUE;
+<span style = "background-color:#dfd">	cout &lt;&lt; "Beginning to perform I/O..." &lt;&lt; endl &lt;&lt; flush;</span>
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+	if (do_syslog) {
+		syslog(LOG_INFO, "Beginning to perform I/O...");
+	}
+#endif
+
+<span style = "background-color:#dfd">	if (target == ALL_WORKERS) {
+		for (int i = 0; i &lt; grunt_count; i++) {
+			grunts[i]-&gt;Begin_IO();
+			if (grunts[i]-&gt;critical_error)</span>
+<span style = "background-color:#fdd">				msg.data = FALSE;</span>
+		}
+<span style = "background-color:#dfd">	} else {</span>
+<span style = "background-color:#fdd">		grunts[target]-&gt;Begin_IO();
+		if (grunts[target]-&gt;critical_error)
+			msg.data = FALSE;</span>
+	}
+#ifdef _DEBUG
+	cout &lt;&lt; "   Performing I/O." &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+	// Reply that I/O has started.
+<span style = "background-color:#dfd">	if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">		(void)reorder(msg);</span>
+	}
+<span style = "background-color:#dfd">	prt-&gt;Send(&amp;msg);
+}</span>
+
+//
+// Signalling to stop testing.
+//
+void Manager::Stop_Test(int target)
+<span style = "background-color:#fdd">{
+	IsWrite = FALSE;</span>
+
+<span style = "background-color:#fdd">	if (target == ALL_WORKERS) {
+		for (int i = 0; i &lt; grunt_count; i++) {
+			grunts[i]-&gt;Stop_Test();</span>
+		}
+	} else {
+<span style = "background-color:#fdd">		grunts[target]-&gt;Stop_Test();</span>
+	}
+
+	cout &lt;&lt; "Stopping..." &lt;&lt; endl &lt;&lt; flush;
+
+	if (target == ALL_WORKERS) {
+<span style = "background-color:#fdd">		for (int i = 0; i &lt; grunt_count; i++) {
+			grunts[i]-&gt;Wait_For_Stop();</span>
+		}
+<span style = "background-color:#fdd">	} else {
+		grunts[target]-&gt;Wait_For_Stop();</span>
+	}
+
+<span style = "background-color:#fdd">	cout &lt;&lt; "   Stopped." &lt;&lt; endl &lt;&lt; flush;</span>
+
+	// Reply that test has stopped.
+<span style = "background-color:#fdd">	if (IsBigEndian()) {
+		(void)reorder(msg);</span>
+	}
+<span style = "background-color:#fdd">	prt-&gt;Send(&amp;msg);</span>
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+	if (do_syslog) {
+		syslog(LOG_INFO, "I/O Stopped");
+	}
+#endif
+<span style = "background-color:#fdd">}</span>
+
+//
+// Signalling to stop disk preparation.
+//
+void Manager::Stop_Prepare()
+<span style = "background-color:#fdd">{
+	cout &lt;&lt; "Stopping..." &lt;&lt; endl &lt;&lt; flush;</span>
+
+<span style = "background-color:#fdd">	for (int i = 0; i &lt; grunt_count; i++)
+		grunts[i]-&gt;grunt_state = TestIdle;</span>
+
+<span style = "background-color:#fdd">	cout &lt;&lt; "   Stopped." &lt;&lt; endl &lt;&lt; flush;
+}</span>
+
+//
+// Received call to remove workers
+//
+void Manager::Remove_Workers(int target)
+<span style = "background-color:#fdd">{</span>
+	// If we're removing just one worker, remove it and return.
+<span style = "background-color:#fdd">	if (target &gt;= 0 &amp;&amp; target &lt; grunt_count) {</span>
+		// Remove a worker.  It does not matter which one.
+<span style = "background-color:#fdd">		cout &lt;&lt; "Removing worker " &lt;&lt; target &lt;&lt; "." &lt;&lt; endl &lt;&lt; flush;
+		delete grunts[--grunt_count];</span>
+
+		return;
+	}
+	// Remove all workers.
+<span style = "background-color:#fdd">	cout &lt;&lt; "Removing all workers." &lt;&lt; endl &lt;&lt; flush;
+	while (grunt_count)
+		delete grunts[--grunt_count];
+}</span>
+
+//
+// Setting the targets for one or more grunts.
+//
+BOOL Manager::Set_Targets(int worker_no, int count, Target_Spec * target_specs)
+<span style = "background-color:#dfd">{
+	if (worker_no == ALL_WORKERS) {</span>
+<span style = "background-color:#fdd">		for (int i = 0; i &lt; grunt_count; i++) {
+			cout &lt;&lt; "Worker " &lt;&lt; i &lt;&lt; " setting targets..." &lt;&lt; endl;
+			if (!grunts[i]-&gt;Set_Targets(count, target_specs))
+				return FALSE;</span>
+		}
+	} else {
+<span style = "background-color:#dfd">		cout &lt;&lt; "Worker " &lt;&lt; worker_no &lt;&lt; " setting targets..." &lt;&lt; endl;
+		return grunts[worker_no]-&gt;Set_Targets(count, target_specs);</span>
+	}
+<span style = "background-color:#fdd">	return TRUE;</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Setting access specifications for next test.
+// Note that Iometer will call Set_Access before testing starts to ensure that
+// Dynamo can run the spec with the largest transfer request.
+//
+BOOL Manager::Set_Access(int target, const Test_Spec * spec)
+<span style = "background-color:#dfd">{</span>
+	int g;			// loop control variable
+
+<span style = "background-color:#dfd">	if(spec-&gt;access-&gt;reads &lt; 100)</span>
+<span style = "background-color:#fdd">		IsWrite = TRUE;</span>
+
+	// Recursively assign all workers the same access specification.
+<span style = "background-color:#dfd">	if (target == ALL_WORKERS) {</span>
+<span style = "background-color:#fdd">		cout &lt;&lt; "All workers running Access Spec: " &lt;&lt; spec-&gt;name &lt;&lt; endl;
+		for (g = 0; g &lt; grunt_count; g++) {
+			if (!Set_Access(g, spec))</span>
+				return FALSE;
+		}
+		return TRUE;
+	}
+
+<span style = "background-color:#dfd">	cout &lt;&lt; "Worker " &lt;&lt; target &lt;&lt; " running Access Spec: " &lt;&lt; spec-&gt;name &lt;&lt; endl;</span>
+
+	// If the grunt could not set the access spec properly, return.
+	// The grunt may not have been able to grow its data buffer.
+<span style = "background-color:#dfd">	if (!grunts[target]-&gt;Set_Access(spec))</span>
+		return FALSE;
+
+	// If the grunt is not using the manager's data buffer or the manager's
+	// buffer is already large enough, just return.
+<span style = "background-color:#dfd">	if (grunts[target]-&gt;data_size || data_size &gt;= grunts[target]-&gt;access_spec.max_transfer) {</span>
+		return TRUE;
+	}
+	// Grow the manager's data buffer and update all grunts using it.
+#ifdef _DEBUG
+	cout &lt;&lt; "Growing manager data buffer from " &lt;&lt; data_size &lt;&lt; " to "
+	    &lt;&lt; grunts[target]-&gt;access_spec.max_transfer &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+	// Align all data transfers on a page boundary.  This will work for all disks
+	// with sector sizes that divide evenly into the page size - which is always
+	// the case.
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	free(data);
+	errno = 0;
+	if (!(data = valloc(grunts[target]-&gt;access_spec.max_transfer)))
+#elif defined(IOMTR_OS_NETWARE)
+	NXMemFree(data);
+	errno = 0;
+	if (!(data = NXMemAlloc(grunts[target]-&gt;access_spec.max_transfer, 1)))
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+<span style = "background-color:#fdd">	VirtualFree(data, 0, MEM_RELEASE);
+	if (!(data = VirtualAlloc(NULL, grunts[target]-&gt;access_spec.max_transfer, MEM_COMMIT, PAGE_READWRITE)))</span>
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		// Could not allocate a larger buffer.  Signal failure.
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** Manager could not allocate data buffer for I/O transfers." &lt;&lt; endl &lt;&lt; flush;
+		data_size = 0;</span>
+		return FALSE;
+	}
+<span style = "background-color:#fdd">	data_size = grunts[target]-&gt;access_spec.max_transfer;</span>
+
+	// Update all grunts using the manager's data buffer.
+<span style = "background-color:#fdd">	for (g = 0; g &lt; grunt_count; g++) {
+		if (!grunts[g]-&gt;data_size) {
+			grunts[g]-&gt;read_data = data;
+			grunts[g]-&gt;write_data = data;
+			grunts[g]-&gt;saved_write_data_pointer = data;</span>
+		}
+	}
+	return TRUE;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Beginning recording of test results.
+//
+void Manager::Record_On(int target)
+<span style = "background-color:#dfd">{
+	record = TRUE;		// At least 1 worker is recording.</span>
+
+#ifdef _DEBUG
+	cout &lt;&lt; "Recording Started." &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+<span style = "background-color:#dfd">	if (target == ALL_WORKERS) {
+		for (int i = 0; i &lt; grunt_count; i++) {
+			grunts[i]-&gt;Record_On();</span>
+		}
+<span style = "background-color:#dfd">	} else {</span>
+<span style = "background-color:#fdd">		grunts[target]-&gt;Record_On();</span>
+	}
+
+	// Get performance data for start of test.
+<span style = "background-color:#dfd">	Get_Performance(WHOLE_TEST_PERF, FIRST_SNAPSHOT);
+	Get_Performance(LAST_UPDATE_PERF, FIRST_SNAPSHOT);
+}</span>
+
+//
+// Stopping recording of test results.
+//
+void Manager::Record_Off(int target)
+<span style = "background-color:#fdd">{</span>
+	// Get performance data for end of test.
+<span style = "background-color:#fdd">	Get_Performance(WHOLE_TEST_PERF, LAST_SNAPSHOT);
+	Get_Performance(LAST_UPDATE_PERF, LAST_SNAPSHOT);</span>
+
+<span style = "background-color:#fdd">	if (target == ALL_WORKERS) {
+		for (int i = 0; i &lt; grunt_count; i++) {
+			grunts[i]-&gt;Record_Off();</span>
+		}
+<span style = "background-color:#fdd">	} else {
+		grunts[target]-&gt;Record_Off();</span>
+	}
+<span style = "background-color:#fdd">	cout &lt;&lt; "   Stopped." &lt;&lt; endl &lt;&lt; flush;</span>
+
+<span style = "background-color:#fdd">	record = FALSE;		// No workers are recording data.</span>
+#ifdef _DEBUG
+	cout &lt;&lt; "Recording stopped." &lt;&lt; endl &lt;&lt; flush;
+#endif
+<span style = "background-color:#fdd">	if (IsBigEndian()) {
+		(void)reorder(msg);</span>
+	}
+<span style = "background-color:#fdd">	prt-&gt;Send(&amp;msg);
+}</span>
+
+//
+// Starting a new grunt worker.  Sending a message back to Iometer indicating 
+// the number of workers actually created.
+//
+void Manager::Add_Workers(int count)
+<span style = "background-color:#dfd">{
+	msg.data = 0;</span>
+
+#ifdef _DEBUG
+	cout &lt;&lt; "Adding " &lt;&lt; count &lt;&lt; " new worker(s)." &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+<span style = "background-color:#dfd">	for (int i = 0; i &lt; count; i++) {</span>
+		// Create a new grunt.
+<span style = "background-color:#dfd">		if (!(grunts[grunt_count] = new Grunt))</span>
+			break;
+
+		// Assign grunt to manager's data buffer by default.
+<span style = "background-color:#dfd">		grunts[grunt_count]-&gt;read_data = data;
+		grunts[grunt_count]-&gt;write_data = data;
+		grunts[grunt_count]-&gt;timer_resolution = perf_data[0].timer_resolution;
+		grunt_count++;
+		msg.data++;</span>
+	}
+
+	// See if we successfully create all workers requested.
+<span style = "background-color:#dfd">	if (msg.data != count) {</span>
+		// Failed to create all workers.
+<span style = "background-color:#fdd">		while (msg.data) {
+			Remove_Workers(grunt_count--);
+			msg.data--;</span>
+		}
+	}
+#ifdef _DEBUG
+	cout &lt;&lt; msg.data &lt;&lt; " worker(s) are created." &lt;&lt; endl;
+#endif
+
+<span style = "background-color:#dfd">	if (IsBigEndian()) {</span>
+<span style = "background-color:#fdd">		(void)reorder(msg);</span>
+	}
+
+<span style = "background-color:#dfd">	prt-&gt;Send(&amp;msg);
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

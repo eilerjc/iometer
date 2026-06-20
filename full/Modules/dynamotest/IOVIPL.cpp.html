@@ -1,0 +1,449 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOVIPL.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / IOVIPL.cpp                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the VIPL class, which provides an   ## */
+/* ##               interface to the Virtual Interface Programmer's       ## */
+/* ##               Library (hiding the dynamic linking to vipl.dll). All ## */
+/* ##               members of this class are static, so in effect there  ## */
+/* ##               is at most one VIPL object in a copy of Dynamo, even  ## */
+/* ##               though there may be multiple instantiations of it.    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOVIPL.h"
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#include &lt;iostream&gt;
+using namespace std;
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+#include &lt;iostream.h&gt;
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+// Initial declarations for static variables.
+//
+HINSTANCE VIPL::vipl_dll = NULL;
+fVipOpenNic VIPL::VipOpenNic = NULL;
+fVipCloseNic VIPL::VipCloseNic = NULL;
+
+// VI
+fVipCreateVi VIPL::VipCreateVi = NULL;
+fVipDestroyVi VIPL::VipDestroyVi = NULL;
+
+ // Client/server connection
+fVipConnectWait VIPL::VipConnectWait = NULL;
+fVipConnectAccept VIPL::VipConnectAccept = NULL;
+fVipConnectReject VIPL::VipConnectReject = NULL;
+fVipConnectRequest VIPL::VipConnectRequest = NULL;
+fVipDisconnect VIPL::VipDisconnect = NULL;
+
+// Ptag
+fVipCreatePtag VIPL::VipCreatePtag = NULL;
+fVipDestroyPtag VIPL::VipDestroyPtag = NULL;
+
+// Memory
+fVipRegisterMem VIPL::VipRegisterMem = NULL;
+fVipDeregisterMem VIPL::VipDeregisterMem = NULL;
+
+// Send/receive
+fVipPostSend VIPL::VipPostSend = NULL;
+fVipSendDone VIPL::VipSendDone = NULL;
+fVipSendWait VIPL::VipSendWait = NULL;
+fVipPostRecv VIPL::VipPostRecv = NULL;
+fVipRecvDone VIPL::VipRecvDone = NULL;
+fVipRecvWait VIPL::VipRecvWait = NULL;
+
+// Completion queues
+fVipCQDone VIPL::VipCQDone = NULL;
+fVipCQWait VIPL::VipCQWait = NULL;
+fVipCreateCQ VIPL::VipCreateCQ = NULL;
+fVipDestroyCQ VIPL::VipDestroyCQ = NULL;
+fVipResizeCQ VIPL::VipResizeCQ = NULL;
+
+// Information
+fVipQueryNic VIPL::VipQueryNic = NULL;
+fVipSetViAttributes VIPL::VipSetViAttributes = NULL;
+fVipQueryVi VIPL::VipQueryVi = NULL;
+fVipSetMemAttributes VIPL::VipSetMemAttributes = NULL;
+fVipQueryMem VIPL::VipQueryMem = NULL;
+fVipQuerySystemManagementInfo VIPL::VipQuerySystemManagementInfo = NULL;
+
+// Peer-to-peer connection
+fVipConnectPeerRequest VIPL::VipConnectPeerRequest = NULL;
+fVipConnectPeerDone VIPL::VipConnectPeerDone = NULL;
+fVipConnectPeerWait VIPL::VipConnectPeerWait = NULL;
+
+// Name service
+fVipNSInit VIPL::VipNSInit = NULL;
+fVipNSGetHostByName VIPL::VipNSGetHostByName = NULL;
+fVipNSGetHostByAddr VIPL::VipNSGetHostByAddr = NULL;
+fVipNSShutdown VIPL::VipNSShutdown = NULL;
+
+//
+///////////////////////////////////////////////////////////////////////////////
+
+//
+// Loading vipl.dll and dynamically linking all VI functions.  Setting 
+// vipl_loaded if the library loaded successfully.
+
+//
+// UNIX/SOLARIS NOTE
+// -----------------
+//              The UNIX code should work straightaway as soon as a VI shared object is
+// available. The dlopen(3), dlsym(3) and dlclose(3) calls setup the VI shared
+// libraries and make the symbols available for access by dynamo.
+//
+// The dlopen(3), dlsym(3) and dlclose(3) calls are available on almost all UNIX
+// systems but, I think, they might be called dl_open(3) and so on in other flavors.
+// Not sure, though. So for now, I have included these calls under a SOLARIS directive.
+// If at a later stage, the calls are the same on all flavors of UNIX, then the
+// SOLARIS directive can be removed.
+//
+// Another ***IMPORTANT*** note. It is assumed as of now that as yet unavailable
+// UNIX VI library will have the same symbols as the NT library. (If you did'nt know,
+// this is called "day-dreaming"). Do not be shocked if the program crashes while 
+// trying to load the symbols. You see, we are not checking for errors from dlsym(3).
+// The exact symbols will have to be determined when the library becomes available.
+//
+// Yet another ***IMPORTANT*** note. Since we are linking with the VI shared library
+// at runtime, there should be no attempt to link with the library at compiler time.
+// But for dynamo to get at the dl...(3) calls we have to link dynamo with -ldl
+// (libdl.so) at compile time.
+//
+VIPL::VIPL()
+<span style = "background-color:#fdd">{</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	// Load vipl.dll.
+<span style = "background-color:#fdd">	if (!(vipl_dll = LoadLibrary("vipl.dll"))) {</span>
+#ifdef _DEBUG
+		cout &lt;&lt; "Unable to load vipl.dll" &lt;&lt; endl;
+#endif
+		return;
+	}
+	// Dynamically linking VI functions.
+
+	// NIC
+<span style = "background-color:#fdd">	VipOpenNic = (fVipOpenNic) GetProcAddress(vipl_dll, "VipOpenNic");
+	VipCloseNic = (fVipCloseNic) GetProcAddress(vipl_dll, "VipCloseNic");</span>
+
+	// VI
+<span style = "background-color:#fdd">	VipCreateVi = (fVipCreateVi) GetProcAddress(vipl_dll, "VipCreateVi");
+	VipDestroyVi = (fVipDestroyVi) GetProcAddress(vipl_dll, "VipDestroyVi");</span>
+
+	// Client/server connection
+<span style = "background-color:#fdd">	VipConnectWait = (fVipConnectWait)</span>
+	    GetProcAddress(vipl_dll, "VipConnectWait");
+<span style = "background-color:#fdd">	VipConnectAccept = (fVipConnectAccept)</span>
+	    GetProcAddress(vipl_dll, "VipConnectAccept");
+<span style = "background-color:#fdd">	VipConnectReject = (fVipConnectReject)</span>
+	    GetProcAddress(vipl_dll, "VipConnectReject");
+<span style = "background-color:#fdd">	VipConnectRequest = (fVipConnectRequest)</span>
+	    GetProcAddress(vipl_dll, "VipConnectRequest");
+<span style = "background-color:#fdd">	VipDisconnect = (fVipDisconnect)</span>
+	    GetProcAddress(vipl_dll, "VipDisconnect");
+
+	// Ptag
+<span style = "background-color:#fdd">	VipCreatePtag = (fVipCreatePtag)</span>
+	    GetProcAddress(vipl_dll, "VipCreatePtag");
+<span style = "background-color:#fdd">	VipDestroyPtag = (fVipDestroyPtag)</span>
+	    GetProcAddress(vipl_dll, "VipDestroyPtag");
+
+	// Memory
+<span style = "background-color:#fdd">	VipRegisterMem = (fVipRegisterMem)</span>
+	    GetProcAddress(vipl_dll, "VipRegisterMem");
+<span style = "background-color:#fdd">	VipDeregisterMem = (fVipDeregisterMem)</span>
+	    GetProcAddress(vipl_dll, "VipDeregisterMem");
+
+	// Send/receive
+<span style = "background-color:#fdd">	VipPostSend = (fVipPostSend) GetProcAddress(vipl_dll, "VipPostSend");
+	VipSendDone = (fVipSendDone) GetProcAddress(vipl_dll, "VipSendDone");
+	VipSendWait = (fVipSendWait) GetProcAddress(vipl_dll, "VipSendWait");
+	VipPostRecv = (fVipPostRecv) GetProcAddress(vipl_dll, "VipPostRecv");
+	VipRecvDone = (fVipRecvDone) GetProcAddress(vipl_dll, "VipRecvDone");
+	VipRecvWait = (fVipRecvWait) GetProcAddress(vipl_dll, "VipRecvWait");</span>
+
+	// Completion queues
+<span style = "background-color:#fdd">	VipCQDone = (fVipCQDone) GetProcAddress(vipl_dll, "VipCQDone");
+	VipCQWait = (fVipCQWait) GetProcAddress(vipl_dll, "VipCQWait");
+	VipCreateCQ = (fVipCreateCQ) GetProcAddress(vipl_dll, "VipCreateCQ");
+	VipDestroyCQ = (fVipDestroyCQ) GetProcAddress(vipl_dll, "VipDestroyCQ");
+	VipResizeCQ = (fVipResizeCQ) GetProcAddress(vipl_dll, "VipResizeCQ");</span>
+
+	// Information
+<span style = "background-color:#fdd">	VipQueryNic = (fVipQueryNic) GetProcAddress(vipl_dll, "VipQueryNic");
+	VipSetViAttributes = (fVipSetViAttributes)</span>
+	    GetProcAddress(vipl_dll, "VipSetViAttributes");
+<span style = "background-color:#fdd">	VipQueryVi = (fVipQueryVi) GetProcAddress(vipl_dll, "VipQueryVi");
+	VipSetMemAttributes = (fVipSetMemAttributes)</span>
+	    GetProcAddress(vipl_dll, "VipSetMemAttributes");
+<span style = "background-color:#fdd">	VipQueryMem = (fVipQueryMem) GetProcAddress(vipl_dll, "VipQueryMem");
+	VipQuerySystemManagementInfo = (fVipQuerySystemManagementInfo)</span>
+	    GetProcAddress(vipl_dll, "VipQuerySystemManagementInfo");
+
+	// Peer-to-peer connection
+<span style = "background-color:#fdd">	VipConnectPeerRequest = (fVipConnectPeerRequest)</span>
+	    GetProcAddress(vipl_dll, "VipConnectPeerRequest");
+<span style = "background-color:#fdd">	VipConnectPeerDone = (fVipConnectPeerDone)</span>
+	    GetProcAddress(vipl_dll, "VipConnectPeerDone");
+<span style = "background-color:#fdd">	VipConnectPeerWait = (fVipConnectPeerWait)</span>
+	    GetProcAddress(vipl_dll, "VipConnectPeerWait");
+
+	// Name service
+<span style = "background-color:#fdd">	VipNSInit = (fVipNSInit) GetProcAddress(vipl_dll, "VipNSInit");
+	VipNSGetHostByName = (fVipNSGetHostByName)</span>
+	    GetProcAddress(vipl_dll, "VipNSGetHostByName");
+<span style = "background-color:#fdd">	VipNSGetHostByAddr = (fVipNSGetHostByAddr)</span>
+	    GetProcAddress(vipl_dll, "VipNSGetHostByAddr");
+<span style = "background-color:#fdd">	VipNSShutdown = (fVipNSShutdown)</span>
+	    GetProcAddress(vipl_dll, "VipNSShutdown");
+#elif defined(IOMTR_OS_SOLARIS)
+	// When VI library becomes available on Solaris, this should work
+	if ((vipl_dll = dlopen("vipl.so", RTLD_NOW | RTLD_GLOBAL | RTLD_PARENT)) == NULL) {
+#ifdef _DEBUG
+		cout &lt;&lt; "unable to load VI shared library" &lt;&lt; endl;
+#endif
+		return;
+	}
+	// Link all the VI functions.
+	// NIC
+	VipOpenNic = (fVipOpenNic) dlsym(vipl_dll, "VipOpenNic");
+	VipCloseNic = (fVipCloseNic) dlsym(vipl_dll, "VipCloseNic");
+
+	// VI
+	VipCreateVi = (fVipCreateVi) dlsym(vipl_dll, "VipCreateVi");
+	VipDestroyVi = (fVipDestroyVi) dlsym(vipl_dll, "VipDestroyVi");
+
+	// Client/server connection
+	VipConnectWait = (fVipConnectWait)
+	    dlsym(vipl_dll, "VipConnectWait");
+	VipConnectAccept = (fVipConnectAccept)
+	    dlsym(vipl_dll, "VipConnectAccept");
+	VipConnectReject = (fVipConnectReject)
+	    dlsym(vipl_dll, "VipConnectReject");
+	VipConnectRequest = (fVipConnectRequest)
+	    dlsym(vipl_dll, "VipConnectRequest");
+	VipDisconnect = (fVipDisconnect)
+	    dlsym(vipl_dll, "VipDisconnect");
+
+	// Ptag
+	VipCreatePtag = (fVipCreatePtag)
+	    dlsym(vipl_dll, "VipCreatePtag");
+	VipDestroyPtag = (fVipDestroyPtag)
+	    dlsym(vipl_dll, "VipDestroyPtag");
+
+	// Memory
+	VipRegisterMem = (fVipRegisterMem)
+	    dlsym(vipl_dll, "VipRegisterMem");
+	VipDeregisterMem = (fVipDeregisterMem)
+	    dlsym(vipl_dll, "VipDeregisterMem");
+
+	// Send/receive
+	VipPostSend = (fVipPostSend) dlsym(vipl_dll, "VipPostSend");
+	VipSendDone = (fVipSendDone) dlsym(vipl_dll, "VipSendDone");
+	VipSendWait = (fVipSendWait) dlsym(vipl_dll, "VipSendWait");
+	VipPostRecv = (fVipPostRecv) dlsym(vipl_dll, "VipPostRecv");
+	VipRecvDone = (fVipRecvDone) dlsym(vipl_dll, "VipRecvDone");
+	VipRecvWait = (fVipRecvWait) dlsym(vipl_dll, "VipRecvWait");
+
+	// Completion queues
+	VipCQDone = (fVipCQDone) dlsym(vipl_dll, "VipCQDone");
+	VipCQWait = (fVipCQWait) dlsym(vipl_dll, "VipCQWait");
+	VipCreateCQ = (fVipCreateCQ) dlsym(vipl_dll, "VipCreateCQ");
+	VipDestroyCQ = (fVipDestroyCQ) dlsym(vipl_dll, "VipDestroyCQ");
+	VipResizeCQ = (fVipResizeCQ) dlsym(vipl_dll, "VipResizeCQ");
+
+	// Information
+	VipQueryNic = (fVipQueryNic) dlsym(vipl_dll, "VipQueryNic");
+	VipSetViAttributes = (fVipSetViAttributes)
+	    dlsym(vipl_dll, "VipSetViAttributes");
+	VipQueryVi = (fVipQueryVi) dlsym(vipl_dll, "VipQueryVi");
+	VipSetMemAttributes = (fVipSetMemAttributes)
+	    dlsym(vipl_dll, "VipSetMemAttributes");
+	VipQueryMem = (fVipQueryMem) dlsym(vipl_dll, "VipQueryMem");
+	VipQuerySystemManagementInfo = (fVipQuerySystemManagementInfo)
+	    dlsym(vipl_dll, "VipQuerySystemManagementInfo");
+
+	// Peer-to-peer connection
+	VipConnectPeerRequest = (fVipConnectPeerRequest)
+	    dlsym(vipl_dll, "VipConnectPeerRequest");
+	VipConnectPeerDone = (fVipConnectPeerDone)
+	    dlsym(vipl_dll, "VipConnectPeerDone");
+	VipConnectPeerWait = (fVipConnectPeerWait)
+	    dlsym(vipl_dll, "VipConnectPeerWait");
+
+	// Name service
+	VipNSInit = (fVipNSInit) dlsym(vipl_dll, "VipNSInit");
+	VipNSGetHostByName = (fVipNSGetHostByName)
+	    dlsym(vipl_dll, "VipNSGetHostByName");
+	VipNSGetHostByAddr = (fVipNSGetHostByAddr)
+	    dlsym(vipl_dll, "VipNSGetHostByAddr");
+	VipNSShutdown = (fVipNSShutdown)
+	    dlsym(vipl_dll, "VipNSShutdown");
+#elif defined(IOMTR_OS_LINUX)
+	// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#fdd">}</span>
+
+//
+// Freeing the dynamically linked vipl.dll
+//
+VIPL::~VIPL()
+<span style = "background-color:#fdd">{</span>
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	// If library had previously been loaded, free it.
+<span style = "background-color:#fdd">	if (vipl_dll)
+		FreeLibrary(vipl_dll);</span>
+#elif defined(IOMTR_OS_SOLARIS)
+	if (vipl_dll)
+		dlclose(vipl_dll);
+	return;
+#elif defined(IOMTR_OS_LINUX)
+	// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+<span style = "background-color:#fdd">}</span>
+
+//
+// Handy debugger function.  Call like so:
+//
+// cout &lt;&lt; "*** Error: " &lt;&lt; vipl.Error( result ) &lt;&lt; endl;
+//
+char *VIPL::Error(VIP_RETURN result)
+<span style = "background-color:#fdd">{</span>
+	static char errmsg[2048];
+
+<span style = "background-color:#fdd">	switch (result) {</span>
+	case VIP_NOT_DONE:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_NOT_DONE - The operation is still in" " progress.");</span>
+		break;
+	case VIP_INVALID_PARAMETER:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_INVALID_PARAMETER - One of the input" " parameters was invalid.");</span>
+		break;
+	case VIP_ERROR_RESOURCE:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_ERROR_RESOURCE - The operation failed due" " to insufficient resources.");</span>
+		break;
+	case VIP_TIMEOUT:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_TIMEOUT - The operation timed out.");</span>
+		break;
+	case VIP_REJECT:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_REJECT - The connection was rejected.");</span>
+		break;
+	case VIP_INVALID_RELIABILITY_LEVEL:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_INVALID_RELIABILITY_LEVEL - The requested"</span>
+		       " reliability level attribute was invalid or not supported.");
+		break;
+	case VIP_INVALID_MTU:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_INVALID_MTU - The maximum transfer size"</span>
+		       " attribute was invalid or not supported.");
+		break;
+	case VIP_INVALID_QOS:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_INVALID_QOS - The quality of service" " attribute was invalid or not supported.");</span>
+		break;
+	case VIP_INVALID_PTAG:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_INVALID_PTAG - The protection tag" " attribute was invalid.");</span>
+		break;
+	case VIP_INVALID_RDMAREAD:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_INVALID_RDMAREAD - The attributes"</span>
+		       " requested support for RDMA Read, but the VI Provider" " does not support it.");
+		break;
+	case VIP_DESCRIPTOR_ERROR:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_DESCRIPTOR_ERROR - The operation returned" " a null Descriptor pointer.");</span>
+		break;
+	case VIP_INVALID_STATE:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_INVALID_STATE - The VI is not in the" " appropriate state for the operation.");</span>
+		break;
+	case VIP_ERROR_NAMESERVICE:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_ERROR_NAMESERVICE - There was an error" " contacting the Name Service.");</span>
+		break;
+	case VIP_NO_MATCH:
+<span style = "background-color:#fdd">		strcpy(errmsg, "VIP_NO_MATCH - The specified discriminator" " was not matched.");</span>
+		break;
+	default:
+<span style = "background-color:#fdd">		sprintf(errmsg, "Unknown VI error: %d.", result);</span>
+		break;
+	}
+
+<span style = "background-color:#fdd">	return errmsg;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

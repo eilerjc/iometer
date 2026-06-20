@@ -1,0 +1,338 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOTargetTCP.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / IOTargetTCP.cpp                                           ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the Target class for TCP/IP         ## */
+/* ##               sockets.                                              ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2004-03-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Code cleanup to ensure common style.                ## */
+/* ##               - Applied Thayne Harmon's patch for supporting        ## */
+/* ##                 Netware support (on I386).                          ## */
+/* ##               2003-10-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOTargetTCP.h"
+
+//////////////////////////////////////////////////////////////////////
+// Construction/Destruction
+//////////////////////////////////////////////////////////////////////
+
+TargetTCP::TargetTCP()
+<span style = "background-color:#fdd">{
+	io_cq = NULL;
+	is_server = CLIENT;
+}</span>
+
+//
+// Initializes the local side of a TCP connection depending on whether
+// the remote side is a TCP server or client.
+//
+BOOL TargetTCP::Initialize(Target_Spec * target_info, CQ * cq)
+<span style = "background-color:#fdd">{</span>
+	// Record completion queue.
+<span style = "background-color:#fdd">	io_cq = (CQAIO *) cq;</span>
+
+<span style = "background-color:#fdd">	if (IsType(target_info-&gt;type, TCPClientType)) {</span>
+		// Target is a client - local connection is a server.
+<span style = "background-color:#fdd">		return InitServer(target_info);
+	} else if (IsType(target_info-&gt;type, TCPServerType)) {</span>
+		// Target is a server - local connection is a client.
+<span style = "background-color:#fdd">		return InitClient(target_info);</span>
+	} else {
+<span style = "background-color:#fdd">		cout &lt;&lt; "***Invalid target type in TargetTCP::Initialize()." &lt;&lt; endl;
+		return FALSE;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Initialize a TCP server at a specific IP address, specified as a string.  
+// Returns the server's port number in *server_port_out (USHRT_MAX in 
+// case of error).
+//
+BOOL TargetTCP::InitServer(Target_Spec * target_info)
+<span style = "background-color:#fdd">{</span>
+	is_server = SERVER;
+<span style = "background-color:#fdd">	memcpy(&amp;spec, target_info, sizeof(Target_Spec));</span>
+
+	// Initialize lastIO with opposite values for server and client
+	// to avoid hang on Close() if no I/Os are performed.
+	lastIO = READ;
+
+	// Set the address of the server socket.
+<span style = "background-color:#fdd">	tcp_socket.SetAddress(SERVER, spec.name);</span>
+	// Create and bind the server socket.
+<span style = "background-color:#fdd">	if (tcp_socket.Create(SERVER) != ReturnSuccess) {
+		cout &lt;&lt; "*** Failed to create a TCP server port." &lt;&lt; endl;</span>
+		target_info-&gt;tcp_info.local_port = USHRT_MAX;
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// Record the assigned port number (in host byte order).
+<span style = "background-color:#fdd">	target_info-&gt;tcp_info.local_port = ntohs(tcp_socket.server_address.sin_port);</span>
+	return TRUE;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Initialize a TCP client, given the server's IP address (specified as 
+// a string) and port number. Returns the client's port number in 
+// *client_port_out (USHRT_MAX in case of error).
+//
+BOOL TargetTCP::InitClient(Target_Spec * target_info)
+<span style = "background-color:#fdd">{</span>
+	is_server = CLIENT;
+<span style = "background-color:#fdd">	memcpy(&amp;spec, target_info, sizeof(Target_Spec));</span>
+
+	// Initialize lastIO with opposite values for server and client
+	// to avoid hang on Close() if no I/Os are performed.
+	lastIO = WRITE;
+
+	// Set the address of the client socket.
+<span style = "background-color:#fdd">	tcp_socket.SetAddress(CLIENT, spec.name);</span>
+
+	// Create and bind the client socket.
+#ifdef _DEBUG
+	cout &lt;&lt; "Creating socket " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+	// Make sure we can create the socket.
+<span style = "background-color:#fdd">	if (tcp_socket.Create(CLIENT) != ReturnSuccess) {
+		cout &lt;&lt; "*** Failed to create TCP client socket." &lt;&lt; endl;</span>
+		spec.tcp_info.local_port = USHRT_MAX;
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// Record the assigned port number (in host byte order).
+<span style = "background-color:#fdd">	spec.tcp_info.local_port = ntohs(tcp_socket.client_address.sin_port);</span>
+
+	// Socket will be re-created in Open() with the same
+	// address and port number, so close it now to prevent
+	// binding error WSAEADDRINUSE.
+<span style = "background-color:#fdd">	tcp_socket.Close(CLIENT);</span>
+
+	// Store the ip_address for the remote connection.
+	// we will connect to specified address
+<span style = "background-color:#fdd">	tcp_socket.SetAddress(SERVER, spec.tcp_info.remote_address, spec.tcp_info.remote_port);</span>
+	return TRUE;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Open a socket.  Blocking call: does not return until connection is established.
+//
+BOOL TargetTCP::Open(volatile TestState * test_state, int open_flag)
+<span style = "background-color:#fdd">{</span>
+	ReturnVal result;
+
+<span style = "background-color:#fdd">	if (is_server) {</span>
+		// Accept an incomming connection on the server socket
+		// until either the accept completes successfully or
+		// the test state changes.
+<span style = "background-color:#fdd">		tcp_socket.SetTimeout(1, 0);</span>
+
+		do {
+<span style = "background-color:#fdd">			result = tcp_socket.Accept();</span>
+		}
+<span style = "background-color:#fdd">		while (result == ReturnRetry &amp;&amp; *test_state != TestIdle);</span>
+
+<span style = "background-color:#fdd">		if (result == ReturnError) {
+			cout &lt;&lt; "*** Unable to accept connection opening TCP target." &lt;&lt; endl;
+			return FALSE;</span>
+		}
+	} else {
+		// Create and bind the client socket.
+		// We cannot re-use the same port number.  Set it to 0 so that the system
+		// will assign a new port.
+<span style = "background-color:#fdd">		tcp_socket.client_address.sin_port = htons(0);
+		tcp_socket.Create(CLIENT);</span>
+
+		// Connect to the server address specified in InitClient()
+		do {
+<span style = "background-color:#fdd">			result = tcp_socket.ConnectSocket(&amp;tcp_socket.server_address);</span>
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+			if (result != ReturnSuccess) {
+				// According to connect(3XN):
+				//      If connect() fails, the state of the socket
+				//      is unspecified.  Portable applications
+				//      should close the file descriptor and
+				//      create a new socket before attempting to
+				//      reconnect.
+
+				tcp_socket.Close(CLIENT);
+				if (tcp_socket.Create(CLIENT) != ReturnSuccess) {
+					cout &lt;&lt; "*** Failed to re-create TCP client socket." &lt;&lt; endl;
+					return FALSE;
+				}
+			}
+#endif				// UNIX
+		}
+<span style = "background-color:#fdd">		while (result == ReturnRetry &amp;&amp; *test_state != TestIdle);</span>
+
+<span style = "background-color:#fdd">		if (result == ReturnError) {
+			cout &lt;&lt; "*** Unable to connect to server opening TCP target." &lt;&lt; endl;
+			return FALSE;</span>
+		}
+	}
+
+	// Indicating where completed asynchronous transfers should be queued.
+<span style = "background-color:#fdd">	return (CreateIoCompletionPort((HANDLE) tcp_socket.client_socket, io_cq-&gt;completion_queue, 0, 1) != NULL);
+}</span>
+
+//
+// Close a socket.
+//
+BOOL TargetTCP::Close(volatile TestState * test_state)
+<span style = "background-color:#fdd">{</span>
+	// Allow the receiving side to disconnect first.
+<span style = "background-color:#fdd">	if (lastIO == WRITE) {
+		while (tcp_socket.WaitForDisconnect() == ReturnRetry &amp;&amp; *test_state != TestIdle) ;</span>
+	}
+
+<span style = "background-color:#fdd">	return (tcp_socket.Close(CLIENT) == ReturnSuccess);
+}</span>
+
+//
+// Perform receive operation.  NOTE: Direction of call is reversed for client!
+//
+ReturnVal TargetTCP::Read(LPVOID buffer, Transaction * trans)
+<span style = "background-color:#fdd">{</span>
+	DWORD bytes_read;
+	int retval;
+
+<span style = "background-color:#fdd">	if (is_server) {</span>
+		// Keep track of whether the last I/O performed by the target was a read or a write.
+		// This is used to determine which side closes first.
+<span style = "background-color:#fdd">		lastIO = READ;</span>
+
+		if ((retval = tcp_socket.Receive(buffer, trans-&gt;size, &amp;bytes_read,
+<span style = "background-color:#fdd">						 &amp;trans-&gt;asynchronous_io)) == ReturnError) {</span>
+			return ReturnError;
+		}
+	} else {
+		// Keep track of whether the last I/O performed by the target was a read or a write.
+		// This is used to determine which side closes first.
+<span style = "background-color:#fdd">		lastIO = WRITE;</span>
+
+		if ((retval = tcp_socket.Send(buffer, trans-&gt;size, &amp;bytes_read,
+<span style = "background-color:#fdd">					      &amp;trans-&gt;asynchronous_io)) == ReturnError) {
+			return ReturnError;</span>
+		}
+	}
+	// If the I/O completed immediately or is deferred, the completion
+	// will still be pending in the completion queue.
+#if defined(IOMTR_OSFAMILY_UNIX) &amp;&amp; defined(IMMEDIATE_AIO_COMPLETION)
+	// This prevents the code from looking in the completionQ for immediately completed IOs.
+	if (retval == ReturnSuccess)
+		return ReturnSuccess;
+#endif				// UNIX &amp;&amp; IMMEDIATE_AIO_COMPLETION
+<span style = "background-color:#fdd">	return ReturnPending;
+}</span>
+
+//
+// Perform send operation.  NOTE: Direction of call is reversed for client!
+//
+ReturnVal TargetTCP::Write(LPVOID buffer, Transaction * trans)
+<span style = "background-color:#fdd">{</span>
+	DWORD bytes_sent;
+	int retval;
+
+<span style = "background-color:#fdd">	if (is_server) {</span>
+		// Keep track of whether the last I/O performed by the target was a read or a write.
+		// This is used to determine which side closes first.
+<span style = "background-color:#fdd">		lastIO = WRITE;</span>
+
+		if ((retval = tcp_socket.Send(buffer, trans-&gt;size, &amp;bytes_sent,
+<span style = "background-color:#fdd">					      &amp;trans-&gt;asynchronous_io)) == ReturnError) {</span>
+			return ReturnError;
+		}
+	} else {
+		// Keep track of whether the last I/O performed by the target was a read or a write.
+		// This is used to determine which side closes first.
+<span style = "background-color:#fdd">		lastIO = READ;</span>
+
+		if ((retval = tcp_socket.Receive(buffer, trans-&gt;size, &amp;bytes_sent,
+<span style = "background-color:#fdd">						 &amp;trans-&gt;asynchronous_io)) == ReturnError) {
+			return ReturnError;</span>
+		}
+	}
+	// If the I/O completed immediately or is deferred, the completion
+	// will still be pending in the completion queue.
+#if defined(IOMTR_OSFAMILY_UNIX) &amp;&amp; defined(IMMEDIATE_AIO_COMPLETION)
+	// This prevents the code from looking in the completionQ for immediately completed IOs.
+	if (retval == ReturnSuccess)
+		return ReturnSuccess;
+#endif				// UNIX &amp;&amp; IMMEDIATE_AIO_COMPLETION
+<span style = "background-color:#fdd">	return ReturnPending;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

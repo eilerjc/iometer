@@ -1,0 +1,2280 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IOTargetDisk.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / IOTargetDisk.cpp                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implements a Target subclass named TargetDisk.        ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2005-04-18 (raltherr@apple.com)                       ## */
+/* ##               - Support for MacOS X                                 ## */
+/* ##               2005-04-02 (moozart@gmx.de)                           ## */
+/* ##               - Corrected a overflow bug in getSizeOfPhysDisk().    ## */
+/* ##               2004-09-26 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Removed a note about the Reported_As_Logical()      ## */
+/* ##                 function as this one was removed.                   ## */
+/* ##               2004-09-01 (henryx.w.tieman@intel.com)                ## */
+/* ##               - Initialize iocq structure member.                   ## */
+/* ##               - Cleanup some function pointer math.                 ## */
+/* ##               - Clean a few comments with non-printing characters.  ## */
+/* ##               - Correct the size of data stored through pointers.   ## */
+/* ##               2004-08-21 (mingz@ele.uri.edu)                        ## */
+/* ##               - Changed "/dev" to RAW_DEVICE_DIR in                 ## */
+/* ##                 getSectorSizeOfPhysDisk() and getSizeOfPhysDisk()   ## */
+/* ##               2004-05-27 (lamontcranston41@yahoo.com)               ## */
+/* ##               - Close files in getSizeOfPhysDisk and                ## */
+/* ##                 getSectorSizeOfPhysDisk for linux                   ## */
+/* ##               - Complete partial I/O properly to prevent disk       ## */
+/* ##                 preparation from hanging                            ## */
+/* ##               2004-03-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Applied Dan Bar Dov's patch for adding              ## */
+/* ##                 Linux on PPC support.                               ## */
+/* ##               - Code cleanup to ensure common style.                ## */
+/* ##               - Applied Thayne Harmon's patch for supporting        ## */
+/* ##                 Netware support (on I386).                          ## */
+/* ##               2004-02-12 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved BLKSSZGET, BLKBSZGET and BLKGETSIZE64         ## */
+/* ##                 from here to the IOCommon.h file.                   ## */
+/* ##               2004-02-06 (mingz@ele.uri.edu)                        ## */
+/* ##               - Added Set_Starting_Sector() code for XScale         ## */
+/* ##               - Changed getSectorSizeOfPhysDisk() to use BLKBSZGET  ## */
+/* ##                 ioctl call to get sector size. Dmitry Yusupov       ## */
+/* ##                 suggest this;                                       ## */
+/* ##               - Removed getSectorTableLoc() and getDevNums()        ## */
+/* ##               - Changed getSizeOfPhysDisk() to use BLKGETSIZE64     ## */
+/* ##                 ioctl call to get disk size                         ## */
+/* ##               2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Applied the large_work_file patch from              ## */
+/* ##                 Russell Reed (for files &gt;2GB on 32 bit).            ## */
+/* ##               2003-08-05 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - changes so VC++ 7 (.NET) will compile correctly.    ## */
+/* ##               2003-03-05 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Removed LINUX_DEBUG, because it is redundant.       ## */
+/* ##                 We can use the generic _DEBUG therefor.             ## */
+/* ##               2003-03-04 (joe@eiler.net)                            ## */
+/* ##               - Cleaned up some compiler warnings for Solaris       ## */
+/* ##               2003-02-27 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Added output of major &amp; minor number within         ## */
+/* ##                 the getSectorSizeOfPhysDisk() method.               ## */
+/* ##               2003-02-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Fixed the getSectorSizeOfPhysDisk() method to       ## */
+/* ##                 detect the sector size was on major and minor       ## */
+/* ##                 number (instead on major number only).              ## */
+/* ##               2003-02-02 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##               - Applied the iometer-initial-largefile.patch file    ## */
+/* ##                 (modifies the Open() method and adds O_LARGEFILE    ## */
+/* ##                 to the flags field of the open() function calls).   ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "IOCommon.h"
+#include "IOTargetDisk.h"
+#include "IOAccess.h"
+
+#if defined(IOMTR_OSFAMILY_WINDOWS)
+#include &lt;initguid.h&gt;
+#include &lt;diskguid.h&gt;
+#endif
+
+#define _DISK_MSGS 0
+
+#if defined(IOMTR_OSFAMILY_NETWARE)
+#include &lt;assert.h&gt;
+#include &lt;math.h&gt;
+#include &lt;monitor.h&gt;
+#include &lt;library.h&gt;
+#include &lt;netware.h&gt;
+#elif defined(IOMTR_OSFAMILY_UNIX)
+#ifdef WORKAROUND_MOD_BUG
+#include &lt;math.h&gt;
+#endif				// WORKAROUND_MOD_BUG
+
+#if defined(IOMTR_OS_SOLARIS)
+#if defined(IOMTR_CPU_I386) || defined(IOMTR_CPU_IA64)
+   // highly specific to Solaris on Intel
+#include &lt;sys/dktp/fdisk.h&gt;
+#endif
+#include &lt;sys/statvfs.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;sys/dkio.h&gt;
+#include &lt;sys/vtoc.h&gt;
+#endif
+
+#if defined(IOMTR_OS_LINUX)
+#include &lt;assert.h&gt;
+#include &lt;sys/vfs.h&gt;
+#endif
+
+#if defined(IOMTR_OS_OSX)
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;sys/mount.h&gt;
+#include &lt;sys/ioctl.h&gt;
+#include &lt;sys/disk.h&gt;
+#endif
+#endif
+
+/**********************************************************************
+ * Forward Declarations
+ **********************************************************************/
+#if defined(IOMTR_OS_LINUX)
+static int getSectorSizeOfPhysDisk(const char *devName);
+static unsigned long long getSizeOfPhysDisk(const char *devName);
+#endif
+
+// IOMTR_TEST_MODE is defined only by the separate "dynamotest" build. In that
+// build the disk layer is fully synthetic (no device access, no elevation); the
+// production "dynamo" build contains none of this code.
+#if defined(IOMTR_TEST_MODE)
+// Synthetic capacity used for a test target (2 GiB); never touches hardware.
+#define IOMTR_TEST_DISK_BYTES ((DWORDLONG)2 * 1024 * 1024 * 1024)
+
+// Per-I/O delays (microseconds) from the command line (--rdelay / --wdelay).
+// They turn instant synthetic completions into targetable latency/IOPS.
+extern struct dynamo_param param;
+
+// Busy-wait the requested number of microseconds using the high-resolution
+// counter (accurate to well under the typical 10-1000 us range used here).
+static void Test_IO_Delay(int microseconds)
+<span style = "background-color:#dfd">{
+	if (microseconds &lt;= 0)</span>
+		return;
+	LARGE_INTEGER freq, start, now;
+<span style = "background-color:#dfd">	QueryPerformanceFrequency(&amp;freq);
+	QueryPerformanceCounter(&amp;start);
+	double ticks = (double) microseconds * (double) freq.QuadPart / 1.0e6;</span>
+	do {
+<span style = "background-color:#dfd">		QueryPerformanceCounter(&amp;now);
+	} while ((double) (now.QuadPart - start.QuadPart) &lt; ticks);
+}</span>
+#endif
+
+//
+// Constructor.
+//
+TargetDisk::TargetDisk()
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	LONG rc;
+#endif
+<span style = "background-color:#dfd">	sector_align_mask = NOT_POWER_OF_TWO;</span>
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	disk_file = (HANDLE) &amp; file_handle;
+	file_handle.iocq = NULL;
+#endif
+
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	mmAppTag = (LONG) AllocateResourceTag(getnlmhandle(), "dynamo", (LONG) MM_APPLICATION_SIGNATURE);
+	appDef.classobjectsignature = MM_APPLICATION_SIGNATURE;
+	appDef.controlroutine = NULL;
+	appDef.name = (unsigned char *)"mmDynamo";
+	appDef.type = MM_GENERAL_STORAGE_APPLICATION;
+	appDef.identifier = 0xEEDDCCBB;
+
+	if ((rc = MM_RegisterObject(&amp;applicationHandle, MM_APPLICATION_CLASS, &amp;appDef, NULL, mmAppTag)) != MM_OK) {
+		printf("Failed MM_RegisterObject (0x%X)\n", rc);
+		exit(1);
+	}
+#endif
+
+<span style = "background-color:#dfd">	memset(&amp;spec, 0, sizeof(spec));
+}</span>
+
+TargetDisk::~TargetDisk()
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_OS_NETWARE)
+	MM_UnregisterObject(applicationHandle, 0);
+#endif
+<span style = "background-color:#dfd">};</span>
+
+//
+// Initializing the disk based on the specified target information.
+//
+BOOL TargetDisk::Initialize(Target_Spec * target_info, CQ * cq)
+<span style = "background-color:#dfd">{</span>
+	BOOL retval;
+
+<span style = "background-color:#dfd">	io_cq = (CQAIO *) cq;</span>
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+	file_handle.iocq = (IOCQ *) io_cq-&gt;completion_queue;
+#endif
+<span style = "background-color:#dfd">	memcpy(&amp;spec, target_info, sizeof(Target_Spec));</span>
+
+#if defined(IOMTR_TEST_MODE)
+	// Assign synthetic geometry and touch no hardware. The real
+	// Init_Logical/Init_Physical + Set_Size paths query the device (and the
+	// physical path needs elevation), so they are bypassed entirely here.
+<span style = "background-color:#dfd">	if (spec.disk_info.sector_size &lt;= 0)</span>
+<span style = "background-color:#fdd">		spec.disk_info.sector_size = 512;</span>
+	sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);
+	size = IOMTR_TEST_DISK_BYTES;
+<span style = "background-color:#dfd">	Set_Starting_Sector(spec.disk_info.starting_sector);
+	return TRUE;</span>
+#endif
+
+	// Initializing logical disks.
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+	if (IsType(target_info-&gt;type, LogicalDiskType))
+		retval = Init_Logical(spec.actual_name);
+	else if (IsType(target_info-&gt;type, PhysicalDiskType))
+		retval = Init_Physical(spec.actual_name);
+#else
+	if (IsType(target_info-&gt;type, LogicalDiskType))
+		retval = Init_Logical(spec.name[0]);
+	else if (IsType(target_info-&gt;type, PhysicalDiskType))
+		retval = Init_Physical(atoi(spec.name + 14));
+#endif
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if (IsType(target_info-&gt;type, LogicalDiskType))
+		retval = Init_Logical(spec.name);
+	else if (IsType(target_info-&gt;type, PhysicalDiskType))
+		retval = Init_Physical(spec.name);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+	else {
+		cout &lt;&lt; "*** Invalid disk type in TargetDisk::Initialize()." &lt;&lt; endl;
+		retval = FALSE;
+	}
+
+	if (retval) {
+		// Setting size of disk, if it was successfully initialized
+		Set_Size(spec.disk_info.maximum_size);
+
+#if defined(IOMTR_CPU_SPARC)
+		// To tell the truth, I have no idear, if this is
+		// a.) Only specific to the Sparc systems (so Linux on Sparc has to do the same)
+		// b.) Only specific to the Solaris operating system (so Solaris on i386 has to do the same)
+		// c.) Specific to the Sparc system / Solaris operating system combination (current implementation)
+#if defined(IOMTR_OS_SOLARIS)
+		if (spec.disk_info.starting_sector)
+			Set_Starting_Sector(spec.disk_info.starting_sector);
+		else if (IsType(target_info-&gt;type, PhysicalDiskType)) {
+			// always skip sector 0 for non-i386 || IA64 platform (only for raw disks).
+			// We need it to avoid destroying the vtoc table which is
+			// not protected on these (sparc) platforms.
+			//
+			// But this is serious performance implications.
+			// Can slow down access quite a bit.
+			//
+			Set_Starting_Sector(1);
+		}
+#else
+#error ===&gt; ERROR: Broken port, advice needed!
+#endif
+#elif defined(IOMTR_CPU_I386) || defined(IOMTR_CPU_IA64) || defined(IOMTR_CPU_PPC) || defined(IOMTR_CPU_X86_64)
+		Set_Starting_Sector(spec.disk_info.starting_sector);
+#elif defined(IOMTR_CPU_XSCALE)
+		// TODO: Need to double check if this is correct for xscale
+		cout &lt;&lt; spec.disk_info.starting_sector &lt;&lt; endl;
+		Set_Starting_Sector(spec.disk_info.starting_sector);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	}
+
+	return retval;
+<span style = "background-color:#dfd">}</span>
+
+#if defined(IOMTR_OS_NETWARE)
+// NetWare logical drives are accessed through path names.
+BOOL TargetDisk::Init_Logical(char *drive)
+{
+	// Setting spec.name of the drive.
+	snprintf(spec.name, MAX_NAME, "%s", drive);
+
+	if (spec.name[strlen(spec.name) - 1] == ':') {
+		snprintf(file_name, MAX_NAME, "%s%s", spec.name, TEST_FILE);
+	} else {
+		snprintf(file_name, MAX_NAME, "%s:%s", spec.name, TEST_FILE);
+	}
+
+	spec.type = LogicalDiskType;
+	size = 0;
+	starting_position = 0;
+	offset = 0;
+	bytes_transferred = 0;
+
+	// Getting size information about the drive.
+	return (Set_Sizes());
+}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+// UNIX logical drives are accessed through path names.
+BOOL TargetDisk::Init_Logical(char *drive)
+{
+	// Strip off file system Information about the logical drives.
+	char *p;
+
+	// check for this pattern is also in Manager::Report_Disks()
+	p = strstr(drive, " [");
+	if (p) {
+		strncpy(spec.name, drive, p - drive);
+		spec.name[p - drive] = 0;
+	} else
+		// Setting spec.name of the drive.
+		snprintf(spec.name, MAX_NAME, "%s", drive);
+
+	if (spec.name[strlen(spec.name) - 1] == '/') {
+		snprintf(file_name, MAX_NAME, "%s%s", spec.name, TEST_FILE);
+	} else {
+		snprintf(file_name, MAX_NAME, "%s/%s", spec.name, TEST_FILE);
+	}
+
+	spec.type = LogicalDiskType;
+	size = 0;
+	starting_position = 0;
+	offset = 0;
+	bytes_transferred = 0;
+
+	// Getting size information about the drive.
+	return (Set_Sizes());
+}
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+BOOL TargetDisk::Init_Logical( char *drive )
+<span style = "background-color:#fdd">{</span>
+	// Setting spec.name of the drive.
+	//sprintf( spec.name, "%s", drive);
+<span style = "background-color:#fdd">	strcpy(spec.name, drive);</span>
+
+	// Save the name to the actual partition device: \\.\c:, not the file path
+<span style = "background-color:#fdd">	if (drive[0] != '\\')</span>
+	{
+<span style = "background-color:#fdd">		sprintf(spec.actual_name, "\\\\.\\%s", drive);
+	}</span>
+	else
+	{
+		//sprintf(spec.actual_name, "%s", drive);
+<span style = "background-color:#fdd">		strcpy(spec.actual_name, drive);</span>
+	}
+
+	// Whack the trailing slash.
+<span style = "background-color:#fdd">	if (spec.actual_name[strlen(spec.actual_name) - 1] == '\\')</span>
+	{
+<span style = "background-color:#fdd">		spec.actual_name[strlen(spec.actual_name) - 1] = '\0';</span>
+	}
+
+<span style = "background-color:#fdd">	sprintf( file_name, "%s\\%s", spec.actual_name, TEST_FILE );</span>
+	
+#else
+//
+// Initialize a logical disk drive.  Logical drives are accessed through
+// a drive letter and may be local or remote.
+//
+BOOL TargetDisk::Init_Logical(char drive)
+{
+	// Setting spec.name of the drive.
+	snprintf(spec.name, MAX_NAME, "%c%s", drive, LOGICAL_DISK);
+	snprintf(file_name, MAX_NAME, "%s%s", spec.name, TEST_FILE);
+
+#endif //USE_NEW_DISCOVERY_MECHANISM
+
+	spec.type = LogicalDiskType;
+<span style = "background-color:#fdd">	size = 0;</span>
+	starting_position = 0;
+	offset = 0;
+	bytes_transferred = 0;
+
+	// Getting size information about the drive.
+<span style = "background-color:#fdd">	return (Set_Sizes());
+}</span>
+
+ 
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+#if defined(IOMTR_OS_NETWARE)
+BOOL TargetDisk::Init_Physical(char *drive)
+{
+	struct IOObjectGenericInfoDef info;
+	int drive1 = atoi(drive + 1);
+
+	// Setting the spec.name of the drive.
+	printf("TargetDisk::Init_Physical: name=%s, mmID=%X\n", drive, drive1);
+	MM_ReturnObjectGenericInfo(drive1, sizeof(struct IOObjectGenericInfoDef), &amp;info);
+	snprintf(spec.name, MAX_NAME, "[%d] %s", drive1, info.name);
+
+	snprintf(file_name, MAX_NAME, "%d", drive1);
+
+	spec.type = PhysicalDiskType;
+	size = 0;
+	starting_position = 0;
+	offset = 0;
+	bytes_transferred = 0;
+
+	// Getting information about the size of the drive.
+	return (Set_Sizes());
+}
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+BOOL TargetDisk::Init_Physical(char *drive)
+{
+	// Setting the spec.name of the drive.
+	// Strip off any extra information in the drive name.
+	char *p;
+
+	// check for this pattern is also in Manager::Report_Disks()
+	// and Manager::Reported_As_Logical().
+	p = strstr(drive, " [");
+	if (p) {
+		strncpy(spec.name, drive, p - drive);
+		spec.name[p - drive] = 0;
+	} else {
+		// Setting spec.name of the drive.
+		if (spec.name != drive)
+			snprintf(spec.name, MAX_NAME, "%s", drive);
+	}
+
+	if (!strstr(spec.name, RAW_DEVICE_DIR))
+		snprintf(file_name, MAX_NAME, "%s/%s", RAW_DEVICE_DIR, spec.name);
+	else
+		snprintf(file_name, MAX_NAME, "%s", spec.name);
+
+	spec.type = PhysicalDiskType;
+	size = 0;
+	starting_position = 0;
+	offset = 0;
+	bytes_transferred = 0;
+
+	// Getting information about the size of the drive.
+	return (Set_Sizes());
+}
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+//
+// Initialize a physical disk drive.  Physical drives are accessed below
+// the file system layer for RAW access.  As a result, data corruption could
+// occur.  To prevent this, only drives which contain nothing but free space
+// are accessible.
+//
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+BOOL TargetDisk::Init_Physical(char *drive)
+<span style = "background-color:#fdd">{
+	strcpy(spec.name, drive);
+	strcpy(spec.actual_name, drive); // may be redundant?
+	strcpy(file_name, spec.actual_name);</span>
+
+#else
+BOOL TargetDisk::Init_Physical(int drive)
+{
+	// Setting the spec.name of the drive.
+	snprintf(spec.name, MAX_NAME, "%s%i", PHYSICAL_DISK, drive);
+	strcpy(file_name, spec.name);
+#endif // USE_NEW_DISCOVERY_MECHANISM
+	spec.type = PhysicalDiskType;
+<span style = "background-color:#fdd">	size = 0;</span>
+	starting_position = 0;
+	offset = 0;
+	bytes_transferred = 0;
+
+	// Getting information about the size of the drive.
+<span style = "background-color:#fdd">	return (Set_Sizes());
+}</span>
+
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+//
+// Setting the maximum amount of disk space to access during testing.
+//
+void TargetDisk::Set_Size(DWORDLONG maximum_size)
+<span style = "background-color:#dfd">{</span>
+	DWORDLONG new_size;
+
+	// Getting the actual size of the disk.
+<span style = "background-color:#dfd">	Set_Sizes();
+	new_size = (DWORDLONG) maximum_size *(DWORDLONG) spec.disk_info.sector_size;</span>
+
+	// If the specified maximum size is not 0 and is smaller than the actual disk,
+	// reset the disk size.
+<span style = "background-color:#dfd">	if (new_size &amp;&amp; (new_size &lt; size)) {</span>
+<span style = "background-color:#fdd">		size = new_size;</span>
+#ifdef _DEBUG
+		cout &lt;&lt; "Resetting accessible size of disk " &lt;&lt; spec.name &lt;&lt; " to " &lt;&lt;
+		    maximum_size &lt;&lt; " sectors." &lt;&lt; endl &lt;&lt; "   " &lt;&lt; spec.name &lt;&lt; " size = " &lt;&lt; size &lt;&lt; endl;
+#endif
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Setting the starting sector of the disk where accesses should begin.
+// This needs to be called after setting the size of the disk (call to Set_Size).
+//
+void TargetDisk::Set_Starting_Sector(DWORDLONG starting_sector)
+<span style = "background-color:#dfd">{</span>
+	DWORDLONG current_size;
+
+<span style = "background-color:#dfd">	starting_position = (DWORDLONG) starting_sector *(DWORDLONG) spec.disk_info.sector_size;</span>
+
+#ifdef _DEBUG
+	cout &lt;&lt; "Moving starting sector of disk " &lt;&lt; spec.name &lt;&lt; " to " &lt;&lt; starting_position &lt;&lt; "." &lt;&lt; endl;
+#endif
+
+	// Moving the starting disk sector may have shrunk the accessible size of the disk.
+<span style = "background-color:#dfd">	current_size = size;	// record the currently assigned size to use
+	Set_Size();		// getting the actual disk size</span>
+
+<span style = "background-color:#dfd">	if (starting_position + current_size &gt; size) {</span>
+		// Re-adjust the accessible size of the disk to reflect the new starting sector.
+		size -= starting_position;
+#ifdef _DEBUG
+		cout &lt;&lt; "Starting sector size has shrunk the effective size of the disk." &lt;&lt; endl;
+#endif
+	} else {
+		// The new starting sector did not affect the accessible disk size.
+		size = current_size;
+	}
+<span style = "background-color:#dfd">	ending_position = (DWORDLONG) starting_position + size;
+}</span>
+
+//
+// Setting information about the physical size of the drive.  This is
+// used in order to guarantee that accesses to the drive are permitted,
+// that is align on the sector sizes, and to allow random accesses over
+// the entire drive.
+//
+#if defined(IOMTR_OS_LINUX)
+//
+// Performs same function as the win32 || _WIN64 version.
+//
+BOOL TargetDisk::Set_Sizes(BOOL open_disk)
+{
+	struct stat fileInfo;
+	struct statfs fsInfo;
+	int statResult;
+	int fd = -1;
+	char filesysName[MAX_NAME];
+
+	if (open_disk) {
+		if (!Open(NULL)) {
+			cout &lt;&lt; __FUNCTION__ &lt;&lt; ": Open on \"" &lt;&lt; file_name &lt;&lt;
+			    "\" failed (error " &lt;&lt; strerror(errno) &lt;&lt; ")." &lt;&lt; endl;
+			return (FALSE);
+		}
+		fd = ((struct File *)disk_file)-&gt;fd;
+	}
+	if (IsType(spec.type, LogicalDiskType)) {
+		/*
+		 * For logical disks, we use statfs and stat to find the size of the
+		 * file system, the size of the test file, the sector size for the
+		 * file system, etc. Pretty straightforward, standard Unix stuff.
+		 */
+		strcpy(filesysName, file_name);
+		filesysName[strlen(filesysName) - strlen(TEST_FILE)] = '\0';
+		if (open_disk) {
+			statResult = fstatfs(fd, &amp;fsInfo);
+		} else {
+			statResult = statfs(filesysName, &amp;fsInfo);
+		}
+		if (statResult &lt; 0) {
+			cerr &lt;&lt; __FUNCTION__ &lt;&lt; ": Couldn't statfs logical disk file!" &lt;&lt; endl;
+			if (open_disk) {
+				Close(NULL);
+			}
+			return (FALSE);
+		}
+		spec.disk_info.sector_size = fsInfo.f_bsize;
+		sector_align_mask = ~((DWORDLONG) fsInfo.f_bsize - 1);
+		/* Free blocks is "f_bfree". */
+		if (open_disk) {
+			statResult = fstat(fd, &amp;fileInfo);
+		} else {
+			statResult = stat(file_name, &amp;fileInfo);
+		}
+		if (statResult &lt; 0) {
+			cerr &lt;&lt; __FUNCTION__ &lt;&lt; ": Error " &lt;&lt; strerror(errno) &lt;&lt; "statting file " &lt;&lt; file_name &lt;&lt; endl;
+			if (open_disk) {
+				Close(NULL);
+			}
+			return (FALSE);
+		}
+		size = fileInfo.st_size;
+		if (size == 0) {
+			spec.disk_info.ready = FALSE;
+			if (open_disk) {
+				Close(NULL);
+			}
+			unlink(file_name);
+			return (TRUE);
+		}
+		ending_position = size;
+		spec.disk_info.ready = TRUE;
+		if (open_disk) {
+			Close(NULL);
+		}
+		return (TRUE);
+	} else {
+		spec.disk_info.sector_size = getSectorSizeOfPhysDisk(file_name);
+		if (spec.disk_info.sector_size == 0) {
+			cerr &lt;&lt; __FUNCTION__ &lt;&lt; ": Failed to get sector size for " &lt;&lt; file_name &lt;&lt; ". Skip it." &lt;&lt; endl;
+			if (open_disk) {
+				Close(NULL);
+			}
+			return (FALSE);
+		}
+		size = getSizeOfPhysDisk(file_name);
+		if (size == 0) {
+			cerr &lt;&lt; __FUNCTION__ &lt;&lt; ": Failed to get device size for " &lt;&lt; file_name &lt;&lt; ". Skip it." &lt;&lt; endl;
+			if (open_disk)
+				Close(NULL);
+			return (FALSE);
+		}
+		alignment = 0;
+		sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);
+		ending_position = size;
+		offset = 0;
+		bytes_transferred = 0;
+		spec.disk_info.ready = TRUE;
+		if (open_disk) {
+			Close(NULL);
+		}
+		return (TRUE);
+	}
+}
+#elif defined(IOMTR_OS_NETWARE)
+//
+// Performs same function as the win32 || _WIN64 version.
+//
+BOOL TargetDisk::Set_Sizes(BOOL open_disk)
+{
+	struct stat fileInfo;
+	struct stat fsInfo;
+	int statResult;
+	int fd = -1;
+	char filesysName[MAX_NAME];
+	struct volume_info spaceInfo;
+	struct IOObjectGenericInfoDef info;
+
+	if (open_disk) {
+		if (!Open(NULL)) {
+#ifdef _DEBUG
+			cout &lt;&lt; __FUNCTION__ &lt;&lt; ": Open on \"" &lt;&lt; file_name &lt;&lt;
+			    "\" failed (error " &lt;&lt; strerror(errno) &lt;&lt; ")." &lt;&lt; endl;
+#endif
+			return (FALSE);
+		}
+		fd = ((struct File *)disk_file)-&gt;fd;
+	}
+	if (IsType(spec.type, LogicalDiskType)) {
+		/*
+		 * For logical disks, we use statfs and stat to find the size of the
+		 * file system, the size of the test file, the sector size for the
+		 * file system, etc. Pretty straightforward, standard Unix stuff.
+		 */
+		strcpy(filesysName, file_name);
+		filesysName[strlen(filesysName) - (strlen(TEST_FILE) + 1)] = '\0';	//and the colon
+		if (open_disk) {
+			statResult = fstat(fd, &amp;fsInfo);
+		} else {
+			statResult = stat(filesysName, &amp;fsInfo);
+		}
+
+		netware_vol_info(&amp;spaceInfo, (int *)&amp;fsInfo.st_dev);
+
+		if (statResult &lt; 0) {
+			cerr &lt;&lt; __FUNCTION__ &lt;&lt; ": Couldn't stat logical disk file!" &lt;&lt; endl;
+			if (open_disk)
+				Close(NULL);
+			return (FALSE);
+		}
+		spec.disk_info.sector_size = spaceInfo.SectorsPerCluster;
+		sector_align_mask = ~((DWORDLONG) spaceInfo.SectorsPerCluster - 1);
+		/* Free blocks is "f_bfree". */
+		if (open_disk) {
+			statResult = fstat(fd, &amp;fileInfo);
+		} else {
+			statResult = stat(file_name, &amp;fileInfo);
+		}
+		if (statResult &lt; 0) {
+			cerr &lt;&lt; __FUNCTION__ &lt;&lt; ": Error " &lt;&lt; strerror(errno) &lt;&lt; " statting file " &lt;&lt; file_name &lt;&lt; endl;
+			if (open_disk) {
+				Close(NULL);
+			}
+			return (FALSE);
+		}
+//              size = fileInfo.st_size;
+		size = spaceInfo.FreedClusters;
+		if (size == 0) {
+			spec.disk_info.ready = FALSE;
+			if (open_disk) {
+				Close(NULL);
+			}
+			unlink(file_name);
+			return (TRUE);
+		}
+		ending_position = size;
+		spec.disk_info.ready = TRUE;
+		if (open_disk) {
+			Close(NULL);
+		}
+		return (TRUE);
+	} else if (IsType(spec.type, PhysicalDiskType))	// physical
+	{
+		MM_ReturnObjectGenericInfo(atoi(file_name), sizeof(struct IOObjectGenericInfoDef), &amp;info);
+		spec.disk_info.sector_size = info.unitsize;
+		if (spec.disk_info.sector_size == 0) {
+			cout &lt;&lt; __FUNCTION__ &lt;&lt; ": Failed to get sector size. Aborting target." &lt;&lt; endl;
+			return (FALSE);
+		}
+		size = info.capacity;
+		alignment = 0;
+		sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);
+		ending_position = size;
+		offset = 0;
+		bytes_transferred = 0;
+		spec.disk_info.ready = TRUE;
+		if (open_disk)
+			Close(NULL);
+		return (TRUE);
+	} else {
+		cout &lt;&lt; "*** Unexpected drive type in Disk::SetSizes()" &lt;&lt; endl &lt;&lt; flush;
+		if (open_disk)
+			Close(NULL);
+		return (FALSE);
+	}
+}
+#elif defined(IOMTR_OS_SOLARIS)
+int TargetDisk::Set_Sizes(BOOL open_disk)
+{
+	DWORD fd;
+
+//      DWORD                   i;
+//      DWORD                   low_size, high_size;
+//      DWORD                   sectors_per_cluster, free_clusters, total_clusters;
+//      BOOL                    foundPartitions = FALSE;
+//      DWORD                   disk_info_size;
+	struct statvfs st;
+	struct dk_geom disk_geo_info;
+	struct vtoc disk_vtoc;
+
+	// Logical and physical drives are treated differently.
+	if (open_disk) {
+		if (!Open(NULL))
+			return (FALSE);
+	}
+
+	if (IsType(spec.type, LogicalDiskType)) {
+		// Getting physical information about the drive. All we need is the sector size. !!!!
+		if (statvfs(file_name, &amp;st) &lt; 0) {
+			cout &lt;&lt; "statvfs error " &lt;&lt; errno &lt;&lt; ". Cannot get sector size" &lt;&lt; endl;
+			if (open_disk)
+				Close(NULL);
+			return (FALSE);
+		}
+		// Which one of these two do we take as the sector size ?
+		spec.disk_info.sector_size = (int)st.f_bsize;
+		//           or
+		// spec.disk_info.sector_size = SECTOR_SIZE;
+
+		// Ok move on to the file size
+		struct stat64 stbuf64;
+
+		if (stat64(file_name, &amp;stbuf64) &lt; 0) {
+			cout &lt;&lt; "unable to get file size. stat64() failed with error " &lt;&lt; errno &lt;&lt; endl;
+			if (open_disk)
+				Close(NULL);
+			return (FALSE);
+		}
+		size = stbuf64.st_size;
+
+		Set_Sector_Info();
+#ifdef _DEBUG
+		cout &lt;&lt; "   " &lt;&lt; spec.name &lt;&lt; " size = " &lt;&lt; size &lt;&lt; endl &lt;&lt; flush;
+#endif
+		if (open_disk)
+			Close(NULL);
+
+		// If test file exists, the drive is ready for access.
+		if (size) {
+			ending_position = size;
+			spec.disk_info.ready = TRUE;
+			return (TRUE);
+		}
+		// Assuming that unlink always succeeds and never fails. how clever! #@$#%
+		unlink(file_name);
+		spec.disk_info.ready = FALSE;
+		return (TRUE);
+	} else if (IsType(spec.type, PhysicalDiskType)) {
+		// Dealing with a physical drive.
+		// Checking for a partition to exist on the physical drive.
+		// If one is there, then disallowing access to the drive.
+		SetLastError(0);
+
+		if (!strstr(file_name, "p0")) {
+			// We are probably working with a slice.
+			int length;
+			int part;
+			char part_name[MAX_NAME];
+
+			strcpy(part_name, spec.name);
+			length = strlen(spec.name);
+			part = atoi((char *)(part_name + length - 1));
+			spec.disk_info.sector_size = SECTOR_SIZE;
+
+			if ((char)part_name[length - 2] == 's') {
+				// We are dealing with a slice
+				size = Get_Slice_Size(part_name, part);
+#ifdef _DEBUG
+				cout &lt;&lt; " slice size : " &lt;&lt; size &lt;&lt; endl;
+#endif
+				if (size &lt;= 0) {
+					if (open_disk)
+						Close(NULL);
+					return (FALSE);
+				}
+			}
+#if defined(IOMTR_CPU_I386) || defined(IOMTR_CPU_IA64) || defined(IOMTR_CPU_PPC)
+			else {
+				// We are dealing with an fdisk partition.
+				size = Get_Partition_Size(part_name, part);
+#ifdef _DEBUG
+				cout &lt;&lt; " partn size : " &lt;&lt; size &lt;&lt; endl;
+#endif
+				if (size &lt;= 0) {
+					if (open_disk)
+						Close(NULL);
+					return (FALSE);
+				}
+			}
+#endif				// __i386 || _IA64 || _PPC
+#ifdef _DEBUG
+			cout &lt;&lt; "spec name : " &lt;&lt; spec.name
+			    &lt;&lt; " part_name : " &lt;&lt; part_name &lt;&lt; " part : " &lt;&lt; part &lt;&lt; endl;
+#endif
+		} else {
+			// Getting information on the size of the drive.
+			fd = ((struct File *)disk_file)-&gt;fd;
+			if (ioctl(fd, DKIOCG_PHYGEOM, &amp;disk_geo_info) &lt; 0) {
+				// unable to get disk geometry. Report disk as NO_DRIVE
+				if (open_disk)
+					Close(NULL);
+				return (FALSE);
+			}
+			// Getting sector size of the disk.
+			// First try to get the sector size from the dkio(vtoc). 
+			// If that fails, then return the default.
+
+			// NOTE: NOTE: NOTE:
+			// We do this because of a problem with ioctl(DKIOCGVTOC). It fails for a
+			// freshly formatted disk. But once u create something on it and then 
+			// even if you clean it all up, the call still succeeds.
+			//
+			if (ioctl(fd, DKIOCGVTOC, &amp;disk_vtoc) &lt; 0)
+				spec.disk_info.sector_size = SECTOR_SIZE;
+			else
+				spec.disk_info.sector_size = disk_vtoc.v_sectorsz;
+
+			// Calculating the size of the physical drive..
+			size = ((DWORDLONG) disk_geo_info.dkg_ncyl * disk_geo_info.dkg_nhead *
+				disk_geo_info.dkg_nsect * spec.disk_info.sector_size);
+		}
+
+		Set_Sector_Info();
+
+#ifdef _DEBUG
+		cout &lt;&lt; "   " &lt;&lt; spec.name &lt;&lt; " size = " &lt;&lt; size &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+		if (open_disk)
+			Close(NULL);
+
+		ending_position = size;
+		spec.disk_info.ready = TRUE;
+		return (TRUE);
+	} else {
+		cout &lt;&lt; "*** Unexpected drive type in Disk::SetSizes()" &lt;&lt; endl &lt;&lt; flush;
+		if (open_disk)
+			Close(NULL);
+		return (FALSE);
+	}
+}
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+BOOL TargetDisk::Set_Sizes(BOOL open_disk)
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_TEST_MODE)
+	// Synthetic geometry only - GetDiskFreeSpace/IOCTL would fail (and need a
+	// real device). Wherever Set_Sizes is reached in test mode, answer locally.
+<span style = "background-color:#dfd">	if (spec.disk_info.sector_size &lt;= 0)</span>
+<span style = "background-color:#fdd">		spec.disk_info.sector_size = 512;</span>
+<span style = "background-color:#dfd">	sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);</span>
+	size = IOMTR_TEST_DISK_BYTES;
+<span style = "background-color:#dfd">	spec.disk_info.ready = TRUE;
+	return TRUE;</span>
+#endif
+
+	DWORD i;
+	DWORD low_size, high_size;
+	DWORD sectors_per_cluster, free_clusters, total_clusters;
+	DWORD sector_size;
+	DWORD disk_info_size;
+
+	// Logical and physical drives are treated differently.
+	if (open_disk) {
+		if (!Open(NULL))
+			return FALSE;
+	}
+
+	if (IsType(spec.type, LogicalDiskType)) {
+		char temp_name[MAX_NAME];
+
+		sprintf(temp_name, "%s\\", spec.name);
+
+		// Getting physical information about the drive.
+		if (!GetDiskFreeSpace(temp_name, &amp;sectors_per_cluster, &amp;sector_size, &amp;free_clusters, &amp;total_clusters)) {
+			cout &lt;&lt; "Error getting sector size of drive " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+			if (open_disk)
+				Close(NULL);
+			return FALSE;
+		}
+		spec.disk_info.sector_size = (int)sector_size;
+
+		// Determining if the test file exists or needs to be made.
+		low_size = GetFileSize(disk_file, &amp;high_size);
+		size = (((DWORDLONG) high_size) &lt;&lt; 32) | (DWORDLONG) low_size;
+		Set_Sector_Info();
+#ifdef _DEBUG
+		cout &lt;&lt; "   " &lt;&lt; spec.name &lt;&lt; " size = " &lt;&lt; size &lt;&lt; endl;
+#endif
+		if (open_disk)
+			Close(NULL);
+
+		// If test file exists, the drive is ready for access.
+		if (size) {
+			ending_position = size;
+			spec.disk_info.ready = TRUE;
+			return TRUE;
+		}
+
+		DeleteFile(file_name);
+		spec.disk_info.ready = FALSE;
+		return TRUE;
+	} else if (IsType(spec.type, PhysicalDiskType)) {
+		// Dealing with a physical drive.
+		// Checking for a partition to exist on the physical drive.
+		// If one is there, then disallowing access to the drive.
+
+		// This is more data than we need, but its ok
+		DRIVE_LAYOUT_INFORMATION disk_layout_info[MAX_PARTITIONS];
+		DRIVE_LAYOUT_INFORMATION_EX disk_layout_info_ex[MAX_PARTITIONS];
+		DISK_GEOMETRY disk_geo_info;
+		DISK_GEOMETRY_EX disk_geo_info_ex;
+
+		SetLastError(0);
+
+		BOOL bDiskIsGpt = FALSE;
+		BOOL bHaveDataPartition = FALSE;
+
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+		spec.disk_info.has_partitions = FALSE;
+#endif
+
+		// Try the EX version first
+		if (DeviceIoControl(disk_file, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0,
+				disk_layout_info_ex, sizeof(disk_layout_info_ex), &amp;disk_info_size, NULL))
+		{
+
+			// Checking that drive contains nothing but free space.
+			for (i = 0; i &lt; disk_layout_info_ex[0].PartitionCount; i++) {
+				if (disk_layout_info_ex[0].PartitionEntry[i].PartitionLength.HighPart ||
+					disk_layout_info_ex[0].PartitionEntry[i].PartitionLength.LowPart) 
+				{
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+					if (disk_layout_info_ex[0].PartitionStyle == PARTITION_STYLE_GPT)
+					{
+						bDiskIsGpt = TRUE;
+
+						if (disk_layout_info_ex[0].PartitionEntry[i].Gpt.PartitionType != PARTITION_MSFT_RESERVED_GUID 
+						  &amp;&amp; disk_layout_info_ex[0].PartitionEntry[i].Gpt.PartitionType != PARTITION_SYSTEM_GUID 
+						  &amp;&amp; disk_layout_info_ex[0].PartitionEntry[i].Gpt.PartitionType != PARTITION_LDM_METADATA_GUID)
+						{
+							bHaveDataPartition = TRUE;
+						}
+					}
+
+
+					// Make the decision about whether to display this disk elsewhere...
+					if (spec.disk_info.has_partitions == FALSE)
+						spec.disk_info.has_partitions = TRUE;
+					//break;
+#else					
+					if ( open_disk )
+						Close( NULL );				
+					cout &lt;&lt; "Physical disk \'" &lt;&lt; spec.name &lt;&lt; "\' contains partition information." &lt;&lt; endl;
+					return FALSE;
+#endif
+				}
+			}
+		}
+		else if (DeviceIoControl(disk_file, IOCTL_DISK_GET_DRIVE_LAYOUT, NULL, 0,
+				disk_layout_info, sizeof(disk_layout_info), &amp;disk_info_size, NULL))	{
+
+			// Checking that drive contains nothing but free space.
+			for (i = 0; i &lt; disk_layout_info[0].PartitionCount; i++) {
+				if (disk_layout_info[0].PartitionEntry[i].PartitionLength.HighPart ||
+					disk_layout_info[0].PartitionEntry[i].PartitionLength.LowPart) 
+				{
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+					// Make the decision about whether to display this disk elsewhere...
+					spec.disk_info.has_partitions = TRUE;
+					break;
+#else					
+					if ( open_disk )
+						Close( NULL );				
+					cout &lt;&lt; "Physical disk \'" &lt;&lt; spec.name &lt;&lt; "\' contains partition information." &lt;&lt; endl;
+					return FALSE;
+#endif
+				}
+			}
+		}
+		else {
+			cout &lt;&lt; "TargetDisk::Set_Sizes() Failed getting drive layout info, error " 
+				 &lt;&lt; GetLastError() &lt;&lt; "." &lt;&lt; endl;
+			return FALSE;
+		}
+
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+		if (bDiskIsGpt &amp;&amp; spec.disk_info.has_partitions &amp;&amp; !bHaveDataPartition)
+		{
+			cout &lt;&lt; "Physical disk \'" &lt;&lt;  spec.name &lt;&lt; "\' is a GPT disk with one or more " &lt;&lt;endl 
+				 &lt;&lt; "   hidden partitions and no data parititons. " &lt;&lt; endl 
+				 &lt;&lt; "   Use diskpart to clean the disk and leave it uninitialized in order" &lt;&lt; endl
+				 &lt;&lt; "   to use as a raw disk, otherwise create and format a data parition. " &lt;&lt; endl;
+		}
+#endif
+		// Getting information on the size of the drive.
+		size = 0;
+		spec.disk_info.sector_size = 0;
+		
+		// Try the EX version first
+		if (DeviceIoControl(disk_file, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0,
+			&amp;disk_geo_info_ex, sizeof(disk_geo_info_ex), &amp;disk_info_size, NULL)) {
+
+			size = disk_geo_info_ex.DiskSize.QuadPart;
+			spec.disk_info.sector_size = disk_geo_info_ex.Geometry.BytesPerSector;
+		}
+		else if(DeviceIoControl(disk_file, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0,
+			&amp;disk_geo_info, sizeof(disk_geo_info), &amp;disk_info_size, NULL)) {
+
+			// Calculating the size of the physical drive..
+			size = (((DWORDLONG) disk_geo_info.Cylinders.HighPart) &lt;&lt; 32) |
+				((DWORDLONG) disk_geo_info.Cylinders.LowPart);
+			size *= (_int64) disk_geo_info.TracksPerCylinder *
+				(_int64) disk_geo_info.SectorsPerTrack * (_int64) disk_geo_info.BytesPerSector;
+			spec.disk_info.sector_size = disk_geo_info.BytesPerSector;
+		}
+		else {
+			// print some warning and return error
+			cout &lt;&lt; "TargetDisk::Set_Sizes() Failed getting drive geometry, error " 
+				 &lt;&lt; GetLastError() &lt;&lt; "." &lt;&lt; endl;
+			return FALSE;
+		}
+
+		Set_Sector_Info();
+
+#ifdef _DEBUG
+		cout &lt;&lt; "   " &lt;&lt; spec.name &lt;&lt; " size = " &lt;&lt; size &lt;&lt; endl;
+#endif
+
+		if (open_disk)
+			Close(NULL);
+		ending_position = size;
+		spec.disk_info.ready = TRUE;
+		return TRUE;
+	} else {
+		cout &lt;&lt; "*** Unexpected drive type in TargetDisk::SetSizes()" &lt;&lt; endl;
+		return FALSE;
+	}
+<span style = "background-color:#dfd">}</span>
+#elif defined(IOMTR_OS_OSX)
+int TargetDisk::Set_Sizes(BOOL open_disk)
+{
+	struct statfs st;
+	DWORD fd;
+
+	if (open_disk) {
+		if (!Open(NULL))
+			return (FALSE);
+	}
+
+	if (IsType(spec.type, LogicalDiskType)) {
+		if (statfs(file_name, &amp;st) &lt; 0) {
+			cout &lt;&lt; "statfs error " &lt;&lt; errno &lt;&lt; ". Cannot get sector size" &lt;&lt; endl;
+			if (open_disk)
+				Close(NULL);
+			return (FALSE);
+		}
+		spec.disk_info.sector_size = (int)st.f_bsize;
+
+		// Ok move on the file size
+		struct stat stbuf64;
+
+		if (stat(file_name, &amp;stbuf64) &lt; 0) {
+			cout &lt;&lt; "unable to get file size. stat failed with error " &lt;&lt; errno &lt;&lt; endl;
+			if (open_disk)
+				Close(NULL);
+			return (FALSE);
+		}
+		size = stbuf64.st_size;
+
+		Set_Sector_Info();
+#ifdef _DEBUG
+		cout &lt;&lt; "    " &lt;&lt; spec.name &lt;&lt; " size = " &lt;&lt; size &lt;&lt; endl &lt;&lt; flush;
+#endif
+		if (open_disk)
+			Close(NULL);
+
+		// If test file exists, the drive is ready for access.
+		if (size) {
+			ending_position = size;
+			spec.disk_info.ready = TRUE;
+			return (TRUE);
+		}
+		// Assuming that unlink always succeeds and never fails
+		unlink(file_name);
+		spec.disk_info.ready = FALSE;
+		return (TRUE);
+	} else if (IsType(spec.type, PhysicalDiskType)) {
+		SetLastError(0);
+
+		fd = ((struct File *)disk_file)-&gt;fd;
+
+		if (ioctl(fd, DKIOCGETBLOCKSIZE, &amp;spec.disk_info.sector_size) &lt; 0) {
+			spec.disk_info.sector_size = 0;
+		}
+
+		if (ioctl(fd, DKIOCGETBLOCKCOUNT, &amp;size) &lt; 0) {
+			size = 0;
+		}
+
+		size *= spec.disk_info.sector_size;
+
+		Set_Sector_Info();
+
+#ifdef _DEBUG
+		cout &lt;&lt; "    " &lt;&lt; spec.name &lt;&lt; " size = " &lt;&lt; size &lt;&lt; endl &lt;&lt; flush;
+#endif
+
+		if (open_disk)
+			Close(NULL);
+
+		ending_position = size;
+		spec.disk_info.ready = TRUE;
+		return (TRUE);
+	} else {
+		cout &lt;&lt; "*** Unexpected drive type in Disk::SetSizes()" &lt;&lt; endl &lt;&lt; flush;
+		if (open_disk)
+			Close(NULL);
+		return (FALSE);
+	}
+}
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+//
+// Setting additional information about the drive's sector size.
+// The sector size of the drive needs to be known before calling this function.
+//
+void TargetDisk::Set_Sector_Info()
+<span style = "background-color:#fdd">{</span>
+	DWORD temp_sector;
+
+	// Check if sector size is a power of 2, by repeatedly dividing the sector size by 2 
+	// (until we get to 1) and checking to see if the result is odd at any point.
+<span style = "background-color:#fdd">	temp_sector = spec.disk_info.sector_size;
+	while (temp_sector &gt; 1) {
+		if (temp_sector % 2) {</span>
+			sector_align_mask = NOT_POWER_OF_TWO;
+			return;
+		}
+<span style = "background-color:#fdd">		temp_sector = temp_sector &gt;&gt; 1;</span>
+	}
+
+	// The sector size is a power of 2, we can use a bit mask to align requests on
+	// sector boundaries.  This improves performance.
+	//
+	// "&amp; ~((DWORDLONG)spec.disk_info.sector_size - 1)" masks off lower bits to force sector alignment.  
+	//     spec.disk_info.sector_size is cast to a DWORDLONG to force the result to be a 64-bit quantity.  
+	//     For example, if spec.disk_info.sector_size = 512 (0x00000200):
+	//           (DWORDLONG)spec.disk_info.sector_size      = 0x0000000000000200
+	//          ((DWORDLONG)spec.disk_info.sector_size - 1) = 0x00000000000001FF
+	//         ~((DWORDLONG)spec.disk_info.sector_size - 1) = 0xFFFFFFFFFFFFFE00
+<span style = "background-color:#fdd">	sector_align_mask = ~((DWORDLONG) spec.disk_info.sector_size - 1);
+}</span>
+
+#define PREPARE_QDEPTH	16
+
+//
+// Logical drives are accessed through a file on the drive.  This will create
+// the file by writing in units of "bytes" beginning at "*prepare_offset".  It
+// maintains a simple I/O queue of depth PREPARE_QDEPTH, which it keeps as 
+// full as possible.  It keeps queueing up new I/Os until the disk fills up, 
+// or the user-specified file size (starting_sector + maximum_size) is reached,
+// or a STOP_PREPARE message is received (reflected in "*test_state").  It 
+// returns only when all queued I/Os have completed.  
+// Return value is TRUE for success, FALSE if any error occurred.
+//
+BOOL TargetDisk::Prepare(DWORDLONG * prepare_offset, volatile TestState * test_state, int sector_size, unsigned char* _random_data_buffer, long long _random_datat_buffer_size)
+<span style = "background-color:#fdd">{</span>
+#if defined(IOMTR_TEST_MODE)
+	// Nothing to prepare - the synthetic target is "ready" immediately.
+<span style = "background-color:#fdd">	*prepare_offset = size;
+	return TRUE;</span>
+#endif
+
+	BOOL write_ok;
+	int num_outstanding;
+	DWORD bytes_written;
+	OVERLAPPED olap[PREPARE_QDEPTH];
+	BOOL busy[PREPARE_QDEPTH];
+	BOOL retval;
+	int i;
+	void *buffer = NULL;
+	DWORD bytes; // static to aid switch to single sectors to finish up preparing
+	BOOL onSingleSectors = FALSE; // mark if a switch needs to be made to single sector writes
+	BOOL singleSectorSwitch = FALSE; // mark that single sectors are being used to write
+	DWORDLONG rand_seed;
+#ifdef IOMTR_SETTING_LINUX_LIBAIO
+ 	struct statfs fsInfo;
+ 	int statResult;
+ 	int fd = -1;
+ 	fd = ((struct File *)disk_file)-&gt;fd;
+#endif
+
+	// Save current spec.random so that it can be reset back to the same seed value after preparing disks
+	// This allows the PRNG to be the same when doing the actual IO, whether the disk is prepped or not and the user specifies fixed seed
+	rand_seed = spec.random;
+
+	// Allocate a large (64k for 512 byte sector size) buffer for the preparation.
+	bytes = sector_size * 128;
+#if defined(IOMTR_OSFAMILY_NETWARE)
+	NXMemFree(buffer);
+	errno = 0;
+	if (!(buffer = NXMemAlloc(bytes, 1)))
+#elif defined(IOMTR_OSFAMILY_UNIX)
+	free(buffer);
+	errno = 0;
+	if (!(buffer = valloc(bytes)))
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+	VirtualFree(buffer, 0, MEM_RELEASE);
+	if (!(buffer = VirtualAlloc(NULL, bytes, MEM_COMMIT, PAGE_READWRITE)))
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		cout &lt;&lt; "*** Could not allocate buffer to prepare disk." &lt;&lt; endl;
+		return FALSE;
+	}
+
+	switch (spec.DataPattern) {
+		case DATA_PATTERN_REPEATING_BYTES:
+			// Do nothing here...a new random byte will be chosen below for each IO
+			break;
+		case DATA_PATTERN_PSEUDO_RANDOM:
+			for( DWORD x = 0; x &lt; bytes; x++)
+				((unsigned char*)buffer)[x] = (unsigned char)Rand(0xff);
+			break;
+		case DATA_PATTERN_FULL_RANDOM:
+			//Nothing to do here
+			break;
+	}
+
+#ifdef _DEBUG
+	cout &lt;&lt; "into function TargetDisk::Prepare()" &lt;&lt; endl;
+#endif
+
+	write_ok = TRUE;
+	num_outstanding = 0;
+	retval = TRUE;
+
+	// Initialize the OVERLAPPED structures.
+	for (i = 0; i &lt; PREPARE_QDEPTH; i++) {
+		// Create an event.
+		olap[i].hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+		SetQueueSize(olap[i].hEvent, 1);
+#elif defined(IOMTR_OSFAMILY_WINDOWS)
+		// nop
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+		// Was the event created successfully?
+		if (olap[i].hEvent == NULL) {
+			cerr &lt;&lt; "*** CreateEvent() failed in TargetDisk::Prepare()" &lt;&lt; endl;
+			write_ok = FALSE;	// don't perform any I/O
+			retval = FALSE;	// return failure status
+			break;	// break out of initialization loop
+		}
+		// Set the low-order bit of the event handle to prevent it from being
+		// picked up by a later call to GetQueuedCompletionStatus() (e.g. in
+		// Grunt::Asynchronous_IOs).
+		// The documentation for GetQueuedCompletionStatus() says:
+		//
+		//     "Even if you have passed the function a file handle associated with 
+		//     a completion port and a valid OVERLAPPED structure, an application  
+		//     can prevent completion port notification. This is done by 
+		//     specifying a valid event handle for the hEvent member of the
+		//     OVERLAPPED structure, and setting its low-order bit. A valid event
+		//     handle whose low-order bit is set keeps I/O completion from being 
+		//     queued to the completion port. 
+		//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+		olap[i].hEvent = (HANDLE) ((UINT_PTR) olap[i].hEvent | 0x0000000000000001);
+#else
+		olap[i].hEvent = (HANDLE) ((unsigned long)olap[i].hEvent | 0x00000001);
+#endif
+
+		// Mark the slot's initial state as idle.
+		busy[i] = FALSE;
+	}
+
+	do {
+		// if marked to switch to single sectors, do so now
+		if(onSingleSectors)
+		{
+			singleSectorSwitch = TRUE;
+			bytes = sector_size;
+		}
+
+		// If we're still writing and there are any available slots, queue up some
+		// writes.
+		if ((*test_state == TestPreparing) &amp;&amp; write_ok &amp;&amp; (num_outstanding &lt; PREPARE_QDEPTH)) {
+			// Loop through the I/O queue looking for idle slots.
+			for (i = 0; i &lt; PREPARE_QDEPTH; i++) {
+				// Check to see if we've reached the end of the disk
+				// Windows debuggers lie when decoding spec.disk_info pushing
+				// values into local vars
+            int dd_sector_size = spec.disk_info.sector_size;
+            uint64_t dd_maximum_size = spec.disk_info.maximum_size;
+            uint64_t dd_starting_sector = spec.disk_info.starting_sector;
+				if (dd_maximum_size &amp;&amp;
+				    ((*prepare_offset + bytes) &gt;
+				     ((dd_starting_sector + dd_maximum_size) * dd_sector_size))) {
+					// A maximum disk size was specified by the user, and the next write 
+					// would go past the specified maximum size.  
+#ifdef _DEBUG
+					cout &lt;&lt; "User-specified maximum size reached!" &lt;&lt; endl;
+#endif
+					// Stop writing and break out of the write loop.
+					write_ok = FALSE;
+					
+					// if not already doing single sectors, mark it now
+					if(!singleSectorSwitch)
+					{
+						onSingleSectors = TRUE;
+					}
+					else
+						break;
+				}
+#ifdef IOMTR_SETTING_LINUX_LIBAIO
+				statResult = fstatfs(fd, &amp;fsInfo);
+				if (statResult &lt; 0) {
+					cerr &lt;&lt; __FUNCTION__ &lt;&lt; ": Couldn't statfs logical disk file!" &lt;&lt; endl;
+				}
+				if (fsInfo.f_bfree &lt;= 0 ) {
+					write_ok = FALSE;
+					break;
+				}
+#endif
+
+				// If we are still writing and the slot is not busy, start an I/O for
+				// this slot.
+				if ((*test_state == TestPreparing) &amp;&amp; write_ok &amp;&amp; !busy[i]) {
+					// Set its address.
+					olap[i].Offset = (DWORD) * prepare_offset;
+					olap[i].OffsetHigh = (DWORD) (*prepare_offset &gt;&gt; 32);
+
+					// Fill the buffer with some new random data so we aren't writing all zeros each time
+					switch (spec.DataPattern) {
+						case DATA_PATTERN_REPEATING_BYTES:
+							memset(buffer, rand(), bytes);
+							break;
+						case DATA_PATTERN_PSEUDO_RANDOM:
+							break; // Nothing to do here, buffer was set above
+						case DATA_PATTERN_FULL_RANDOM:
+							//Buffer offset must be DWORD-aligned in memory, otherwise the transfer fails
+							//Choose a pointer into the buffer
+							long long mem_offset = (long long)Rand(_random_datat_buffer_size-bytes);
+
+							//See how far it is from being DWORD-aligned
+							long long remainder = mem_offset &amp; (sizeof(DWORD) - 1);
+
+							//Align the pointer using the remainder
+							mem_offset = mem_offset - remainder;
+
+							buffer = &amp;_random_data_buffer[mem_offset];
+							break;
+					}
+
+					// Do the asynchronous write.
+					if (WriteFile(disk_file, (char *)buffer, bytes, &amp;bytes_written, &amp;(olap[i]))) {
+						// It succeeded immediately!
+#ifdef _DEBUG
+						cout &lt;&lt; "Wrote (immediately) " &lt;&lt; bytes_written &lt;&lt; " of "
+						    &lt;&lt; bytes &lt;&lt; " bytes to disk " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+#endif
+						// Advance the file pointer, but do not mark the slot as busy.
+						*prepare_offset += bytes;
+					} else {
+						// It did not succeed immediately... did it start OK?
+						if (GetLastError() == ERROR_IO_PENDING) {
+							// It started OK.
+#if _DETAILS
+							cout &lt;&lt; "I/O started successfully for slot #" &lt;&lt; i
+							    &lt;&lt; " for " &lt;&lt; bytes &lt;&lt; " bytes at address "
+							    &lt;&lt; *prepare_offset &lt;&lt; endl;
+#endif
+							// Advance the file pointer and mark the slot as busy.
+							*prepare_offset += bytes;
+							busy[i] = TRUE;
+							num_outstanding++;
+						} else if (GetLastError() == ERROR_DISK_FULL) {
+							// The disk filled up -- this is an expected error.
+#ifdef _DEBUG
+							cout &lt;&lt; "Disk full (immediately) while writing "
+							    &lt;&lt; bytes_written &lt;&lt; " of " &lt;&lt; bytes &lt;&lt; " bytes to disk "
+							    &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+#endif
+							// Stop writing and break out of the write loop.
+							write_ok = FALSE;
+
+							// if not already doing single sectors, mark it now
+							if(!singleSectorSwitch)
+							{
+								onSingleSectors = TRUE;
+							}
+							else
+								break;
+
+						} else {
+							// It didn't start OK!  Bail out.
+							cout &lt;&lt; "***Error (immediately) writing " &lt;&lt; bytes_written &lt;&lt;
+							    " of " &lt;&lt; bytes &lt;&lt; " bytes to disk " &lt;&lt; spec.name &lt;&lt;
+							    ", error=" &lt;&lt; GetLastError() &lt;&lt; endl;
+							write_ok = FALSE;	// don't perform any more I/O
+							retval = FALSE;	// return failure status
+							break;	// break out of write loop
+						}
+					}
+				}
+			}
+		}		// Done queueing up new writes.
+
+		// If there are any outstanding I/Os, check to see if any have completed.
+		if (num_outstanding &gt; 0) {
+			// Check all the busy I/O's to see if any have completed
+			for (i = 0; i &lt; PREPARE_QDEPTH; i++) {
+				if (busy[i]) {
+					// Check to see if it has completed
+					if (GetOverlappedResult(disk_file, &amp;(olap[i]), &amp;bytes_written, FALSE)) {
+						// It completed successfully!
+#ifdef _DEBUG
+						cout &lt;&lt; "Wrote (eventually) " &lt;&lt; bytes_written &lt;&lt; " of " &lt;&lt; bytes
+						    &lt;&lt; " bytes to disk " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+
+#endif
+						// Mark the slot as idle.
+						busy[i] = FALSE;
+						num_outstanding--;
+
+						if (bytes_written != bytes) {
+							cout &lt;&lt; "***Error (eventually); wrote only " &lt;&lt; bytes_written
+							    &lt;&lt; " of " &lt;&lt; bytes &lt;&lt; " bytes!" &lt;&lt; endl;
+							retval = FALSE;
+							write_ok = FALSE;
+							break;
+						}
+					} else if (GetLastError() == ERROR_IO_INCOMPLETE) {
+						// The I/O has not yet completed -- this is an expected error.
+#if _DETAILS
+						cout &lt;&lt; "I/O not yet complete for slot #" &lt;&lt; i &lt;&lt; endl;
+#endif
+						;	// Do nothing.
+					} else if (GetLastError() == ERROR_DISK_FULL) {
+						// The disk filled up -- this is an expected error.
+#ifdef _DEBUG
+						cout &lt;&lt; "Disk full (eventually) while writing " &lt;&lt; bytes_written &lt;&lt;
+						    " of " &lt;&lt; bytes &lt;&lt; " bytes to disk " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+#endif
+						// Since the write did not actually succeed, decrement the file pointer.
+						*prepare_offset -= bytes;
+						// Stop writing and mark the slot as idle.
+						write_ok = FALSE;
+						busy[i] = FALSE;
+						num_outstanding--;
+
+						// if not already doing single sectors, mark it now
+						if(!singleSectorSwitch)
+						{
+							onSingleSectors = TRUE;
+						}
+
+					} else {
+						// The I/O failed!  Bail out.
+						cout &lt;&lt; "***Error (eventually) writing " &lt;&lt; bytes_written &lt;&lt; " of " &lt;&lt;
+						    bytes &lt;&lt; " bytes to disk " &lt;&lt; spec.
+						    name &lt;&lt; ", error=" &lt;&lt; GetLastError() &lt;&lt; endl;
+						// Stop writing and mark the slot as idle.
+						write_ok = FALSE;
+						busy[i] = FALSE;
+						num_outstanding--;
+						// Return failure status once all I/Os have completed.
+						retval = FALSE;
+					}
+				}
+			}
+		}		// Done checking for I/O completions.
+
+		// don't quit until single sectors had a chance to write to complete filling
+		if(!singleSectorSwitch)
+			write_ok = TRUE;
+	}
+	while ((*test_state == TestPreparing) &amp;&amp; (write_ok || (num_outstanding &gt; 0)));
+	// Keep looping until (the user tells us to stop) OR 
+	// (we're done writing AND we've accumulated all the results).
+
+	Set_Sizes(FALSE);
+
+	// Destroy the events.
+	for (i = 0; i &lt; PREPARE_QDEPTH; i++) {
+#if defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)
+		// Reset the handles.
+		olap[i].hEvent = (HANDLE) ((ULONG_PTR) olap[i].hEvent ^ 0x1);
+#endif
+		CloseHandle(olap[i].hEvent);
+	}
+
+	// Restore spec.random to what it was upon entering this fuction - if using fixed seed
+	// This allows the PRNG to be the same when doing the actual IO, whether the disk is prepped or not and the user specifies fixed seed
+	if(spec.use_fixed_seed)
+	{
+		cout &lt;&lt; "   Resetting Targets random seed back to(" &lt;&lt; rand_seed &lt;&lt; ") after disk preperation." &lt;&lt; endl;
+		spec.random = rand_seed;
+	}
+		
+
+#ifdef _DEBUG
+	cout &lt;&lt; "out of member function TargetDisk::Prepare()" &lt;&lt; endl;
+#endif
+
+	return retval;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Opening a disk for low-level access.
+//
+BOOL TargetDisk::Open(volatile TestState * test_state, int open_flag)
+<span style = "background-color:#dfd">{</span>
+#if defined(IOMTR_TEST_MODE)
+	// No real device handle. Use a non-NULL sentinel so callers that check for
+	// INVALID_HANDLE_VALUE/NULL succeed; Read/Write/Close never touch it.
+<span style = "background-color:#dfd">	disk_file = (HANDLE) 1;
+	return TRUE;</span>
+#endif
+
+	// open_flag is a
+	if (IsType(spec.type, LogicalDiskType)) {
+#if defined(IOMTR_OS_LINUX)
+// It is preferred to open the target with O_DIRECT in order to minimize the
+// effects of caching. Unfortunately we had problems in the past with O_DIRECT
+// and multiple outstanding IOs so the flag was removed. Using libaio, this
+// is no longer an issue and O_DIRECT has been reintroduced accordingly.
+//
+// TODO: Ultimately the way forward is to stick to a good automatic default,
+// but (i) add functionality to display the used flags and (ii) add an option
+// for the user to explicitely specify the flags.
+#ifdef IOMTR_SETTING_LINUX_LIBAIO
+		((struct File *)disk_file)-&gt;fd =
+		    open(file_name, O_DIRECT | O_RDWR | O_CREAT | O_LARGEFILE | open_flag, S_IRUSR | S_IWUSR);
+#else
+#warning ===&gt; WARNING: Dynamo will not open the target with O_DIRECT, because it is not safe in your environment.
+		((struct File *)disk_file)-&gt;fd =
+		    open(file_name, O_RDWR | O_CREAT | O_LARGEFILE | open_flag, S_IRUSR | S_IWUSR);
+#endif
+#elif defined(IOMTR_OS_NETWARE)
+		NXFileOpen(0, (void *)file_name, (NXMode_t) (NX_O_RDWR | NX_O_CREAT | open_flag),
+			   &amp;((struct File *)disk_file)-&gt;fd);
+		((struct File *)disk_file)-&gt;type = LogicalDiskType;
+#elif defined(IOMTR_OS_OSX)
+		((struct File *)disk_file)-&gt;fd = open(file_name, O_RDWR | O_CREAT | open_flag, S_IRUSR | S_IWUSR);
+#elif defined(IOMTR_OS_SOLARIS)
+		((struct File *)disk_file)-&gt;fd =
+		    open(file_name, O_RDWR | O_CREAT | O_LARGEFILE | open_flag, S_IRUSR | S_IWUSR);
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+		// Ignore errors that occur if trying to open a floppy or CD-ROM with
+		// nothing in the drive.
+		SetErrorMode(SEM_FAILCRITICALERRORS);
+		disk_file = CreateFile(file_name, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ |
+				       FILE_SHARE_WRITE, NULL, OPEN_ALWAYS,
+				       FILE_FLAG_NO_BUFFERING | FILE_FLAG_OVERLAPPED, NULL);
+		SetErrorMode(0);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	} else if (IsType(spec.type, PhysicalDiskType)) {
+#if defined(IOMTR_OS_LINUX)
+// It is preferred to open the target with O_DIRECT in order to minimize the
+// effects of caching. Unfortunately we had problems in the past with O_DIRECT
+// and multiple outstanding IOs so the flag was removed. Using libaio, this
+// is no longer an issue and O_DIRECT has been reintroduced accordingly.
+//
+// TODO: Ultimately the way forward is to stick to a good automatic default,
+// but (i) add functionality to display the used flags and (ii) add an option
+// for the user to explicitely specify the flags.
+#ifdef IOMTR_SETTING_LINUX_LIBAIO
+		((struct File *)disk_file)-&gt;fd = open(file_name, O_DIRECT | O_RDWR | O_LARGEFILE, S_IRUSR | S_IWUSR);
+#else
+#warning ===&gt; WARNING: Dynamo will not open the target with O_DIRECT, because it is not safe in your environment.
+		((struct File *)disk_file)-&gt;fd = open(file_name, O_RDWR | O_LARGEFILE, S_IRUSR | S_IWUSR);
+#endif
+#elif defined(IOMTR_OS_NETWARE)
+		((struct File *)disk_file)-&gt;fd = NWOpenDevice(atoi(file_name), 0);
+#elif defined(IOMTR_OS_OSX)
+		((struct File *)disk_file)-&gt;fd = open(file_name, O_RDWR, S_IRUSR | S_IWUSR);
+#elif defined(IOMTR_OS_SOLARIS)
+		((struct File *)disk_file)-&gt;fd = open(file_name, O_RDWR | O_LARGEFILE, S_IRUSR | S_IWUSR);
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+		SetErrorMode(SEM_FAILCRITICALERRORS);
+		disk_file = CreateFile(file_name, GENERIC_READ | GENERIC_WRITE,
+				       FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+				       OPEN_EXISTING, FILE_FLAG_NO_BUFFERING | FILE_FLAG_OVERLAPPED, NULL);
+		SetErrorMode(0);
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	} else {
+		cout &lt;&lt; "*** Unexpected drive type in TargetDisk::Open()" &lt;&lt; endl;
+	}
+
+	offset = starting_position;
+#if _DISK_MSGS
+	cout &lt;&lt; "Opening disk " &lt;&lt; spec.name &lt;&lt; endl;
+#endif
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	if (disk_file == INVALID_HANDLE_VALUE)
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if (((struct File *)disk_file)-&gt;fd == (int)INVALID_SOCKET)
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	return FALSE;
+
+	// Cludgy hack used to control reporting drives.  This will go away when
+	// the TargetDisk class is divided into a disk Target subclass and a
+	// Disk interface class.
+	if (!test_state)
+		return TRUE;
+
+	// Indicating where completed asynchronous transfers should be queued.
+	return (CreateIoCompletionPort(disk_file, io_cq-&gt;completion_queue, 0, 1)
+		!= NULL);
+<span style = "background-color:#dfd">}</span>
+
+//
+// Closing the disk handle.
+//
+BOOL TargetDisk::Close(volatile TestState * test_state)
+<span style = "background-color:#fdd">{</span>
+	// Note that test_state is not used.  It IS used by network targets.
+
+#if defined(IOMTR_TEST_MODE)
+	// The handle is a sentinel, not a real device - just drop it.
+<span style = "background-color:#fdd">	disk_file = INVALID_HANDLE_VALUE;
+	return TRUE;</span>
+#endif
+
+	// If testing connection rate, the disk may already be closed.
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if (((struct File *)disk_file)-&gt;fd == (int)INVALID_SOCKET)
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	if (disk_file == INVALID_HANDLE_VALUE)
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+#if _DISK_MSGS
+		cout &lt;&lt; "Disk is already closed." &lt;&lt; endl;
+#endif
+		return TRUE;
+	}
+
+#if _DISK_MSGS
+	cout &lt;&lt; "Closing disk " &lt;&lt; spec.name &lt;&lt; endl;
+#endif
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	if (!CloseHandle(disk_file, FILE_ELEMENT))
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	if (!CloseHandle(disk_file))
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	{
+		cout &lt;&lt; "*** Error " &lt;&lt; GetLastError()
+		    &lt;&lt; " closing disk in TargetDisk::Close()." &lt;&lt; endl;
+		SetLastError(0);
+		return FALSE;
+	}
+
+#if defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_NETWARE) || defined(IOMTR_OS_OSX) || defined(IOMTR_OS_SOLARIS)
+	((struct File *)disk_file)-&gt;fd = (int)INVALID_SOCKET;
+#elif defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+	disk_file = INVALID_HANDLE_VALUE;
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+	return TRUE;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Seek to another position on the disk.  Whether this is a random seek or a sequential
+// seek will be determined by the value of the first parameter.  This does not actually
+// move the disk head, it just updates the offset of the next I/O request.
+//
+// Calling instructions:
+//
+// 1) If user enters an alignment which is a power of two, pass in the user_alignment
+//              the user specified and the precalculated user_align_mask.
+//              This uses fast byte alignment code.
+// 2) If user enters an alignment which is NOT a power of two, pass in the user_alignment
+//              the user specified and NOT_POWER_OF_TWO for user_align_mask.
+//              This uses slower byte alignment code.
+// 3) If user enters an alignment of 0 (zero), sector alignment is assumed.  Pass in
+//              zeroes for both byte_alignment and user_align_mask.
+//              This uses fast byte alignment code as long as the sector size is a power
+//              of two, otherwise it reverts to slower code.
+//
+void TargetDisk::Seek(BOOL random, DWORD request_size, DWORD user_alignment, DWORDLONG user_align_mask)
+<span style = "background-color:#dfd">{</span>
+	static DWORDLONG remainder;	// static for performance reasons
+
+	// Find out if this is a random seek.
+<span style = "background-color:#dfd">	if (random) {</span>
+		// Set the offset to a random location on the disk.
+<span style = "background-color:#dfd">		offset = starting_position + Rand(size);
+	} else {</span>
+		// Adjusting the offset pointer by the last number of bytes successfully transferred.
+<span style = "background-color:#dfd">		offset += (DWORDLONG) bytes_transferred;</span>
+	}
+
+<span style = "background-color:#dfd">	switch (user_align_mask) {</span>
+	case NOT_POWER_OF_TWO:
+		// If not at a user_alignment boundary, move offset ahead to next one.
+<span style = "background-color:#fdd">		if ((remainder = offset % user_alignment))
+			offset += user_alignment - remainder;</span>
+
+		// See if we're near the end of the file and need to return to the start.
+<span style = "background-color:#fdd">		if ((offset + (DWORDLONG) request_size) &gt; ending_position) {
+			offset = starting_position;</span>
+
+			// starting_position won't necessarily be byte-aligned.
+<span style = "background-color:#fdd">			if ((remainder = offset % user_alignment)) {</span>
+				offset += user_alignment - remainder;
+
+				// If we went beyond the end of the disk again, report an error.
+#ifdef _DEBUG
+				if ((offset + (DWORDLONG) request_size) &gt; ending_position) {
+					cout &lt;&lt; "*** Can't align on " &lt;&lt; user_alignment &lt;&lt; " byte boundaries" &lt;&lt; endl;
+
+					offset = starting_position;
+				}
+#endif
+			}
+		}
+<span style = "background-color:#fdd">		break;</span>
+
+	case 0:
+		// Assume sector alignment.
+<span style = "background-color:#fdd">		if (sector_align_mask == NOT_POWER_OF_TWO) {
+			if ((remainder = offset % spec.disk_info.sector_size))
+				offset += spec.disk_info.sector_size - remainder;
+		} else {
+			if (offset != (offset &amp; sector_align_mask))
+				offset = (offset + spec.disk_info.sector_size) &amp; sector_align_mask;</span>
+		}
+
+		// See if we're near the end of the file and need to return to the start.
+<span style = "background-color:#fdd">		if ((offset + (DWORDLONG) request_size) &gt; ending_position) {
+			offset = starting_position;</span>
+
+			// starting_position won't necessarily be sector-aligned.
+<span style = "background-color:#fdd">			if (sector_align_mask == NOT_POWER_OF_TWO) {
+				if ((remainder = offset % spec.disk_info.sector_size)) {</span>
+					offset += spec.disk_info.sector_size - remainder;
+
+					// If we went beyond the end of the disk again, report an error.
+#ifdef _DEBUG
+					if ((offset + (DWORDLONG) request_size) &gt; ending_position) {
+						cout &lt;&lt; "*** Can't align on " &lt;&lt; spec.disk_info.sector_size
+						    &lt;&lt; " byte boundaries" &lt;&lt; endl;
+
+						offset = starting_position;
+					}
+#endif
+				}
+			} else {
+<span style = "background-color:#fdd">				if (offset != (offset &amp; sector_align_mask)) {
+					offset = (offset + spec.disk_info.sector_size) &amp; sector_align_mask;</span>
+
+					// If we went beyond the end of the disk again, report an error.
+#ifdef _DEBUG
+					if ((offset + (DWORDLONG) request_size) &gt; ending_position) {
+						cout &lt;&lt; "*** ERROR: Can't align on " &lt;&lt; spec.disk_info.sector_size
+						    &lt;&lt; " byte boundaries" &lt;&lt; endl;
+
+						offset = starting_position;
+					}
+#endif
+				}
+			}
+		}
+		break;
+
+	default:
+		// If not at a user_alignment boundary, move offset ahead to next one.
+<span style = "background-color:#dfd">		if (offset != (offset &amp; user_align_mask))
+			offset = (offset + user_alignment) &amp; user_align_mask;</span>
+
+		// See if we're near the end of the file and need to return to the start.
+<span style = "background-color:#dfd">		if ((offset + (DWORDLONG) request_size) &gt; ending_position) {
+			offset = starting_position;</span>
+
+			// starting_position won't necessarily be byte-aligned.
+<span style = "background-color:#dfd">			if (offset != (offset &amp; user_align_mask)) {</span>
+<span style = "background-color:#fdd">				offset = (offset + user_alignment) &amp; sector_align_mask;</span>
+
+				// If we went beyond the end of the disk again, report an error.
+#ifdef _DEBUG
+				if ((offset + (DWORDLONG) request_size) &gt; ending_position) {
+					cout &lt;&lt; "*** Can't align on " &lt;&lt; alignment &lt;&lt; " byte boundaries" &lt;&lt; endl;
+
+					offset = starting_position;
+				}
+#endif
+			}
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Reading a user specified amount of data from the drive and returning it.
+// This does not check the request size to be a multiple of the sector size 
+// (except in debug).  For performance reasons, Iometer ensures that the 
+// values are correct.
+//
+ReturnVal TargetDisk::Read(LPVOID buffer, Transaction * trans)
+<span style = "background-color:#dfd">{</span>
+	DWORD error_no;
+
+#if defined(IOMTR_TEST_MODE)
+	// Complete the read synchronously and synthetically. The optional --rdelay
+	// makes each read take a fixed time, so IOPS/latency are targetable.
+	// Returning ReturnSuccess makes Grunt::Do_IOs record it immediately via the
+	// normal Record_IO path - real result accounting, no device, no completion queue.
+<span style = "background-color:#dfd">	Test_IO_Delay(param.test_read_delay_us);
+	bytes_transferred = trans-&gt;size;
+	return ReturnSuccess;</span>
+#endif
+
+#ifdef _DEBUG
+	// Checking for the access to be a multiple of the sector size.
+	// Avoiding this check during actual testing for performance reasons.
+	if (offset % spec.disk_info.sector_size) {
+		cout &lt;&lt; "Invalid offset.  Not aligned with disk sector size for : " &lt;&lt; spec.name &lt;&lt; endl;
+		return (ReturnError);
+	}
+	if (trans-&gt;size % spec.disk_info.sector_size) {
+		cout &lt;&lt; "Invalid transfer size.  Not aligned with disk sector size for : " &lt;&lt; spec.name &lt;&lt; endl;
+		return (ReturnError);
+	}
+#endif
+
+#if _DETAILS
+	cout &lt;&lt; "Reading " &lt;&lt; trans-&gt;size &lt;&lt; " bytes from disk : "
+	    &lt;&lt; spec.name &lt;&lt; endl &lt;&lt; "   Accessing : " &lt;&lt; offset &lt;&lt; endl;
+#endif
+
+	// Determining location of read to disk.
+	trans-&gt;asynchronous_io.Offset = (DWORD) offset;
+	trans-&gt;asynchronous_io.OffsetHigh = (DWORD) (offset &gt;&gt; 32);
+
+	// Reading information from the disk.
+	if (ReadFile(disk_file, buffer, trans-&gt;size, &amp;bytes_transferred, &amp;trans-&gt;asynchronous_io)) {
+		// Read succeeded immediately, but completion is pending.  It will
+		// still go to the completion queue.
+#if (defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)) &amp;&amp; defined(IMMEDIATE_AIO_COMPLETION)
+		// This code blocks reading the completion Q for the immediately completed I/Os.
+		error_no = 0;
+		// this is for the next sequential I/O.
+		bytes_transferred = trans-&gt;size;
+		return ReturnSuccess;
+#else				// All other cases UNIX, NT, etc.
+		error_no = ERROR_IO_PENDING;
+#endif
+	} else {
+		error_no = GetLastError();
+	}
+
+	// See if read failed.
+	if (error_no != ERROR_IO_PENDING) {
+		// Record that no bytes were read.
+		bytes_transferred = 0;
+
+		// Return error.
+		cout &lt;&lt; "*** Error " &lt;&lt; error_no &lt;&lt; " reading " &lt;&lt; trans-&gt;size
+		    &lt;&lt; " bytes from disk " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+		return ReturnError;
+	}
+	// An asynchronous read was successfully initiated!
+
+	// Record number of bytes *to be* transferred (ReadFile() set this to 0).
+	// This value will be used to determine location of next sequential I/O.
+	bytes_transferred = trans-&gt;size;
+
+#if _DETAILS
+	cout &lt;&lt; "Queued read for " &lt;&lt; trans-&gt;size &lt;&lt; " bytes from disk " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+#endif
+	return ReturnPending;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Writing a user defined buffer to the drive.  This does not check the request size 
+// to be a multiple of the sector size (except in debug).  For performance reasons,
+// Iometer ensures that the values are correct.
+//
+ReturnVal TargetDisk::Write(LPVOID buffer, Transaction * trans)
+<span style = "background-color:#dfd">{</span>
+	DWORD error_no;
+
+#if defined(IOMTR_TEST_MODE)
+	// Complete the write synchronously and synthetically (see Read); --wdelay
+	// sets the per-write time.
+<span style = "background-color:#dfd">	Test_IO_Delay(param.test_write_delay_us);
+	bytes_transferred = trans-&gt;size;
+	return ReturnSuccess;</span>
+#endif
+
+#ifdef _DEBUG
+	// Verifying that the amount to be written is a multiple of the sector size.
+	// Avoiding this check during actual testing for performance reasons.
+	if (offset % spec.disk_info.sector_size) {
+		cout &lt;&lt; "Invalid offset.  Not aligned with disk sector size for : " &lt;&lt; spec.name &lt;&lt; endl;
+		return (ReturnError);
+	}
+	if (trans-&gt;size % spec.disk_info.sector_size) {
+		cout &lt;&lt; "Invalid transfer size.  Not aligned with disk sector size for : " &lt;&lt; spec.name &lt;&lt; endl;
+		return (ReturnError);
+	}
+#endif
+
+#if _DETAILS
+	cout &lt;&lt; "Writing " &lt;&lt; trans-&gt;size &lt;&lt; " bytes to disk : " &lt;&lt; spec.name
+	    &lt;&lt; endl &lt;&lt; "   Accessing : " &lt;&lt; offset &lt;&lt; endl;
+#endif
+
+	// Determining location of write to disk.
+	trans-&gt;asynchronous_io.Offset = (DWORD) offset;
+	trans-&gt;asynchronous_io.OffsetHigh = (DWORD) (offset &gt;&gt; 32);
+
+	// Writing information from the disk.
+	if (WriteFile(disk_file, buffer, trans-&gt;size, &amp;bytes_transferred, &amp;trans-&gt;asynchronous_io)) {
+		// Write succeeded immediately, but completion is pending.  It will
+		// still go to the completion queue.
+#if (defined(IOMTR_OSFAMILY_NETWARE) || defined(IOMTR_OSFAMILY_UNIX)) &amp;&amp; defined(IMMEDIATE_AIO_COMPLETION)
+		// This code blocks reading the completion Q for the immediately completed I/Os.
+		error_no = 0;
+		// this is for the next sequential I/O.
+		bytes_transferred = trans-&gt;size;
+		return ReturnSuccess;
+#else				// All other cases UNIX, NT, etc.
+		error_no = ERROR_IO_PENDING;
+#endif
+	} else {
+		error_no = GetLastError();
+	}
+
+	// See if write failed.
+	if (error_no != ERROR_IO_PENDING) {
+		// Record that no bytes were written.
+		bytes_transferred = 0;
+
+		// Return error code.
+		cout &lt;&lt; "*** Error " &lt;&lt; error_no &lt;&lt; " writing " &lt;&lt; trans-&gt;size
+		    &lt;&lt; " bytes to disk " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+		return ReturnError;
+	}
+	// An asynchronous write was successfully initiated!  
+
+	// Record number of bytes *to be* transferred (WriteFile() set this to 0).
+	// This value will be used to determine location of next sequential I/O.
+	bytes_transferred = trans-&gt;size;
+
+#if _DETAILS
+	cout &lt;&lt; "Queued write for " &lt;&lt; trans-&gt;size &lt;&lt; " bytes to disk " &lt;&lt; spec.name &lt;&lt; "." &lt;&lt; endl;
+#endif
+	return ReturnPending;
+<span style = "background-color:#dfd">}</span>
+
+#if defined(IOMTR_OSFAMILY_UNIX)
+#if defined(IOMTR_OS_SOLARIS)
+#if defined(IOMTR_CPU_I386) || defined(IOMTR_CPU_IA64)
+// highly specific to Solaris on Intel
+BOOL TargetDisk::Look_For_Partitions()
+{
+	char buffer[512];
+	int bytes_read, i;
+	struct mboot *mb;
+	struct ipart *ip;
+	struct File *fp;
+
+	fp = (struct File *)disk_file;
+	if ((bytes_read = read(fp-&gt;fd, buffer, SECTOR_SIZE)) &lt; SECTOR_SIZE) {
+		// cannot read from the disk. So we should try to use it.
+		// simply return (TRUE) indicating that it has partitions.
+		return (TRUE);
+	}
+	//
+	// We have read 512 bytes of the first cylinder, first sector.
+	// It contains the master boot record, the partition table and mboot signature (viz 0xAA55)
+	//
+	mb = (struct mboot *)buffer;
+	if (mb-&gt;signature != MBB_MAGIC)
+		// Hmmm... This drive appears to be freshly formatted. guess we can report it.!
+		return (FALSE);
+	else {
+		// well, we did have a valid signature in the mboot. Look for valid partitions.
+		for (i = 0; i &lt; FD_NUMPART; i++) {
+			ip = (struct ipart *)(buffer + BOOTSZ + (i * sizeof(struct ipart)));
+			if (ip-&gt;numsect || ip-&gt;relsect)
+				return (TRUE);
+		}
+	}
+	return (FALSE);
+}
+
+DWORDLONG TargetDisk::Get_Partition_Size(char *part_name, int part)
+{
+	char disk_name[MAX_NAME];
+	char buffer[512];
+	int bytes_read, fd;
+	struct ipart *ip;
+	int length;
+
+	length = strlen(part_name);
+	part_name[length - 1] = '0';	// Converting cXtXdXpX to cXtXdXp0
+	snprintf(disk_name, MAX_NAME, "%s/%s", RAW_DEVICE_DIR, part_name);
+	fd = open(disk_name, O_RDONLY);
+	if (fd &lt; 0) {
+		return (0);
+	}
+
+	if ((bytes_read = read(fd, buffer, SECTOR_SIZE)) &lt; SECTOR_SIZE) {
+		close(fd);
+		return (0);
+	}
+	//
+	// We have read 512 bytes of the first cylinder, first sector.
+	// It contains the master boot record, the partition table and mboot signature (viz 0xAA55)
+	//
+	close(fd);
+	ip = (struct ipart *)(buffer + BOOTSZ + ((part - 1) * sizeof(struct ipart)));
+	return ((DWORDLONG) ip-&gt;numsect * SECTOR_SIZE);
+}
+#endif				// __i386 || _IA64
+
+DWORDLONG TargetDisk::Get_Slice_Size(char *part_name, int part)
+{
+	char disk_name[MAX_NAME];
+
+//      int bytes_read;
+	int fd;
+	struct vtoc this_vtoc;
+	int length;
+
+	length = strlen(part_name);
+	part_name[length - 1] = '2';	// Converting cXtXdXsX to cXtXdXs2
+	snprintf(disk_name, MAX_NAME, "%s/%s", RAW_DEVICE_DIR, part_name);
+	fd = open(disk_name, O_RDONLY);
+	if (fd &lt; 0) {
+		return (0);
+	}
+
+	if (ioctl(fd, DKIOCGVTOC, &amp;this_vtoc) &lt; 0) {
+		close(fd);
+		return (0);
+	}
+	//
+	// We have the vtoc.
+	// It contains the slice info (including size).
+	//
+	close(fd);
+	return ((DWORDLONG) this_vtoc.v_part[part].p_size * this_vtoc.v_sectorsz);
+}
+#endif				// SOLARIS
+
+#if defined(IOMTR_OS_LINUX)
+
+static int getSectorSizeOfPhysDisk(const char *devName)
+{
+	char devNameBuf[MAX_NAME];
+	const char *fullDevName;
+	int fd, ssz;
+
+	if (devName[0] == '/') {
+		fullDevName = devName;
+	} else {
+		snprintf(devNameBuf, MAX_NAME, "%s/%s", RAW_DEVICE_DIR, devName);
+		fullDevName = devNameBuf;
+	}
+	if ((fd = open(fullDevName, O_RDWR)) &lt; 0) {
+		cerr &lt;&lt; "Fail to open device" &lt;&lt; endl;
+		return 0;
+	}
+
+	// still leave old comments here but we should use BLKSSZGET. Sector 
+	// size request should be allowed no matter what.
+	//
+	// Use BLKBSZGET here as opposed to BLKSSZGET.  BLKSSZGET returns the
+	// true sector size of the physical disk which should be what we want.
+	// However, Linux will always use the potential cluster size of the 
+	// file system even for raw devices with no file system.  So we use 
+	// BLKBSZGET which returns the (potential) file system cluster size.
+
+	if (ioctl(fd, BLKSSZGET, &amp;ssz) &lt; 0) {
+		cerr &lt;&lt; "Fail to get sector size for " &lt;&lt; fullDevName &lt;&lt; endl;
+		close(fd);
+		return 0;
+	}
+	close(fd);
+	return ssz;
+}
+
+//////////////////////////////////////////////////////////////////////
+//
+// Parameters:
+//   devName - The name of this device's node. Must be in the "/dev/&lt;name&gt;"
+//             format.
+// Return value:
+//   The size (in bytes) of the named device.
+//
+static unsigned long long getSizeOfPhysDisk(const char *devName)
+{
+	char devNameBuf[MAX_NAME];
+	const char *fullDevName;
+	int fd;
+	unsigned long long sz64;
+	unsigned long sz32;
+
+	if (devName[0] == '/') {
+		fullDevName = devName;
+	} else {
+		snprintf(devNameBuf, MAX_NAME, "%s/%s", RAW_DEVICE_DIR, devName);
+		fullDevName = devNameBuf;
+	}
+	if ((fd = open(fullDevName, O_RDWR)) &lt; 0) {
+		cerr &lt;&lt; "Fail to open device" &lt;&lt; endl;
+		return 0;
+	}
+	if (ioctl(fd, BLKGETSIZE64, &amp;sz64) &lt; 0) {
+		//cerr &lt;&lt; "Fail to get size for " &lt;&lt; fullDevName &lt;&lt; " by BLKGETSIZE64" &lt;&lt; endl;
+		cerr &lt;&lt; "Warning: Reading the device geometry for " &lt;&lt; fullDevName &lt;&lt; " failed using the ";
+		cerr &lt;&lt; "primary detection method - going to try backup method (this puts a 2TB limit ";
+		cerr &lt;&lt; "on Iometer for accessing the device)" &lt;&lt; endl;
+		if (ioctl(fd, BLKGETSIZE, &amp;sz32) &lt; 0) {
+			//cerr &lt;&lt; "Fail to get size for " &lt;&lt; fullDevName &lt;&lt; "by BLKGETSIZE" &lt;&lt; endl;
+			cerr &lt;&lt; "ERROR: Reading the device geometry for " &lt;&lt; fullDevName &lt;&lt; " failed using ";
+			cerr &lt;&lt; "the backup detection method - give up (device will not be usable by Iometer)" &lt;&lt; endl;
+			sz64 = 0;
+		} else {
+			sz64 = sz32;
+			sz64 &lt;&lt;= 9;
+		}
+	}
+#ifdef _DEBUG
+	cout &lt;&lt; "Device " &lt;&lt; fullDevName &lt;&lt; " size:" &lt;&lt; sz64 &lt;&lt; "Bytes." &lt;&lt; endl;
+#endif
+
+	close(fd);
+	return sz64;
+}
+
+#endif				// Linux
+#endif				// UNIX</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

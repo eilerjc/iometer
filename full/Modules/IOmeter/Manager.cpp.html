@@ -1,0 +1,1805 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>Manager.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  (Iometer) / Manager.cpp                                            ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the Manager class for Iometer,      ## */
+/* ##               which contains a list of workers and provides         ## */
+/* ##               functions for manager-level actions (creating and     ## */
+/* ##               removing workers, communication between Iometer and   ## */
+/* ##               a single copy of Dynamo, etc.). A Manager object is   ## */
+/* ##               created whenever a copy of Dynamo logs in.            ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2004-06-11 (lamontcranston41@yahoo.com)               ## */
+/* ##               - Add code to allow potentially invalid access specs  ## */
+/* ##                 but warn the user.                                  ## */
+/* ##               2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "Manager.h"
+#include "ManagerList.h"
+#include "GalileoApp.h"
+#include "GalileoView.h"
+#include "core/IcfDocument.h"	// shared MANAGER LIST parse result types
+#include "core/IcfWriter.h"	// shared ICF section writers (iocore)
+#include "core/ResultDecode.h"	// shared raw-counter -&gt; latency decode (iocore)
+#include "core/ResultsCsv.h"	// canonical results-CSV row writer (iocore)
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+Manager::Manager()
+<span style = "background-color:#dfd">{
+	id = IOERROR;
+	ResetResults(WHOLE_TEST_PERF);
+	ResetResults(LAST_UPDATE_PERF);
+	tcps.SetSize(INITIAL_ARRAY_SIZE, ARRAY_GROW_STEP);
+	vis.SetSize(INITIAL_ARRAY_SIZE, ARRAY_GROW_STEP);
+	disks.SetSize(INITIAL_ARRAY_SIZE, ARRAY_GROW_STEP);
+	workers.SetSize(INITIAL_ARRAY_SIZE, ARRAY_GROW_STEP);
+	port = NULL;
+}</span>
+
+Manager::~Manager()
+<span style = "background-color:#dfd">{</span>
+	// Removing all worker, disk info, and net info from the manager.
+<span style = "background-color:#dfd">	while (WorkerCount()) {
+		delete GetWorker(0);</span>
+
+<span style = "background-color:#dfd">		workers.RemoveAt(0);</span>
+	}
+<span style = "background-color:#dfd">	RemoveDiskInfo();
+	RemoveNetInfo();</span>
+
+	// Close the manager's communications pipe.
+<span style = "background-color:#dfd">	port-&gt;Close();
+	delete port;
+}</span>
+
+//
+// Returns the index of the manager.
+//
+int Manager::GetIndex()
+<span style = "background-color:#fdd">{
+	for (int m = 0; m &lt; theApp.manager_list.ManagerCount(); m++) {
+		if (this == theApp.manager_list.GetManager(m))
+			return m;</span>
+	}
+<span style = "background-color:#fdd">	return IOERROR;
+}</span>
+
+//
+// Returns an indication of all types of workers that a manager has.
+//
+TargetType Manager::Type()
+<span style = "background-color:#dfd">{</span>
+	int i, worker_count;
+<span style = "background-color:#dfd">	TargetType type = GenericType;</span>
+
+<span style = "background-color:#dfd">	worker_count = WorkerCount();
+	for (i = 0; i &lt; worker_count; i++)
+		type = (TargetType) (type | workers[i]-&gt;Type());</span>
+
+	// See if the manager is active.
+	// (A manager may be active even if none of its workers are.)
+<span style = "background-color:#dfd">	if (ActiveInCurrentTest())</span>
+		type = (TargetType) (type | ActiveType);
+
+<span style = "background-color:#dfd">	return type;
+}</span>
+
+//
+// Get information about a given worker.  This returns the nth worker of the
+// specified type.
+//
+Worker *Manager::GetWorker(int index, TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int i, worker_count;
+
+	// Make sure the desired worker exists.
+<span style = "background-color:#dfd">	if (index &lt; 0 || index &gt;= WorkerCount(type))</span>
+<span style = "background-color:#fdd">		return NULL;</span>
+
+	// Find the worker.
+<span style = "background-color:#dfd">	worker_count = WorkerCount();
+	for (i = 0; i &lt; worker_count; i++) {
+		if (IsType(workers[i]-&gt;Type(), type)) {
+			if (!index--)
+				return workers[i];</span>
+		}
+	}
+
+	ASSERT(0);		// requested worker not found - should not happen
+	return NULL;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Get the first worker having the specified name, if any.
+//
+Worker *Manager::GetWorkerByName(const char *wkr_name, const int wkr_id)
+<span style = "background-color:#fdd">{</span>
+	int i, worker_count;
+
+<span style = "background-color:#fdd">	if (!wkr_name) {
+		ErrorMessage("Invalid string in Manager::GetWorkerByName()");
+		return NULL;</span>
+	}
+
+<span style = "background-color:#fdd">	worker_count = WorkerCount();
+	for (i = 0; i &lt; worker_count; i++) {
+		if (strcmp(workers[i]-&gt;name, wkr_name) == 0 &amp;&amp; workers[i]-&gt;id == wkr_id) {
+			return workers[i];</span>
+		}
+	}
+
+	// Didn't find it (not an error).
+<span style = "background-color:#fdd">	return NULL;
+}</span>
+
+//
+// Adding a new worker to the worker list.  The new worker is always added to 
+// the end of the list.  A connection to the worker is also made
+//  * May use a given worker as a template.
+//  * May specify the new worker's name.  (Ignored if src_worker is defined.)
+//
+Worker *Manager::AddWorker(TargetType type, Worker * src_worker, const CString &amp; in_name)
+<span style = "background-color:#dfd">{</span>
+	Message msg;
+	Worker *new_worker;
+
+	// Adding the new worker to the manager.
+<span style = "background-color:#dfd">	if (WorkerCount() &gt;= MAX_WORKERS)</span>
+		return (NULL);
+
+	// Request that a new worker be spawned.
+	// The data of the message is the number of workers to spawn.
+<span style = "background-color:#dfd">	msg.purpose = ADD_WORKERS;
+	msg.data = 1;
+	if (Send(&amp;msg) != MESSAGE_SIZE)</span>
+<span style = "background-color:#fdd">		ErrorMessage("Message may not be sent correctly in Manager::AddWorker().");</span>
+<span style = "background-color:#dfd">	if (Receive(&amp;msg) != MESSAGE_SIZE)</span>
+<span style = "background-color:#fdd">		ErrorMessage("Message may not be received correctly in Manager::AddWorker().");</span>
+
+	// Verifying that the worker was created.
+<span style = "background-color:#dfd">	if (!msg.data)</span>
+<span style = "background-color:#fdd">		return (NULL);</span>
+
+	// Allocating space for the new worker under the manager.
+<span style = "background-color:#dfd">	new_worker = new Worker(this, type);</span>
+
+	// Adding worker to end of the worker list.
+<span style = "background-color:#dfd">	workers.Add(new_worker);</span>
+
+<span style = "background-color:#dfd">	if (!src_worker) {</span>
+		// Set the name of the worker based on the number of workers for 
+		// this manager
+<span style = "background-color:#dfd">		CString worker_name;</span>
+
+<span style = "background-color:#dfd">		if (in_name.IsEmpty())
+			worker_name.Format("Worker %d", WorkerCount());</span>
+		else
+<span style = "background-color:#dfd">			worker_name = in_name;</span>
+
+<span style = "background-color:#dfd">		strcpy(new_worker-&gt;name, worker_name);
+	} else {</span>
+		// Copy the template's name and other information.
+<span style = "background-color:#fdd">		new_worker-&gt;Clone(src_worker);</span>
+	}
+
+	// Reassign the disambiguating IDs this manager's workers.
+<span style = "background-color:#dfd">	IndexWorkers();</span>
+
+<span style = "background-color:#dfd">	return new_worker;
+}</span>
+
+//
+// Removing a worker from the list.  Return FALSE if all workers have
+// been removed.
+//
+BOOL Manager::RemoveWorker(int index, TargetType type)
+<span style = "background-color:#dfd">{</span>
+	Worker *worker;
+	int main_index;
+
+	// Get the desired worker.
+<span style = "background-color:#dfd">	if (!(worker = GetWorker(index, type))) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Invalid worker in Manager::RemoveWorker().");
+		return FALSE;</span>
+	}
+<span style = "background-color:#dfd">	main_index = worker-&gt;GetIndex();</span>
+
+	// Informing Dynamo to remove the worker.
+	// The data of the message is the index of the worker to remove.
+<span style = "background-color:#dfd">	Send(main_index, EXIT);</span>
+
+	// Remove the worker from memory.
+<span style = "background-color:#dfd">	workers.RemoveAt(main_index);</span>
+	delete worker;
+
+	// Reassign the disambiguating IDs this manager's workers.
+<span style = "background-color:#dfd">	IndexWorkers();</span>
+
+<span style = "background-color:#dfd">	return WorkerCount(type);
+}</span>
+
+//
+// Returns the number of workers in the worker list.
+//
+int Manager::WorkerCount(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int i, count = 0, worker_count;
+
+<span style = "background-color:#dfd">	worker_count = (int)workers.GetSize();
+	for (i = 0; i &lt; worker_count; i++) {
+		if (IsType(workers[i]-&gt;Type(), type))</span>
+			count++;
+	}
+<span style = "background-color:#dfd">	return count;
+}</span>
+
+//
+// Number of targets for all workers under this manager.
+//
+int Manager::TargetCount(TargetType type)
+<span style = "background-color:#dfd">{
+	int w, count = 0, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++)
+		count += GetWorker(w)-&gt;TargetCount(type);</span>
+
+	return count;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Removing all cached disk information for manager and all its workers.
+//
+void Manager::RemoveDiskInfo()
+<span style = "background-color:#dfd">{</span>
+	int i, wkr_count;
+
+	// Deleting Disk_Info objects held in "disks" array
+<span style = "background-color:#dfd">	for (i = 0; i &lt; InterfaceCount(GenericDiskType); i++)
+		delete disks[i];</span>
+
+	// Deleting memory used by "disks" array itself
+<span style = "background-color:#dfd">	disks.RemoveAll();</span>
+
+	// Removing all disk targets assigned to the manager's workers.
+<span style = "background-color:#dfd">	wkr_count = WorkerCount();
+	for (i = 0; i &lt; wkr_count; i++)</span>
+<span style = "background-color:#fdd">		GetWorker(i)-&gt;RemoveTargets(GenericDiskType);</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Removing all cached network information for manager and all its workers.
+//
+void Manager::RemoveNetInfo()
+<span style = "background-color:#dfd">{</span>
+	int i, net_count, wkr_count;
+
+	// Deleting network information referenced by "tcp" array
+<span style = "background-color:#dfd">	net_count = (int)tcps.GetSize();
+	for (i = 0; i &lt; net_count; i++)
+		delete tcps[i];</span>
+
+<span style = "background-color:#dfd">	tcps.RemoveAll();</span>
+
+<span style = "background-color:#dfd">	net_count = (int)vis.GetSize();
+	for (i = 0; i &lt; net_count; i++)</span>
+<span style = "background-color:#fdd">		delete vis[i];</span>
+
+<span style = "background-color:#dfd">	vis.RemoveAll();</span>
+
+	// Removing all network targets assigned to the manager's workers.
+<span style = "background-color:#dfd">	wkr_count = WorkerCount();
+	for (i = 0; i &lt; wkr_count; i++)</span>
+<span style = "background-color:#fdd">		GetWorker(i)-&gt;RemoveTargets(GenericNetType);</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Setting the test specifications for all workers.
+//
+BOOL Manager::SetAccess(int access_index)
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++) {
+		if (!GetWorker(w)-&gt;SetAccess(access_index))</span>
+<span style = "background-color:#fdd">			return FALSE;</span>
+	}
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Initializing results for the manager.
+//
+void Manager::ResetResults(int which_perf)
+<span style = "background-color:#dfd">{
+	if ((which_perf &lt; 0) || (which_perf &gt;= MAX_PERF))</span>
+		return;
+
+<span style = "background-color:#dfd">	memset(&amp;(results[which_perf]), 0, sizeof(Results));</span>
+<span style = "background-color:#fdd">}</span>
+
+//
+// Resetting all results related to the manager.  This includes resetting all results
+// for its workers and whatever results a worker relies on.
+//
+void Manager::ResetAllResults()
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	ResetResults(WHOLE_TEST_PERF);
+	ResetResults(LAST_UPDATE_PERF);</span>
+
+	// Resetting results for all worker threads as well.
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w)-&gt;ResetAllResults();
+}</span>
+
+//
+// Removing all targets from manager's workers.
+//
+void Manager::RemoveTargets(TargetType type)
+<span style = "background-color:#fdd">{</span>
+	int w;
+
+	// A target might be a network client, so always check against the current
+	// worker count (WorkerCount()) and not a saved value.
+<span style = "background-color:#fdd">	for (w = 0; w &lt; WorkerCount(); w++)
+		GetWorker(w)-&gt;RemoveTargets(type);
+}</span>
+
+//
+// Resets a worker's drives to indicate that they are not running.
+//
+void Manager::ClearActiveTargets()
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w)-&gt;ClearActiveTargets();
+}</span>
+
+//
+// Marks which targets accessible by a worker are to run, and sending the
+// worker the list.  Returns number of targets actually set (IOERROR in case of error).
+//
+int Manager::SetActiveTargets(int worker_index, int targets_to_set)
+<span style = "background-color:#dfd">{
+	return GetWorker(worker_index)-&gt;SetActiveTargets(targets_to_set);
+}</span>
+
+//
+// Peeking to see if a given worker has sent back a message that's waiting 
+// in its message queue.
+//
+DWORD Manager::Peek(int worker_index)
+<span style = "background-color:#fdd">{
+	return port-&gt;Peek();</span>
+}
+
+//
+// Sending a message to Dynamo.
+//
+DWORDLONG Manager::Send(Message * msg)
+<span style = "background-color:#dfd">{
+	return port-&gt;Send(msg);</span>
+}
+
+DWORDLONG Manager::SendData(Data_Message * data_msg)
+<span style = "background-color:#dfd">{
+	return port-&gt;Send(data_msg, DATA_MESSAGE_SIZE);</span>
+}
+
+DWORDLONG Manager::Send(int data, int purpose)
+<span style = "background-color:#dfd">{</span>
+	Message msg;
+
+	msg.purpose = purpose;
+<span style = "background-color:#dfd">	msg.data = data;
+	return Send(&amp;msg);
+}</span>
+
+//
+// Getting a message from Dynamo.
+//
+DWORDLONG Manager::Receive(Message * msg)
+<span style = "background-color:#dfd">{
+	return port-&gt;Receive(msg);</span>
+}
+
+DWORDLONG Manager::ReceiveData(Data_Message * data_msg)
+<span style = "background-color:#dfd">{
+	return port-&gt;Receive(data_msg, DATA_MESSAGE_SIZE);</span>
+}
+
+DWORDLONG Manager::Receive()
+<span style = "background-color:#fdd">{</span>
+	Message msg;
+
+<span style = "background-color:#fdd">	return Receive(&amp;msg);
+}</span>
+
+//
+// Updating the list of targets known by a manager.  This retrieves the
+// target information from Dynamo.
+//
+void Manager::UpdateTargetLists()
+<span style = "background-color:#dfd">{</span>
+	// Query worker for list of available targets.
+<span style = "background-color:#dfd">	Send(MANAGER, REPORT_TARGETS);</span>
+
+	// Reset information about currently stored targets.
+<span style = "background-color:#dfd">	RemoveDiskInfo();
+	RemoveNetInfo();</span>
+
+	// Get the reply containing the target information and initialize the lists.
+<span style = "background-color:#dfd">	InitTargetList(&amp;disks);
+	InitTargetList(&amp;tcps);
+	InitTargetList(&amp;vis);
+}</span>
+
+//
+// Initialize the specified target list using the target specifications
+// given in the data message.
+//
+void Manager::InitTargetList(CTypedPtrArray &lt; CPtrArray, Target_Spec * &gt;*targets)
+<span style = "background-color:#dfd">{</span>
+	int i;
+	Data_Message *data_msg;
+	Target_Spec *target_spec;
+
+<span style = "background-color:#dfd">	data_msg = new Data_Message;</span>
+
+	// Receive the target specifications in a data message.
+<span style = "background-color:#dfd">	ReceiveData(data_msg);</span>
+
+	// Add the targets to the specified array.
+<span style = "background-color:#dfd">	for (i = 0; i &lt; data_msg-&gt;count; i++) {
+		target_spec = new Target_Spec;
+		memcpy(target_spec, &amp;data_msg-&gt;data.targets[i], sizeof(Target_Spec));</span>
+
+		// Initialize the target specs to the default settings.
+<span style = "background-color:#dfd">		target_spec-&gt;queue_depth = 1;
+		target_spec-&gt;test_connection_rate = FALSE;
+		target_spec-&gt;trans_per_conn = 1;</span>
+
+<span style = "background-color:#dfd">		targets-&gt;Add(target_spec);</span>
+	}
+
+<span style = "background-color:#dfd">	delete data_msg;
+}</span>
+
+//
+// Sets each workers targets to run for the next test.  This call will result
+// in each worker sending their active target list to Dynamo.
+//
+BOOL Manager::SetTargets()
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++) {
+		if (!GetWorker(w)-&gt;SetTargets())</span>
+			return FALSE;
+	}
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Setting targets that need to be prepared for the specified worker.
+//
+void Manager::SetTargetsToPrepare(int worker_index)
+<span style = "background-color:#fdd">{
+	GetWorker(worker_index)-&gt;SetTargetsToPrepare();
+}</span>
+
+//
+// Receives the answer to a prepare command.
+//
+BOOL Manager::PreparedAnswer()
+<span style = "background-color:#fdd">{</span>
+	Message msg;
+	int t, i;
+
+	// Get the notification message that the prepare is done.
+<span style = "background-color:#fdd">	Receive(&amp;msg);</span>
+
+	// Verify that all targets were successfully prepared.
+<span style = "background-color:#fdd">	if (!msg.data)
+		return FALSE;</span>
+
+	Worker *wkr;
+<span style = "background-color:#fdd">	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#fdd">	for (w = 0; w &lt; wkr_count; w++) {
+		wkr = GetWorker(w);</span>
+
+		// Update the ready status of all disk targets that the worker prepared.
+<span style = "background-color:#fdd">		for (t = 0; t &lt; wkr-&gt;TargetCount(); t++) {</span>
+			// Find the worker's corresponding disk in the manager's disk list.
+<span style = "background-color:#fdd">			for (i = 0; i &lt; InterfaceCount(GenericDiskType); i++) {
+				if (!strcmp(wkr-&gt;GetTarget(t)-&gt;spec.name, GetInterface(i, GenericDiskType)-&gt;name)) {
+					GetInterface(i, GenericDiskType)-&gt;disk_info.ready = TRUE;</span>
+				}
+			}
+		}
+	}
+
+	// Update the Targets display if a manager or worker is selected, 
+	// in case the manager or worker that just finished preparing its 
+	// drives is currently displayed.  This will update the icon.
+<span style = "background-color:#fdd">	theApp.pView-&gt;m_pPageDisk-&gt;ShowData();
+	return TRUE;
+}</span>
+
+//
+// Saving the manager's results to a file along with all of its workers and
+// their targets.
+//
+void Manager::SaveResults(ostream * file, int access_index, int result_type)
+<span style = "background-color:#dfd">{</span>
+	int stat;
+	char specname[MAX_WORKER_NAME];
+
+<span style = "background-color:#dfd">	if (!ActiveInCurrentTest())</span>
+		return;
+
+	// Save manager's results (one canonical row via iocore::writeResultRow). The
+	// manager level fills the raw block and CPU/network blocks, blanks the
+	// #Managers column, and reports timer_resolution as the processor-speed column.
+	{
+<span style = "background-color:#dfd">		iocore::ResultRow row;
+		iocore::fillResultRow(row, results[WHOLE_TEST_PERF]);
+		row.targetType = "MANAGER";
+		row.targetName = name;
+		row.accessSpec = GetCommonAccessSpec(access_index, specname);
+		row.managers   = "";		// space for managers running
+		row.workers    = std::to_string(WorkerCount(ActiveType));
+		row.disks      = std::to_string(TargetCount(ActiveType)</span>
+		                   + WorkerCount((TargetType) (GenericClientType | ActiveType)));
+<span style = "background-color:#dfd">		row.transPerConn = (GetConnectionRate(ActiveType) == ENABLED_VALUE)</span>
+		                   ? GetTransPerConn(ActiveType) : AMBIGUOUS_VALUE;
+<span style = "background-color:#dfd">		row.rawBlock = true;
+		row.startingSector = std::to_string(GetDiskStart((TargetType) (GenericDiskType | ActiveType)));
+		row.maxSize        = std::to_string(GetDiskSize((TargetType) (GenericDiskType | ActiveType)));
+		row.queueDepth     = std::to_string(GetQueueDepth(ActiveType));
+		row.cpuNetBlock = true;
+		row.procSpeedPresent = true;
+		row.procSpeed = timer_resolution;
+		iocore::writeResultRow(*file, row);
+	}</span>
+
+	// Save individual CPU results.
+<span style = "background-color:#dfd">	for (int cpu = 0; cpu &lt; processors; cpu++) {
+		(*file) &lt;&lt; "PROCESSOR" &lt;&lt; "," &lt;&lt; "CPU " &lt;&lt; cpu &lt;&lt; ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,";</span>
+
+<span style = "background-color:#dfd">		for (stat = 0; stat &lt; CPU_UTILIZATION_RESULTS; stat++)
+			(*file) &lt;&lt; "," &lt;&lt; results[WHOLE_TEST_PERF].individual_CPU_utilization[cpu][stat];</span>
+
+<span style = "background-color:#dfd">		(*file) &lt;&lt; "," &lt;&lt; timer_resolution</span>
+
+			&lt;&lt; "," &lt;&lt; results[WHOLE_TEST_PERF].individual_CPU_utilization[cpu][CPU_IRQ]
+		    &lt;&lt; ",";	// Space for CPU_effectiveness (no way to calculate IOs per processor)
+
+<span style = "background-color:#dfd">		for (stat = 0; stat &lt; NI_COMBINE_RESULTS + TCP_RESULTS; stat++)
+			(*file) &lt;&lt; ",";	// space for network results</span>
+
+<span style = "background-color:#dfd">		(*file) &lt;&lt; endl;</span>
+	}
+
+	// If requested, save workers' results.
+<span style = "background-color:#dfd">	if (result_type == RecordAll || result_type == RecordNoTargets) {
+		for (int i = 0; i &lt; WorkerCount(); i++)</span>
+		{
+<span style = "background-color:#dfd">			GetWorker(i)-&gt;SaveResults(file, access_index, result_type);
+			GetWorker(i)-&gt;SaveResultsInstantaneousWorkerAverage(access_index, result_type);</span>
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Updating the results stored with the manager.
+//
+void Manager::UpdateResults(int which_perf, bool instantaneousDump)
+<span style = "background-color:#dfd">{</span>
+	Worker *worker;
+	Data_Message *data_msg;
+	CPU_Results *cpu_results;
+	Net_Results *net_results;
+	_int64 start_perf_time, end_perf_time;
+	int i, stat;		// loop control variables
+
+<span style = "background-color:#dfd">	if ((which_perf &lt; 0) || (which_perf &gt;= MAX_PERF))</span>
+		return;
+
+<span style = "background-color:#dfd">	ResetResults(which_perf);</span>
+
+	// Dynamo will send one reply for itself and one for every worker running.
+
+	// Send appropriate request for results to manager.
+<span style = "background-color:#dfd">	if (which_perf == WHOLE_TEST_PERF) {
+		if (Send(MANAGER, REPORT_RESULTS) == PORT_ERROR)</span>
+			return;
+	} else			// which_perf == LAST_UPDATE_PERF
+	{
+<span style = "background-color:#dfd">		if (Send(MANAGER, REPORT_UPDATE) == PORT_ERROR)</span>
+			return;
+	}
+
+<span style = "background-color:#dfd">	data_msg = new Data_Message;</span>
+
+	// Get results from manager.
+<span style = "background-color:#dfd">	if (ReceiveData(data_msg) == PORT_ERROR)</span>
+	{
+<span style = "background-color:#fdd">		delete data_msg;
+		return;</span>
+	}
+
+	cpu_results = &amp;(data_msg-&gt;data.manager_results.cpu_results);
+	net_results = &amp;(data_msg-&gt;data.manager_results.net_results);
+	start_perf_time = data_msg-&gt;data.manager_results.time_counter[FIRST_SNAPSHOT];
+	end_perf_time = data_msg-&gt;data.manager_results.time_counter[LAST_SNAPSHOT];
+
+	// Reset aggregate related utilizations.
+	for (stat = 0; stat &lt; CPU_RESULTS; stat++)
+<span style = "background-color:#dfd">		results[which_perf].CPU_utilization[stat] = (double)0;</span>
+	for (stat = 0; stat &lt; NI_COMBINE_RESULTS; stat++)
+		results[which_perf].ni_statistics[stat] = (double)0;
+
+	// Loop though all CPUs.
+<span style = "background-color:#dfd">	for (i = 0; i &lt; processors; i++) {</span>
+		// Loop through the utilization counters.
+		for (stat = 0; stat &lt; CPU_RESULTS; stat++) {
+			// Storing returned CPU utilization statistics.
+<span style = "background-color:#dfd">			results[which_perf].individual_CPU_utilization[i][stat] = cpu_results-&gt;CPU_utilization[i][stat];
+			results[which_perf].CPU_utilization[stat] += cpu_results-&gt;CPU_utilization[i][stat];	// calc. ave. below</span>
+		}
+	}
+	// Determine average aggregate CPU related utilizations.
+	// Interrupts per second is a total, so is not averaged across CPUs.
+<span style = "background-color:#dfd">	if (processors) {</span>
+		for (stat = 0; stat &lt; CPU_UTILIZATION_RESULTS; stat++)
+<span style = "background-color:#dfd">			results[which_perf].CPU_utilization[stat] /= processors;</span>
+	}
+	// Record all network related statistics.
+	for (stat = 0; stat &lt; TCP_RESULTS; stat++)
+<span style = "background-color:#dfd">		results[which_perf].tcp_statistics[stat] = net_results-&gt;tcp_stats[stat];
+	for (i = 0; i &lt; net_results-&gt;ni_count; i++) {</span>
+		results[which_perf].ni_statistics[NI_PACKETS] += net_results-&gt;ni_stats[i][NI_PACKETS];
+<span style = "background-color:#dfd">		results[which_perf].ni_statistics[NI_ERRORS] += net_results-&gt;ni_stats[i][NI_OUT_ERRORS];
+		results[which_perf].ni_statistics[NI_ERRORS] += net_results-&gt;ni_stats[i][NI_IN_ERRORS];</span>
+	}
+
+	//
+	// Update Worker Results
+	//
+<span style = "background-color:#dfd">	for (i = 0; i &lt; WorkerCount(); i++) {
+		worker = GetWorker(i);</span>
+
+		// Only update the results of workers active in the current test.
+<span style = "background-color:#dfd">		if (!worker-&gt;ActiveInCurrentTest()) {</span>
+			// Reset the results of idle workers to prevent any older results
+			// from being visible.
+<span style = "background-color:#fdd">			worker-&gt;ResetAllResults();
+			continue;</span>
+		}
+		// Receive an update from a worker and process the results.
+<span style = "background-color:#dfd">		worker-&gt;UpdateResults(which_perf, instantaneousDump);</span>
+
+		// Recording maximum time any of the workers ran.
+<span style = "background-color:#dfd">		if (worker-&gt;results[which_perf].raw.counter_time &gt; results[which_perf].raw.counter_time)
+			results[which_perf].raw.counter_time = worker-&gt;results[which_perf].raw.counter_time;</span>
+
+		// Recording error results.
+<span style = "background-color:#dfd">		results[which_perf].total_errors += worker-&gt;results[which_perf].total_errors;
+		results[which_perf].raw.read_errors += worker-&gt;results[which_perf].raw.read_errors;
+		results[which_perf].raw.write_errors += worker-&gt;results[which_perf].raw.write_errors;</span>
+
+		// Recording results related to the number of I/Os completed.
+<span style = "background-color:#dfd">		results[which_perf].IOps += worker-&gt;results[which_perf].IOps;
+		results[which_perf].read_IOps += worker-&gt;results[which_perf].read_IOps;
+		results[which_perf].write_IOps += worker-&gt;results[which_perf].write_IOps;
+		results[which_perf].raw.read_count += worker-&gt;results[which_perf].raw.read_count;
+		results[which_perf].raw.write_count += worker-&gt;results[which_perf].raw.write_count;</span>
+
+		// Recording throughput results.
+<span style = "background-color:#dfd">		results[which_perf].MBps_Bin += worker-&gt;results[which_perf].MBps_Bin;</span>
+		results[which_perf].read_MBps_Bin += worker-&gt;results[which_perf].read_MBps_Bin;
+		results[which_perf].write_MBps_Bin += worker-&gt;results[which_perf].write_MBps_Bin;
+		results[which_perf].MBps_Dec += worker-&gt;results[which_perf].MBps_Dec;
+		results[which_perf].read_MBps_Dec += worker-&gt;results[which_perf].read_MBps_Dec;
+		results[which_perf].write_MBps_Dec += worker-&gt;results[which_perf].write_MBps_Dec;
+<span style = "background-color:#dfd">		results[which_perf].raw.bytes_read += worker-&gt;results[which_perf].raw.bytes_read;
+		results[which_perf].raw.bytes_written += worker-&gt;results[which_perf].raw.bytes_written;</span>
+
+		// Recording results related to the number of transactions completed.
+<span style = "background-color:#dfd">		results[which_perf].transactions_per_second += worker-&gt;results[which_perf].transactions_per_second;
+		results[which_perf].raw.transaction_count += worker-&gt;results[which_perf].raw.transaction_count;</span>
+
+		// Recording results related to the number of connections completed.
+<span style = "background-color:#dfd">		results[which_perf].connections_per_second += worker-&gt;results[which_perf].connections_per_second;
+		results[which_perf].raw.connection_count += worker-&gt;results[which_perf].raw.connection_count;</span>
+
+		// Recording maximum latency results.
+<span style = "background-color:#dfd">		if (results[which_perf].max_latency &lt; worker-&gt;results[which_perf].max_latency)
+			results[which_perf].max_latency = worker-&gt;results[which_perf].max_latency;
+		if (results[which_perf].max_read_latency &lt; worker-&gt;results[which_perf].max_read_latency) {
+			results[which_perf].max_read_latency = worker-&gt;results[which_perf].max_read_latency;
+			results[which_perf].raw.max_raw_read_latency =</span>
+			    worker-&gt;results[which_perf].raw.max_raw_read_latency;
+		}
+<span style = "background-color:#dfd">		if (results[which_perf].max_write_latency &lt; worker-&gt;results[which_perf].max_write_latency) {
+			results[which_perf].max_write_latency = worker-&gt;results[which_perf].max_write_latency;
+			results[which_perf].raw.max_raw_write_latency =</span>
+			    worker-&gt;results[which_perf].raw.max_raw_write_latency;
+		}
+<span style = "background-color:#dfd">		if (results[which_perf].max_transaction_latency &lt; worker-&gt;results[which_perf].max_transaction_latency) {
+			results[which_perf].max_transaction_latency =</span>
+			    worker-&gt;results[which_perf].max_transaction_latency;
+<span style = "background-color:#dfd">			results[which_perf].raw.max_raw_transaction_latency =</span>
+			    worker-&gt;results[which_perf].raw.max_raw_transaction_latency;
+		}
+<span style = "background-color:#dfd">		if (results[which_perf].max_connection_latency &lt; worker-&gt;results[which_perf].max_connection_latency) {
+			results[which_perf].max_connection_latency = worker-&gt;results[which_perf].max_connection_latency;
+			results[which_perf].raw.max_raw_connection_latency =</span>
+			    worker-&gt;results[which_perf].raw.max_raw_connection_latency;
+		}
+<span style = "background-color:#dfd">		results[which_perf].raw.read_latency_sum += worker-&gt;results[which_perf].raw.read_latency_sum;
+		results[which_perf].raw.write_latency_sum += worker-&gt;results[which_perf].raw.write_latency_sum;
+		results[which_perf].raw.transaction_latency_sum +=</span>
+		    worker-&gt;results[which_perf].raw.transaction_latency_sum;
+<span style = "background-color:#dfd">		results[which_perf].raw.connection_latency_sum +=</span>
+		    worker-&gt;results[which_perf].raw.connection_latency_sum;
+
+		for (int x = 0; x &lt; LATENCY_BIN_SIZE; x++)
+<span style = "background-color:#dfd">			results[which_perf].raw.latency_bin[x] += worker-&gt;results[which_perf].raw.latency_bin[x];</span>
+
+		// Copying results only reported for the manager to the workers.
+		// This allows the results to be displayed in the results page in the GUI.
+		for (stat = 0; stat &lt; CPU_RESULTS; stat++)
+<span style = "background-color:#dfd">			worker-&gt;results[which_perf].CPU_utilization[stat] = results[which_perf].CPU_utilization[stat];</span>
+		for (stat = 0; stat &lt; TCP_RESULTS; stat++)
+<span style = "background-color:#dfd">			worker-&gt;results[which_perf].tcp_statistics[stat] = results[which_perf].tcp_statistics[stat];</span>
+		for (stat = 0; stat &lt; NI_COMBINE_RESULTS; stat++)
+<span style = "background-color:#dfd">			worker-&gt;results[which_perf].ni_statistics[stat] = results[which_perf].ni_statistics[stat];</span>
+	}
+
+	// Calculate CPU_effectiveness (number of IOs per second divided by CPU efficiency)
+<span style = "background-color:#dfd">	if (results[which_perf].CPU_utilization[CPU_TOTAL_UTILIZATION] != (double)0)	// avoid a divide by zero
+		results[which_perf].CPU_effectiveness =</span>
+		    results[which_perf].IOps / results[which_perf].CPU_utilization[CPU_TOTAL_UTILIZATION];
+	else
+<span style = "background-color:#fdd">		results[which_perf].CPU_effectiveness = (double)0;</span>
+
+	// Calculating average latencies from the aggregated raw counters via the
+	// shared iocore formula. (The rates were summed from the workers separately;
+	// only the latency fields are taken here. runTime is irrelevant to latency.)
+	{
+<span style = "background-color:#dfd">		const iocore::ResultRates _m =</span>
+		    iocore::decodeRawResult(results[which_perf].raw, 0.0, timer_resolution);
+		results[which_perf].ave_latency = _m.aveLatency;
+		results[which_perf].ave_read_latency = _m.aveReadLatency;
+		results[which_perf].ave_write_latency = _m.aveWriteLatency;
+		results[which_perf].ave_transaction_latency = _m.aveTransactionLatency;
+		results[which_perf].ave_connection_latency = _m.aveConnectionLatency;
+	}
+
+<span style = "background-color:#dfd">	delete data_msg;
+}</span>
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// The following functions update the values for the starting sector, the 
+// number of sectors to access, the queue depth, and the disk selection.
+// On the Manager level, it propagates down the tree to all the workers and
+// calls the workers function.
+//
+///////////////////////////////////////////////////////////////////////////////
+void Manager::SetDiskSize(DWORDLONG disk_size)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(GenericDiskType);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, GenericDiskType)-&gt;SetDiskSize(disk_size);
+}</span>
+
+void Manager::SetDiskStart(DWORDLONG disk_start)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(GenericDiskType);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, GenericDiskType)-&gt;SetDiskStart(disk_start);
+}</span>
+
+void Manager::SetQueueDepth(int queue_depth, TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#dfd">	wkr_count = WorkerCount(type);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, GenericDiskType)-&gt;SetQueueDepth(queue_depth);
+}</span>
+
+void Manager::SetMaxSends(int max_sends)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(VIServerType);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, VIServerType)-&gt;SetMaxSends(max_sends);
+}</span>
+
+void Manager::SetLocalNetworkInterface(int iface_index)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(GenericServerType);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, GenericServerType)-&gt;SetLocalNetworkInterface(iface_index);
+}</span>
+
+void Manager::SetConnectionRate(BOOL test_connection_rate, TargetType type)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(type);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, type)-&gt;SetConnectionRate(test_connection_rate);
+}</span>
+
+void Manager::SetDataPattern(int data_pattern, TargetType type)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(type);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, type)-&gt;SetDataPattern(data_pattern);
+}</span>
+
+void Manager::SetTransPerConn(int trans_per_conn, TargetType type)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(type);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, type)-&gt;SetTransPerConn(trans_per_conn);
+}</span>
+
+void Manager::SetUseFixedSeed(BOOL use_fixed_seed, TargetType type)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(type);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, type)-&gt;SetUseFixedSeed(use_fixed_seed);
+}</span>
+
+void Manager::SetFixedSeedValue(DWORDLONG fixed_seed_value, TargetType type)
+<span style = "background-color:#fdd">{</span>
+	int w, wkr_count;
+
+	// Loop through all the workers.
+<span style = "background-color:#fdd">	wkr_count = WorkerCount(type);
+	for (w = 0; w &lt; wkr_count; w++)
+		GetWorker(w, type)-&gt;SetFixedSeedValue(fixed_seed_value);
+}</span>
+///////////////////////////////////////////////
+//
+// Functions to retrieve worker information
+//
+// Functions return a valid value if all 
+// underlying workers have the same value.
+//
+///////////////////////////////////////////////
+
+//
+// Returns a valid connection rate setting if all the manager's workers of the
+// same type have the same value.
+//
+int Manager::GetConnectionRate(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count, wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first worker of the specified type's transaction per
+	// connection value.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetConnectionRate(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetConnectionRate(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// All workers have the same value.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+//
+// Returns if the user has chosen to use random data
+//
+int Manager::GetDataPattern(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	BOOL wkr_result;
+	int w, wkr_count;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+<span style = "background-color:#fdd">		return DATA_PATTERN_FULL_RANDOM; //Full random data pattern</span>
+
+	// Find the first worker of the specified type's transaction per
+	// connection value.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetDataPattern(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetDataPattern(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// All workers have the same value.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+//
+// Returns a valid transaction per connection value if all the manager's
+// workers of the specified type have the same value.
+//
+int Manager::GetTransPerConn(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count, wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first worker of the specified type's transaction per
+	// connection value.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetTransPerConn(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetTransPerConn(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// Return the first worker's value if all other workers have the same.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+int Manager::GetUseFixedSeed(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count, wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first worker of the specified type's transaction per
+	// connection value.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetUseFixedSeed(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetUseFixedSeed(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// All workers have the same value.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+DWORDLONG Manager::GetFixedSeedValue(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count;
+	DWORDLONG wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first worker of the specified type's transaction per
+	// connection value.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetFixedSeedValue(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetFixedSeedValue(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// Return the first worker's value if all other workers have the same.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+//
+// Returns a valid disk start value if all the manager's disk workers
+// have the same value.
+//
+DWORDLONG Manager::GetDiskStart(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count;
+	DWORDLONG wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first disk worker.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetDiskStart(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetDiskStart(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// Return the first worker's value if all other workers have the same.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+//
+// Returns a valid disk start value if all the manager's disk workers
+// have the same value.
+//
+DWORDLONG Manager::GetDiskSize(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count;
+	DWORDLONG wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first disk worker.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetDiskSize(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetDiskSize(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// Return the first worker's value if all other workers have the same.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+//
+// Returns a valid queue depth value if all the manager's workers
+// have the same value.
+//
+int Manager::GetQueueDepth(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count, wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first worker of the specified type's queue depth value.
+<span style = "background-color:#dfd">	wkr_result = GetWorker(0, type)-&gt;GetQueueDepth(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetQueueDepth(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// Return the first worker's value if all other workers have the same.
+<span style = "background-color:#dfd">	return wkr_result;
+}</span>
+
+//
+// Returns a valid maximum number of outstanding sends value if all the 
+// manager's disk workers have the same value.
+//
+int Manager::GetMaxSends(TargetType type)
+<span style = "background-color:#dfd">{</span>
+	int w, wkr_count, wkr_result;
+
+	// If there are no workers, return immediately.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(type)))</span>
+		return AMBIGUOUS_VALUE;
+
+	// Find the first worker of the specified type's transaction per
+	// connection value.
+<span style = "background-color:#fdd">	wkr_result = GetWorker(0, type)-&gt;GetMaxSends(type);</span>
+
+	// Compare the value with all the other workers of the same type.
+<span style = "background-color:#fdd">	for (w = 1; w &lt; wkr_count; w++) {
+		if (wkr_result != GetWorker(w, type)-&gt;GetMaxSends(type)) {</span>
+			// The value isn't the same.
+<span style = "background-color:#dfd">			return AMBIGUOUS_VALUE;</span>
+		}
+	}
+	// Return the first worker's value if all other workers have the same.
+<span style = "background-color:#fdd">	return wkr_result;</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Returns a valid pointer to a net address string if all the manager's 
+// workers have the same net address selected, otherwise NULL.
+// 
+char *Manager::GetLocalNetworkInterface()
+<span style = "background-color:#dfd">{</span>
+	char *net_address;
+	int w, wkr_count;
+
+	// If the manager has no GenericServerType workers, there is no valid 
+	// net address.
+<span style = "background-color:#dfd">	if (!(wkr_count = WorkerCount(GenericServerType)))</span>
+		return NULL;
+
+	// Find the first GenericServerType's local address.
+<span style = "background-color:#dfd">	net_address = GetWorker(0, GenericServerType)-&gt;GetLocalNetworkInterface();</span>
+
+	// Compare the first GenericServerType's net address with all other 
+	// GenericServerType's.
+<span style = "background-color:#dfd">	for (w = 1; w &lt; wkr_count; w++) {</span>
+<span style = "background-color:#fdd">		if (strcmp(net_address, GetWorker(w, GenericServerType)-&gt;GetLocalNetworkInterface())) {</span>
+<span style = "background-color:#dfd">			return NULL;</span>
+		}
+	}
+
+	// All the manager's workers are using the same local address.
+<span style = "background-color:#dfd">	return net_address;
+}</span>
+
+//
+// Return a pointer to the manager's information about a given interface.
+// This applies to Disk targets as well as Network targets.
+//
+Target_Spec *Manager::GetInterface(int index, TargetType type)
+<span style = "background-color:#dfd">{
+	if (IsType(type, GenericDiskType))
+		return disks[index];
+	else if (IsType(type, GenericTCPType))</span>
+<span style = "background-color:#fdd">		return tcps[index];</span>
+<span style = "background-color:#dfd">	else if (IsType(type, GenericVIType))</span>
+<span style = "background-color:#fdd">		return vis[index];</span>
+<span style = "background-color:#dfd">	else if (IsType(type, GenericNetType)) {</span>
+		// Networks are viewed as TCP interfaces then VI interfaces.
+<span style = "background-color:#dfd">		if (index &lt; InterfaceCount(GenericTCPType))
+			return tcps[index];</span>
+<span style = "background-color:#fdd">		return vis[index - InterfaceCount(GenericTCPType)];</span>
+	} else {
+<span style = "background-color:#fdd">		ErrorMessage("Unknown target type in Manager::GetInterface()");</span>
+		return NULL;
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Returning the number of interfaces accessible by a manager.  If desired,
+// a count of a specific type may be returned.
+//
+int Manager::InterfaceCount(TargetType type)
+<span style = "background-color:#dfd">{
+	switch (type) {</span>
+	case GenericType:
+<span style = "background-color:#fdd">		return (int)disks.GetSize() + (int)tcps.GetSize() + (int)vis.GetSize();</span>
+	case GenericDiskType:
+<span style = "background-color:#dfd">		return (int)disks.GetSize();</span>
+	case GenericNetType:
+	case GenericServerType:
+	case GenericClientType:
+<span style = "background-color:#dfd">		return (int)tcps.GetSize() + (int)vis.GetSize();</span>
+	case GenericTCPType:
+	case TCPServerType:
+	case TCPClientType:
+<span style = "background-color:#dfd">		return (int)tcps.GetSize();</span>
+	case GenericVIType:
+	case VIServerType:
+	case VIClientType:
+<span style = "background-color:#dfd">		return (int)vis.GetSize();</span>
+	default:
+<span style = "background-color:#fdd">		ErrorMessage("Unknown target type in Manager::InterfaceCount()");
+		return 0;</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+///////////////////////////////////////////////
+//
+// Functions that deal with access specs.
+//
+///////////////////////////////////////////////
+
+//
+// Return the maximum number of access specs assigned to a worker.
+//
+int Manager::GetMaxAccessSpecCount()
+<span style = "background-color:#dfd">{
+	int max_spec_count = 0, wkr_count = WorkerCount();</span>
+	int w, spec_count;
+
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++) {
+		if ((spec_count = GetWorker(w)-&gt;AccessSpecCount()) &gt; max_spec_count) {</span>
+			max_spec_count = spec_count;
+		}
+	}
+	return max_spec_count;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Verify that all assigned access specs are valid.
+//
+BOOL Manager::InvalidSetup(BOOL &amp; invalidSpecOK)
+<span style = "background-color:#dfd">{</span>
+	int i, w, wkr_count, iface_count, conn_count, queue_depth;
+	DWORD max_size;
+	Worker *wkr;
+<span style = "background-color:#dfd">	CString msg_box;</span>
+
+	// Verify that all specs for each worker is valid.
+<span style = "background-color:#dfd">	wkr_count = WorkerCount();
+	for (w = 0; w &lt; wkr_count; w++) {
+		if (GetWorker(w)-&gt;InvalidSetup(invalidSpecOK))</span>
+			return TRUE;
+	}
+
+	// If there are no targets using VI interfaces, everything is valid.
+<span style = "background-color:#dfd">	if (!WorkerCount(GenericVIType))</span>
+		return FALSE;
+
+	// Verify that the manager's VIA interfaces can handle the assigned
+	// test setup.
+<span style = "background-color:#fdd">	iface_count = InterfaceCount(VIClientType);
+	wkr_count = WorkerCount(GenericVIType);
+	for (i = 0; i &lt; iface_count; i++) {</span>
+		// Update how much of the VI hardware is in use.
+<span style = "background-color:#fdd">		conn_count = 0;
+		queue_depth = 0;
+		for (w = 0; w &lt; wkr_count; w++) {
+			wkr = GetWorker(w, GenericVIType);</span>
+
+			// Skip workers without VI targets.
+<span style = "background-color:#fdd">			if (!wkr-&gt;TargetCount(GenericVIType))</span>
+				continue;
+
+			// If the worker will use the VI interface, count it.
+<span style = "background-color:#fdd">			if (!strcmp(wkr-&gt;GetLocalNetworkInterface(), vis[i]-&gt;name)) {
+				conn_count++;
+				queue_depth += wkr-&gt;MaxOutstandingIOs(0);</span>
+			}
+			// Ensure that the worker will not make an I/O request larger
+			// than that supported by the VI NIC.
+<span style = "background-color:#fdd">			max_size = wkr-&gt;MaxTransferSize();
+			if (max_size &gt; (DWORD) vis[i]-&gt;vi_info.max_transfer_size) {
+				msg_box.Format((CString) "Worker \"" + wkr-&gt;name + "\" on " +</span>
+					       "manager \"" + name + "\" cannot perform the largest requested " +
+					       "transfer size over VI NIC \"" + vis[i]-&gt;name +
+					       "\".  VI hardware supports transfers up to " +
+					       "%i bytes.  %i bytes were requested.",
+					       vis[i]-&gt;vi_info.max_transfer_size, max_size);
+<span style = "background-color:#fdd">				ErrorMessage(msg_box);</span>
+				return TRUE;
+			}
+		}
+
+		// See that the VI NIC can handle the requested number of connections.
+<span style = "background-color:#fdd">		if (conn_count &gt; vis[i]-&gt;vi_info.max_connections) {
+			msg_box.Format((CString) "Manager \"" + name + "\" cannot support the " +</span>
+				       "requested number of VI connections over VI NIC \""
+				       + vis[i]-&gt;name + "\".  Only %i connections are allowed.  " +
+				       "%i were requested.", vis[i]-&gt;vi_info.max_connections, conn_count);
+			ErrorMessage(msg_box);
+			return TRUE;
+		}
+		// See that the VI NIC can handle the requested number of posted 
+		// descriptors.
+<span style = "background-color:#fdd">		if (queue_depth &gt; vis[i]-&gt;vi_info.outstanding_ios) {
+			msg_box.Format((CString) "Manager \"" + name + "\" cannot support the " +</span>
+				       "requested number of outstanding I/Os over VI NIC \""
+				       + vis[i]-&gt;name + "\".  Only %i connections are allowed.  " +
+				       "%i were requested.", vis[i]-&gt;vi_info.outstanding_ios, queue_depth);
+			ErrorMessage(msg_box);
+<span style = "background-color:#fdd">			return TRUE;</span>
+		}
+	}
+<span style = "background-color:#fdd">	return FALSE;</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Assigns the default access specs to workers based on their type.
+//
+void Manager::AssignDefaultAccessSpecs()
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++) {
+		GetWorker(w)-&gt;AssignDefaultAccessSpecs();</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Remove all instances of an access spec from all the manager's
+// worker's access spec lists.
+//
+void Manager::RemoveAccessSpec(Test_Spec * spec)
+<span style = "background-color:#dfd">{
+	int worker_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	for (int w = 0; w &lt; worker_count; w++)
+		GetWorker(w)-&gt;RemoveAccessSpec(spec);
+}</span>
+
+//
+// Remove a specific instance of an access spec from all the manager's
+// worker's access spec lists (only if they are all the same).
+//
+void Manager::RemoveAccessSpecAt(int index)
+<span style = "background-color:#fdd">{
+	if (!AreAccessSpecsIdentical())</span>
+		return;
+
+<span style = "background-color:#fdd">	int worker_count = WorkerCount();</span>
+
+<span style = "background-color:#fdd">	for (int w = 0; w &lt; worker_count; w++)
+		GetWorker(w)-&gt;RemoveAccessSpecAt(index);
+}</span>
+
+//
+// Removes all entries from all the manager's
+// worker's access spec lists.
+//
+void Manager::RemoveAllAccessSpecs()
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();</span>
+	Worker *wkr;
+
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++) {
+		wkr = GetWorker(w);</span>
+
+<span style = "background-color:#dfd">		if (IsType(wkr-&gt;Type(), GenericClientType))</span>
+			continue;
+
+<span style = "background-color:#dfd">		wkr-&gt;RemoveAllAccessSpecs();</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Adds spec[index] from global access spec list
+// to all the manager's workers at position 'before_index'.
+//
+BOOL Manager::InsertAccessSpec(Test_Spec * spec, int before_index)
+<span style = "background-color:#fdd">{
+	int w, wkr_count = WorkerCount();</span>
+	Worker *wkr;
+
+<span style = "background-color:#fdd">	for (w = 0; w &lt; wkr_count; w++) {
+		wkr = GetWorker(w);</span>
+
+		// Do not add specs to client workers.
+<span style = "background-color:#fdd">		if (IsType(wkr-&gt;Type(), GenericClientType))</span>
+			continue;
+
+<span style = "background-color:#fdd">		if (!wkr-&gt;InsertAccessSpec(spec, before_index))
+			return FALSE;</span>
+	}
+<span style = "background-color:#fdd">	return TRUE;
+}</span>
+
+//
+// Moves the entry at position [index] to [before_index] in the 
+// workers' access spec list to all the manager's workers.
+//
+void Manager::MoveAccessSpec(int index, int before_index)
+<span style = "background-color:#fdd">{
+	int w, wkr_count = WorkerCount();</span>
+	Worker *wkr;
+
+<span style = "background-color:#fdd">	for (w = 0; w &lt; wkr_count; w++) {
+		wkr = GetWorker(w);</span>
+
+		// Do not move client worker specs.
+<span style = "background-color:#fdd">		if (IsType(wkr-&gt;Type(), GenericClientType))</span>
+			continue;
+
+<span style = "background-color:#fdd">		wkr-&gt;MoveAccessSpec(index, before_index);</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Determines if the manager will be active in the current test.  This is
+// TRUE if any of its workers are active or have been explicitly assigned the
+// Idle spec.
+//
+BOOL Manager::ActiveInCurrentTest()
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();
+	int access_index = theApp.pView-&gt;GetCurrentAccessIndex();</span>
+	Worker *wkr;
+
+	// Loop through all workers and see if they're either active or have been
+	// explicitly assigned the Idle spec.
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++) {
+		wkr = GetWorker(w);</span>
+
+		// See if the worker's active or has the Idle spec.
+<span style = "background-color:#dfd">		if (wkr-&gt;ActiveInCurrentTest() || wkr-&gt;HasIdleCurrentSpec())
+			return TRUE;</span>
+	}
+<span style = "background-color:#dfd">	return FALSE;
+}</span>
+
+//
+// Returns TRUE if any worker has an access spec assigned for the current
+// access index and the spec is not the Idle spec.
+//
+BOOL Manager::HasActiveCurrentSpec()
+<span style = "background-color:#fdd">{
+	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#fdd">	for (w = 0; w &lt; wkr_count; w++) {
+		if (GetWorker(w)-&gt;HasActiveCurrentSpec())</span>
+			return TRUE;
+	}
+<span style = "background-color:#fdd">	return FALSE;
+}</span>
+
+//
+// Returns TRUE if any of the manager's workers has an idle spec assigned
+// at the current access spec index.
+//
+BOOL Manager::HasIdleCurrentSpec()
+<span style = "background-color:#fdd">{
+	int w, wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#fdd">	for (w = 0; w &lt; wkr_count; w++) {
+		if (GetWorker(w)-&gt;HasIdleCurrentSpec())</span>
+			return TRUE;
+	}
+<span style = "background-color:#fdd">	return FALSE;
+}</span>
+
+//
+// Returns a TRUE if all of this manager's workers have the same access 
+// specification list.
+//
+BOOL Manager::AreAccessSpecsIdentical()
+<span style = "background-color:#dfd">{</span>
+	int w, s, wkr_count, spec_count;
+	Worker *compare_worker, *current_worker;
+
+	// Get the first non-client worker
+<span style = "background-color:#dfd">	wkr_count = WorkerCount();
+	for (w = 0; w &lt; wkr_count; w++) {
+		compare_worker = GetWorker(w);</span>
+
+<span style = "background-color:#dfd">		if (!IsType(compare_worker-&gt;Type(), GenericClientType)) {
+			spec_count = compare_worker-&gt;AccessSpecCount();</span>
+			break;
+		}
+	}
+
+	// If there were no non-client workers, return TRUE;
+<span style = "background-color:#fdd">	if (w == wkr_count)</span>
+		return TRUE;
+
+	// Compare the first worker's Test_Spec to each other worker's Test_Spec.
+<span style = "background-color:#dfd">	for (++w; w &lt; wkr_count; w++) {
+		current_worker = GetWorker(w);</span>
+
+		// Skip network clients.
+<span style = "background-color:#dfd">		if (IsType(current_worker-&gt;Type(), GenericClientType))</span>
+			continue;
+
+		// If this worker doesn't have the same number of access specs, return FALSE.
+<span style = "background-color:#dfd">		if (current_worker-&gt;AccessSpecCount() != spec_count)</span>
+			return FALSE;
+
+		// Check to make sure each returned Test_Spec pointer is identical to 
+		// and in the same order as the pointer in the first_worker.
+<span style = "background-color:#fdd">		for (s = 0; s &lt; spec_count; s++) {
+			if (current_worker-&gt;GetAccessSpec(s) != compare_worker-&gt;GetAccessSpec(s))</span>
+<span style = "background-color:#dfd">				return FALSE;</span>
+		}
+	}
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Sees whether all workers have the same access spec assigned at index spec_index.
+// Returns a pointer to the name of the spec if all workers have the same one assigned.
+// Returns a pointer to a null string (not a null pointer) otherwise.
+//
+// Calling function supplies pointer to a char[MAX_WORKER_NAME].
+// This same pointer is returned for convenience.
+//
+char *Manager::GetCommonAccessSpec(int spec_index, char *const specname)
+<span style = "background-color:#dfd">{
+	int w, wkr_count = WorkerCount();</span>
+	Worker *wkr;
+
+	// Return null string if there are no workers.
+<span style = "background-color:#dfd">	if (wkr_count == 0) {</span>
+		specname[0] = '\0';
+		return specname;
+	}
+	// Find the first worker with this spec assigned and get the name of the spec.
+<span style = "background-color:#dfd">	for (w = 0; w &lt; wkr_count; w++) {
+		wkr = GetWorker(w);
+		if (spec_index &lt; wkr-&gt;AccessSpecCount()) {
+			strcpy(specname, wkr-&gt;GetAccessSpec(spec_index)-&gt;name);</span>
+			break;
+		}
+	}
+
+	if (w &gt;= wkr_count) {
+		ASSERT(0);	// (THIS SHOULD NOT HAPPEN.)
+
+		// Return an error if no worker has this access spec.
+<span style = "background-color:#fdd">		return strcpy(specname, "***ERROR***");</span>
+	}
+
+<span style = "background-color:#dfd">	w++;</span>
+
+	// Compare that spec name to each other worker's spec name.
+<span style = "background-color:#dfd">	while (w &lt; wkr_count) {</span>
+		// Return null string if this worker's spec is different.
+		// (Ignore this worker if it is not participating in this test.)
+<span style = "background-color:#fdd">		wkr = GetWorker(w);
+		if (wkr-&gt;ActiveInCurrentTest() &amp;&amp; strcmp(wkr-&gt;GetAccessSpec(spec_index)-&gt;name, specname)) {
+			specname[0] = '\0';</span>
+			return specname;
+		}
+
+<span style = "background-color:#fdd">		w++;</span>
+	}
+
+	// They all matched, so return the name of the spec.
+	return specname;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Save the manager/worker configuration to the specified stream.
+//              save_aspecs --&gt; should each worker's access spec assignments be saved?
+//              save_targets --&gt; should each worker's target assignments be saved?
+//
+// Gather this manager + its (non-client) workers' live config into a shared
+// iocore::IcfManagerConfig (the byte format is emitted by iocore::IcfWriter).
+BOOL Manager::GatherConfig(iocore::IcfManagerConfig &amp; m, BOOL save_aspecs, BOOL save_targets)
+<span style = "background-color:#dfd">{
+	int wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	m.id      = id;
+	m.name    = name;
+	m.address = network_name;</span>
+
+<span style = "background-color:#dfd">	for (int counter = 0; counter &lt; wkr_count; counter++) {
+		Worker *wkr = GetWorker(counter);</span>
+
+		// Don't record network clients.  They are restored when the network
+		// server's targets are examined.
+<span style = "background-color:#dfd">		if (IsType(wkr-&gt;Type(), GenericClientType))</span>
+			continue;
+
+<span style = "background-color:#dfd">		iocore::IcfWorkerConfig w;
+		if (!wkr-&gt;GatherConfig(w, save_aspecs, save_targets))</span>
+<span style = "background-color:#fdd">			return FALSE;	// error saving data - propagate back</span>
+<span style = "background-color:#dfd">		m.workers.push_back(w);
+	}</span>
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Apply a core-parsed manager config (iocore::IcfManagerConfig) to the live
+// manager. This is the parse-then-apply replacement for the stream-based
+// LoadConfig: the PARSE now lives in iocore::IcfDocument::loadManagerList; this
+// reproduces the worker matching/creation side-effects faithfully.
+//
+BOOL Manager::LoadConfig(const iocore::IcfManagerConfig &amp; pm, BOOL load_aspecs, BOOL load_targets)
+<span style = "background-color:#dfd">{</span>
+	int counter;
+<span style = "background-color:#dfd">	CString wkr_name;</span>
+	TargetType wkr_type_hex = InvalidType;
+	Worker *wkr;
+	int wkr_count, wkr_svr_count;
+
+	// Using a dynamic because size isn't known at compile time.
+<span style = "background-color:#dfd">	CArray &lt; BOOL, int &gt;wkr_svr_loaded;	// identifies workers that have been loaded
+	CArray &lt; Worker *, int &gt;wkr_svr_list;	// Pointers to each of the workers (they may move)</span>
+
+<span style = "background-color:#dfd">	wkr_count = WorkerCount();
+	wkr_svr_loaded.SetSize(wkr_count);
+	wkr_svr_list.SetSize(wkr_count);</span>
+
+	// Identify all workers that are not clients.
+<span style = "background-color:#dfd">	wkr_svr_count = 0;
+	for (counter = 0; counter &lt; wkr_count; counter++) {</span>
+<span style = "background-color:#fdd">		wkr = GetWorker(counter);
+		if (!IsType(wkr-&gt;Type(), GenericClientType)) {
+			wkr_svr_list[wkr_svr_count] = wkr;
+			wkr_svr_loaded[wkr_svr_count] = FALSE;
+			wkr_svr_count++;</span>
+		}
+	}
+
+<span style = "background-color:#dfd">	for (size_t w = 0; w &lt; pm.workers.size(); w++) {
+		const iocore::IcfWorkerConfig &amp; pw = pm.workers[w];
+		wkr_name = pw.name.c_str();</span>
+
+<span style = "background-color:#dfd">		switch (pw.kind) {
+		case iocore::IcfWorkerKind::Disk:	wkr_type_hex = GenericDiskType;	break;</span>
+<span style = "background-color:#fdd">		case iocore::IcfWorkerKind::NetTCP:	wkr_type_hex = TCPServerType;	break;
+		case iocore::IcfWorkerKind::NetVI:	wkr_type_hex = VIServerType;	break;
+		default:				wkr_type_hex = InvalidType;	break;</span>
+		}
+
+		// See if this worker already exists on this manager.
+<span style = "background-color:#dfd">		for (counter = 0; counter &lt; wkr_svr_count; counter++) {</span>
+			if (wkr_name.CompareNoCase(wkr_svr_list[counter]-&gt;name) == 0
+			    &amp;&amp; IsType(wkr_svr_list[counter]-&gt;Type(),
+				      (TargetType) (wkr_type_hex &amp; WORKER_COMPATIBILITY_MASK))
+<span style = "background-color:#fdd">			    &amp;&amp; !wkr_svr_loaded[counter]) {
+				wkr_svr_loaded[counter] = TRUE;
+				wkr = wkr_svr_list[counter];</span>
+
+				break;	// Worker was found, stop looking.
+			}
+		}
+
+		// See if we weren't able to find a match.
+		if (counter &gt;= wkr_svr_count) {
+			// This worker doesn't already exist (or a duplicate name); create it.
+			// wkr_count is intentionally not incremented (only used above to
+			// search for previously existing workers).
+<span style = "background-color:#dfd">			wkr = theApp.pView-&gt;AddWorker(wkr_type_hex, this, wkr_name);</span>
+
+<span style = "background-color:#dfd">			if (load_aspecs) {</span>
+				// Restoring assignments explicitly -&gt; no default assignments.
+<span style = "background-color:#dfd">				wkr-&gt;RemoveAllAccessSpecs();</span>
+			}
+		}
+		// Load the worker.
+<span style = "background-color:#dfd">		if (!wkr-&gt;LoadConfig(pw, load_aspecs, load_targets))</span>
+			return FALSE;
+	}
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Disambiguate same-named managers.  This allows managers
+// to be uniquely identified in saved files and other places.
+// This should be called any time managers are added, removed, or renamed.
+//
+void Manager::IndexWorkers()
+<span style = "background-color:#dfd">{</span>
+	Worker *wkr, *otherwkr;
+	int count_up, count_down;
+<span style = "background-color:#dfd">	const int wkr_count = WorkerCount();</span>
+
+<span style = "background-color:#dfd">	for (count_up = 0; count_up &lt; wkr_count; count_up++) {
+		wkr = GetWorker(count_up);</span>
+
+<span style = "background-color:#dfd">		wkr-&gt;id = 1;	// Assume this is unique, unless proven otherwise.</span>
+
+<span style = "background-color:#dfd">		for (count_down = count_up - 1; count_down &gt;= 0; count_down--) {
+			otherwkr = GetWorker(count_down);</span>
+
+<span style = "background-color:#dfd">			if (CString(wkr-&gt;name).CompareNoCase(otherwkr-&gt;name) == 0) {</span>
+				// If the workers' names are identical, assign
+				// this worker an ID value one greater.
+<span style = "background-color:#fdd">				wkr-&gt;id = otherwkr-&gt;id + 1;</span>
+				break;
+			}
+		}
+	}
+<span style = "background-color:#dfd">}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

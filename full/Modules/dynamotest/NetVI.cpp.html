@@ -1,0 +1,350 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>NetVI.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Dynamo / NetVI.cpp                                                 ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implements the NetVI class for communication between  ## */
+/* ##               network workers using the VI technology.              ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-15 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Replaced the [BIG|LITTLE]_ENDIAN_ARCH defines by    ## */
+/* ##                 IsBigEndian() function calls.                       ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               - Added new header holding the changelog.             ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#define VI_DETAILS 0		// Set to 1 to enable additional debug messages.
+
+#include "NetVI.h"
+
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#include &lt;iostream&gt;
+using namespace std;
+#elif defined(IOMTR_OS_LINUX) || defined(IOMTR_OS_SOLARIS)
+#include &lt;iostream.h&gt;
+#else
+#warning ===&gt; WARNING: You have to do some coding here to get the port done!
+#endif
+
+//
+// Initialization.
+//
+NetVI::NetVI()
+<span style = "background-color:#fdd">{
+	vi = NULL;
+}</span>
+
+//
+// Creating a new virtual interface on the specified VI NIC.
+//
+ReturnVal NetVI::Create(VINic * nic, TargetVI * vi_target)
+<span style = "background-color:#fdd">{</span>
+	VIP_VI_STATE vi_state;
+	VIP_BOOLEAN send_queue_empty, receive_queue_empty;
+	VIP_VI_ATTRIBUTES vi_attributes;
+	VIP_RETURN result;
+
+#if VI_DETAILS
+	cout &lt;&lt; "Creating VI on nic " &lt;&lt; nic-&gt;nic_attributes.Name &lt;&lt; endl;
+#endif
+
+	// Create the VI completion queue for the specified VI NIC.
+<span style = "background-color:#fdd">	if (!vi_cq.Create(nic, vi_target))</span>
+		return ReturnError;
+
+	// Set the VI attributes to match the NIC it's created on.
+	vi_attributes.ReliabilityLevel = VIP_SERVICE_RELIABLE_DELIVERY;
+	vi_attributes.MaxTransferSize = nic-&gt;nic_attributes.MaxTransferSize;
+	vi_attributes.QoS = 0;	// not defined by spec as of 7/24/98
+	vi_attributes.Ptag = nic-&gt;nic_mem_attributes.Ptag;
+	vi_attributes.EnableRdmaWrite = nic-&gt;nic_mem_attributes.EnableRdmaWrite;
+	vi_attributes.EnableRdmaRead = nic-&gt;nic_mem_attributes.EnableRdmaRead;
+
+	// Create the virtual interface.
+<span style = "background-color:#fdd">	result = vipl.VipCreateVi(nic-&gt;nic, &amp;vi_attributes, vi_cq.completion_queue, vi_cq.completion_queue, &amp;vi);
+	if (result != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to create VI: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		vi_cq.Destroy();</span>
+		return ReturnError;
+	}
+	// Get the VI attributes that were actually assigned.
+	if ((result = vipl.VipQueryVi(vi, &amp;vi_state, &amp;vi_attributes,
+<span style = "background-color:#fdd">				      &amp;send_queue_empty, &amp;receive_queue_empty)) != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to retrieve VI attributes: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		vipl.VipDestroyVi(&amp;vi);
+		vi_cq.Destroy();
+		return ReturnError;</span>
+	}
+	vi_nic = nic;
+
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Closing the VI connection.
+//
+ReturnVal NetVI::Close()
+<span style = "background-color:#fdd">{</span>
+	VIP_DESCRIPTOR *descriptor;
+	VIP_RETURN result;
+
+#if VI_DETAILS
+	cout &lt;&lt; "Closing VI on " &lt;&lt; vi_nic-&gt;nic_attributes.Name &lt;&lt; endl;
+#endif
+
+	// See if the VI exists.  If it doesn't, we're done.
+<span style = "background-color:#fdd">	if (!vi)</span>
+		return ReturnSuccess;
+
+	// Disconnect the VI.  This will mark all outstanding requests as complete.
+<span style = "background-color:#fdd">	if ((result = vipl.VipDisconnect(vi)) != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to disconnect VI while closing: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;</span>
+		return ReturnError;
+	}
+	// Remove outstanding requests from the completion queue.
+	do {
+<span style = "background-color:#fdd">		result = vipl.VipRecvDone(vi, &amp;descriptor);</span>
+	}
+<span style = "background-color:#fdd">	while (result == VIP_SUCCESS || result == VIP_DESCRIPTOR_ERROR &amp;&amp; descriptor);</span>
+	do {
+<span style = "background-color:#fdd">		result = vipl.VipSendDone(vi, &amp;descriptor);</span>
+	}
+<span style = "background-color:#fdd">	while (result == VIP_SUCCESS || result == VIP_DESCRIPTOR_ERROR &amp;&amp; descriptor);</span>
+
+	// Destroy the VI.
+<span style = "background-color:#fdd">	if ((result = vipl.VipDestroyVi(vi)) != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to destroy VI while closing: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+	// Destroy the associated completion queue.
+<span style = "background-color:#fdd">	if (!vi_cq.Destroy()) {
+		cout &lt;&lt; "*** Unable to destroy VI completion queue." &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+
+<span style = "background-color:#fdd">	vi = NULL;</span>
+	return ReturnSuccess;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Waiting for the remote side to disconnect from the VI connection.
+//
+ReturnVal NetVI::CheckForDisconnect()
+<span style = "background-color:#fdd">{</span>
+	VIP_VI_STATE vi_state;
+	VIP_VI_ATTRIBUTES vi_attributes;
+	VIP_BOOLEAN no_sends;
+	VIP_BOOLEAN no_receives;
+
+	// See if the VI exists, if not, we're done.
+<span style = "background-color:#fdd">	if (!vi)</span>
+		return ReturnSuccess;
+
+	// Get the current state of the VI connection.
+<span style = "background-color:#fdd">	if (vipl.VipQueryVi(vi, &amp;vi_state, &amp;vi_attributes, &amp;no_sends, &amp;no_receives) != VIP_SUCCESS) {
+		return ReturnError;</span>
+	}
+	// See if it's still connected.
+<span style = "background-color:#fdd">	if (vi_state == VIP_STATE_CONNECTED)</span>
+		return ReturnRetry;
+
+<span style = "background-color:#fdd">	return ReturnSuccess;
+}</span>
+
+//
+// Using the VI "client/server" connection model to wait and accept a VI 
+// connection.
+// This is called by the worker designated as the server.
+//
+ReturnVal NetVI::Accept(VIP_NET_ADDRESS * local_nic_address)
+<span style = "background-color:#fdd">{</span>
+	VIP_RETURN result;
+	VIP_NET_ADDRESS remote_nic_address;
+	VIP_VI_ATTRIBUTES remote_vi_attributes;
+	VIP_CONN_HANDLE connection;
+
+#if VI_DETAILS
+	cout &lt;&lt; "Waiting to accept VI connection on " &lt;&lt; vi_nic-&gt;nic_attributes.Name &lt;&lt; endl;
+#endif
+
+	// Waiting until the client can connect.
+<span style = "background-color:#fdd">	switch (result = vipl.VipConnectWait(vi_nic-&gt;nic, local_nic_address,</span>
+					     RETRY_DELAY, &amp;remote_nic_address, &amp;remote_vi_attributes, &amp;connection)) {
+		// Client ready to connect, accept the connection.
+	case VIP_SUCCESS:
+#if VI_DETAILS
+		cout &lt;&lt; "VipConnectWait succeeded!  Accepting connection." &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		switch (result = vipl.VipConnectAccept(connection, vi)) {</span>
+		case VIP_SUCCESS:
+#if VI_DETAILS
+			cout &lt;&lt; "VipConnectAccept succeeded!" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">			return ReturnSuccess;</span>
+		case VIP_TIMEOUT:
+		case VIP_ERROR_RESOURCE:
+#if VI_DETAILS
+			cout &lt;&lt; "VipConnectAccept() failed (trying again): " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">			return ReturnRetry;</span>
+		default:
+<span style = "background-color:#fdd">			cout &lt;&lt; "*** VipConnectAccept() failed: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;</span>
+			return ReturnError;
+		}
+
+		// Client did not connect within the time limit.
+	case VIP_TIMEOUT:
+	case VIP_ERROR_RESOURCE:
+#if VI_DETAILS
+		cout &lt;&lt; "VipConnectWait() failed (trying again): " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+#endif
+		return ReturnRetry;
+	default:
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** VipConnectWait() failed: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Using the VI "client/server" connection model to connect to a waiting VI 
+// connection.
+// This is called by the worker designated as the client.
+//
+ReturnVal NetVI::Connect(VIP_NET_ADDRESS * local_nic_address, VIP_NET_ADDRESS * remote_nic_address)
+<span style = "background-color:#fdd">{</span>
+	VIP_RETURN result;
+	VIP_VI_ATTRIBUTES remote_vi_attributes;
+
+#if VI_DETAILS
+	cout &lt;&lt; "Requesting VI connection from " &lt;&lt; vi_nic-&gt;nic_attributes.Name &lt;&lt; endl;
+#endif
+
+	// Request to connect to a remote VI.
+<span style = "background-color:#fdd">	switch (result = vipl.VipConnectRequest(vi, local_nic_address,</span>
+						remote_nic_address, RETRY_DELAY, &amp;remote_vi_attributes)) {
+	case VIP_SUCCESS:
+#if VI_DETAILS
+		cout &lt;&lt; "VipConnectRequest succeeded!" &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		return ReturnSuccess;</span>
+	case VIP_TIMEOUT:
+	case VIP_NO_MATCH:
+	case VIP_ERROR_RESOURCE:
+	case VIP_REJECT:
+#if VI_DETAILS
+		cout &lt;&lt; "VipConnectRequest() failed (trying again): " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+#endif
+<span style = "background-color:#fdd">		return ReturnRetry;</span>
+	default:
+<span style = "background-color:#fdd">		cout &lt;&lt; "*** VipConnectRequest() failed: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Sending data to the remote VI connection.
+//
+ReturnVal NetVI::Send(VIP_DESCRIPTOR * descriptor, VIP_MEM_HANDLE descriptor_handle)
+<span style = "background-color:#fdd">{</span>
+	VIP_RETURN result;
+
+#if VI_DETAILS
+	cout &lt;&lt; "Sending " &lt;&lt; descriptor-&gt;CS.Length &lt;&lt; " bytes over VI NIC " &lt;&lt; vi_nic-&gt;nic_attributes.Name &lt;&lt; endl;
+#endif
+
+	// Send the I/O request.
+<span style = "background-color:#fdd">	if ((result = vipl.VipPostSend(vi, descriptor, descriptor_handle)) != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to post VI send: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+<span style = "background-color:#fdd">	return ReturnSuccess;
+}</span>
+
+//
+// Pre-posting a receiving for data from the remote VI connection.
+//
+ReturnVal NetVI::Receive(VIP_DESCRIPTOR * descriptor, VIP_MEM_HANDLE descriptor_handle)
+<span style = "background-color:#fdd">{</span>
+	VIP_RETURN result;
+
+#if VI_DETAILS
+	cout &lt;&lt; "Receiving " &lt;&lt; descriptor-&gt;CS.Length &lt;&lt; " bytes over VI NIC " &lt;&lt; vi_nic-&gt;nic_attributes.Name &lt;&lt; endl;
+#endif
+
+	// Send the I/O request.
+<span style = "background-color:#fdd">	if ((result = vipl.VipPostRecv(vi, descriptor, descriptor_handle)) != VIP_SUCCESS) {
+		cout &lt;&lt; "*** Unable to post VI receive: " &lt;&lt; vipl.Error(result) &lt;&lt; endl;
+		return ReturnError;</span>
+	}
+<span style = "background-color:#fdd">	return ReturnSuccess;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

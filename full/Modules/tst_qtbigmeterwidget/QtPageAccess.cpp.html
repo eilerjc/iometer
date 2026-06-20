@@ -1,0 +1,748 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtPageAccess.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtPageAccess.cpp -- "Access Specifications" tab
+#include "QtPageAccess.h"
+#include "QtIometerEngine.h"
+#include "../core/AccessSpecLibrary.h"
+#include &lt;QHBoxLayout&gt;
+#include &lt;QVBoxLayout&gt;
+#include &lt;QGridLayout&gt;
+#include &lt;QGroupBox&gt;
+#include &lt;QListWidget&gt;
+#include &lt;QTableWidget&gt;
+#include &lt;QHeaderView&gt;
+#include &lt;QPushButton&gt;
+#include &lt;QLabel&gt;
+#include &lt;QDialog&gt;
+#include &lt;QDialogButtonBox&gt;
+#include &lt;QFormLayout&gt;
+#include &lt;QLineEdit&gt;
+#include &lt;QSpinBox&gt;
+#include &lt;QDoubleSpinBox&gt;
+#include &lt;QComboBox&gt;
+#include &lt;QCheckBox&gt;
+#include &lt;QRadioButton&gt;
+#include &lt;QSlider&gt;
+#include &lt;QButtonGroup&gt;
+#include &lt;QMessageBox&gt;
+#include &lt;QStyleFactory&gt;
+#include &lt;QPainter&gt;
+#include &lt;QPixmap&gt;
+
+
+// =============================================================================
+
+QtPageAccess::QtPageAccess(QtIometerEngine *engine, QWidget *parent)
+<span style = "background-color:#dfd">    : QWidget(parent), m_engine(engine)
+{
+    setupUi();
+    loadSpecList();
+    connect(engine, &amp;QtIometerEngine::configChanged, this, &amp;QtPageAccess::loadSpecList);
+}</span>
+
+// =============================================================================
+// UI construction -- matches the original Access Specifications tab
+// =============================================================================
+
+void QtPageAccess::setupUi()
+<span style = "background-color:#dfd">{
+    auto *root = new QHBoxLayout(this);
+    root-&gt;setContentsMargins(6, 6, 6, 6);
+    root-&gt;setSpacing(6);</span>
+
+    // ---- Left: Assigned Access Specifications + Move Up/Down ----------------
+<span style = "background-color:#dfd">    auto *leftGroup = new QGroupBox("Assigned Access Specifications");
+    auto *leftLay   = new QVBoxLayout(leftGroup);
+    leftLay-&gt;setContentsMargins(4, 8, 4, 4);
+    m_assigned = new QListWidget;
+    leftLay-&gt;addWidget(m_assigned, 1);</span>
+    // Move Up / Move Down at bottom
+<span style = "background-color:#dfd">    auto *moveLay = new QHBoxLayout;
+    m_upBtn   = new QPushButton("Move Up");
+    m_downBtn = new QPushButton("Move Down");
+    m_upBtn-&gt;setEnabled(false);
+    m_downBtn-&gt;setEnabled(false);
+    moveLay-&gt;addWidget(m_upBtn);
+    moveLay-&gt;addWidget(m_downBtn);
+    leftLay-&gt;addLayout(moveLay);
+    root-&gt;addWidget(leftGroup, 2);</span>
+
+    // ---- Center: &lt;&lt; Add / Remove &gt;&gt; buttons ---------------------------------
+<span style = "background-color:#dfd">    auto *midLay = new QVBoxLayout;
+    midLay-&gt;addStretch(1);
+    m_addBtn = new QPushButton("&lt;&lt; Add");
+    m_removeBtn = new QPushButton("Remove &gt;&gt;");
+    m_addBtn-&gt;setEnabled(false);
+    m_removeBtn-&gt;setEnabled(false);
+    midLay-&gt;addWidget(m_addBtn);
+    midLay-&gt;addSpacing(6);
+    midLay-&gt;addWidget(m_removeBtn);
+    midLay-&gt;addStretch(1);
+    root-&gt;addLayout(midLay);</span>
+
+    // ---- Right: Global Access Specifications + New/Edit/Copy/Delete ----------
+<span style = "background-color:#dfd">    auto *rightOuter = new QHBoxLayout;</span>
+
+<span style = "background-color:#dfd">    auto *rightGroup = new QGroupBox("Global Access Specifications");
+    auto *rightLay   = new QVBoxLayout(rightGroup);
+    rightLay-&gt;setContentsMargins(4, 8, 4, 4);
+    m_global = new QListWidget;
+    m_global-&gt;setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    rightLay-&gt;addWidget(m_global, 1);
+    rightOuter-&gt;addWidget(rightGroup, 1);</span>
+
+    // Buttons column to the right of the global list
+<span style = "background-color:#dfd">    auto *btnLay = new QVBoxLayout;
+    m_newBtn  = new QPushButton("New");
+    m_editBtn = new QPushButton("Edit");
+    m_copyBtn = new QPushButton("Edit Copy");
+    m_delBtn  = new QPushButton("Delete");
+    m_editBtn-&gt;setEnabled(false);
+    m_copyBtn-&gt;setEnabled(false);
+    m_delBtn-&gt;setEnabled(false);
+    btnLay-&gt;addWidget(m_newBtn);
+    btnLay-&gt;addWidget(m_editBtn);
+    btnLay-&gt;addWidget(m_copyBtn);
+    btnLay-&gt;addWidget(m_delBtn);
+    btnLay-&gt;addStretch();
+    rightOuter-&gt;addLayout(btnLay);</span>
+
+<span style = "background-color:#dfd">    root-&gt;addLayout(rightOuter, 3);</span>
+
+    // ---- Connections ---------------------------------------------------------
+<span style = "background-color:#dfd">    connect(m_addBtn,    &amp;QPushButton::clicked, this, &amp;QtPageAccess::onAddToAssigned);
+    connect(m_removeBtn, &amp;QPushButton::clicked, this, &amp;QtPageAccess::onRemoveFromAssigned);
+    connect(m_upBtn,     &amp;QPushButton::clicked, this, &amp;QtPageAccess::onMoveUp);
+    connect(m_downBtn,   &amp;QPushButton::clicked, this, &amp;QtPageAccess::onMoveDown);
+    connect(m_newBtn,    &amp;QPushButton::clicked, this, &amp;QtPageAccess::onNewSpec);
+    connect(m_editBtn,   &amp;QPushButton::clicked, this, &amp;QtPageAccess::onEditSpec);
+    connect(m_copyBtn,   &amp;QPushButton::clicked, this, &amp;QtPageAccess::onEditCopySpec);
+    connect(m_delBtn,    &amp;QPushButton::clicked, this, &amp;QtPageAccess::onDeleteSpec);
+    connect(m_global,   &amp;QListWidget::itemSelectionChanged,</span>
+            this, &amp;QtPageAccess::onGlobalSelectionChanged);
+<span style = "background-color:#dfd">    connect(m_assigned, &amp;QListWidget::itemSelectionChanged,</span>
+            this, &amp;QtPageAccess::onAssignedSelectionChanged);
+<span style = "background-color:#dfd">}</span>
+
+// =============================================================================
+// Population
+// =============================================================================
+
+<span style = "background-color:#dfd">static QString specLabel(const AccessSpec &amp;s) {
+    return QString::fromStdString(s.name);   // all built-in specs carry their full original name
+}</span>
+
+void QtPageAccess::rebuildGlobalList()
+<span style = "background-color:#dfd">{
+    const int cur = m_global-&gt;currentRow();
+    m_global-&gt;clear();
+    for (const auto &amp;s : m_engine-&gt;accessSpecs()) {
+        auto *item = new QListWidgetItem(specLabel(s));
+        item-&gt;setData(Qt::UserRole, QString::fromStdString(s.name));
+        if (s.defaultSpec) {
+            QFont f = item-&gt;font();
+            f.setBold(true);
+            item-&gt;setFont(f);
+        }
+        m_global-&gt;addItem(item);</span>
+    }
+<span style = "background-color:#dfd">    if (cur &gt;= 0 &amp;&amp; cur &lt; m_global-&gt;count())
+        m_global-&gt;setCurrentRow(cur);
+}</span>
+
+void QtPageAccess::rebuildAssignedList()
+<span style = "background-color:#dfd">{</span>
+    // The "assigned" list reflects the global assignment (assignedSpecs of all workers)
+    // For now show a placeholder empty list -- workers are configured via the engine
+<span style = "background-color:#dfd">    m_assigned-&gt;clear();</span>
+}
+
+void QtPageAccess::loadSpecList()
+<span style = "background-color:#dfd">{
+    rebuildGlobalList();
+    rebuildAssignedList();
+    onGlobalSelectionChanged();
+    onAssignedSelectionChanged();
+}</span>
+
+void QtPageAccess::setActiveSpecIndex(int idx)
+<span style = "background-color:#dfd">{</span>
+    // Build a small green right-arrow icon for the running spec
+<span style = "background-color:#dfd">    static QIcon runIcon, blankIcon;
+    if (runIcon.isNull()) {
+        QPixmap pm(12, 12);
+        pm.fill(Qt::transparent);
+        QPainter p(&amp;pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setBrush(QColor(0x00, 0xaa, 0x00));
+        p.setPen(Qt::NoPen);</span>
+        // Solid green right-pointing triangle
+<span style = "background-color:#dfd">        p.drawPolygon(QPolygon({ QPoint(2,2), QPoint(2,10), QPoint(10,6) }));
+        runIcon = QIcon(pm);</span>
+
+<span style = "background-color:#dfd">        QPixmap blank(12, 12);
+        blank.fill(Qt::transparent);
+        blankIcon = QIcon(blank);
+    }</span>
+
+<span style = "background-color:#dfd">    for (int i = 0; i &lt; m_assigned-&gt;count(); ++i)
+        m_assigned-&gt;item(i)-&gt;setIcon(i == idx ? runIcon : blankIcon);
+}</span>
+
+QList&lt;AccessSpec&gt; QtPageAccess::currentAssignedSpecs() const
+<span style = "background-color:#dfd">{
+    QList&lt;AccessSpec&gt; result;
+    const auto &amp;allSpecs = m_engine-&gt;accessSpecs();
+    for (int i = 0; i &lt; m_assigned-&gt;count(); ++i) {
+        const QString name = m_assigned-&gt;item(i)-&gt;data(Qt::UserRole).toString();
+        for (const auto &amp;s : allSpecs) {
+            if (s.name == name) { result.append(s); break; }</span>
+        }
+<span style = "background-color:#dfd">    }
+    return result;
+}</span>
+
+// =============================================================================
+// Slot implementations
+// =============================================================================
+
+void QtPageAccess::onGlobalSelectionChanged()
+<span style = "background-color:#dfd">{
+    const bool sel = m_global-&gt;currentRow() &gt;= 0;
+    m_addBtn-&gt;setEnabled(sel);
+    m_editBtn-&gt;setEnabled(sel);
+    m_copyBtn-&gt;setEnabled(sel);
+    m_delBtn-&gt;setEnabled(sel);
+}</span>
+
+void QtPageAccess::onAssignedSelectionChanged()
+<span style = "background-color:#dfd">{
+    const int row = m_assigned-&gt;currentRow();
+    m_removeBtn-&gt;setEnabled(row &gt;= 0);
+    m_upBtn-&gt;setEnabled(row &gt; 0);
+    m_downBtn-&gt;setEnabled(row &gt;= 0 &amp;&amp; row &lt; m_assigned-&gt;count() - 1);
+}</span>
+
+void QtPageAccess::onAddToAssigned()
+<span style = "background-color:#dfd">{
+    auto *item = m_global-&gt;currentItem();
+    if (!item) return;</span>
+    // Add spec name to assigned list if not already present
+<span style = "background-color:#dfd">    const QString name = item-&gt;data(Qt::UserRole).toString();
+    for (int i = 0; i &lt; m_assigned-&gt;count(); ++i)
+        if (m_assigned-&gt;item(i)-&gt;data(Qt::UserRole).toString() == name) return;
+    auto *newItem = new QListWidgetItem(item-&gt;text());
+    newItem-&gt;setData(Qt::UserRole, name);
+    m_assigned-&gt;addItem(newItem);
+    onAssignedSelectionChanged();
+}</span>
+
+void QtPageAccess::onRemoveFromAssigned()
+<span style = "background-color:#dfd">{
+    const int row = m_assigned-&gt;currentRow();
+    if (row &lt; 0) return;
+    delete m_assigned-&gt;takeItem(row);
+    onAssignedSelectionChanged();
+}</span>
+
+void QtPageAccess::onMoveUp()
+<span style = "background-color:#dfd">{
+    const int row = m_assigned-&gt;currentRow();
+    if (row &lt;= 0) return;
+    auto *item = m_assigned-&gt;takeItem(row);
+    m_assigned-&gt;insertItem(row - 1, item);
+    m_assigned-&gt;setCurrentRow(row - 1);
+    onAssignedSelectionChanged();
+}</span>
+
+void QtPageAccess::onMoveDown()
+<span style = "background-color:#dfd">{
+    const int row = m_assigned-&gt;currentRow();
+    if (row &lt; 0 || row &gt;= m_assigned-&gt;count() - 1) return;
+    auto *item = m_assigned-&gt;takeItem(row);
+    m_assigned-&gt;insertItem(row + 1, item);
+    m_assigned-&gt;setCurrentRow(row + 1);
+    onAssignedSelectionChanged();
+}</span>
+
+// =============================================================================
+// Spec editor dialog
+// =============================================================================
+
+// -- Helper --------------------------------------------------------------------
+// Build three spinners (Megabytes / Kilobytes / Bytes) packed into an HBox.
+// *mbSpin, *kbSpin, *bSpin are set to the created spinners.
+static QHBoxLayout *makeSizeSpinners(QSpinBox **mbSpin, QSpinBox **kbSpin,
+                                     QSpinBox **bSpin)
+<span style = "background-color:#dfd">{
+    *mbSpin = new QSpinBox; (*mbSpin)-&gt;setRange(0, 8192); (*mbSpin)-&gt;setSuffix("");
+    *kbSpin = new QSpinBox; (*kbSpin)-&gt;setRange(0, 65535);
+    *bSpin  = new QSpinBox; (*bSpin)-&gt;setRange(0, 65535);
+    auto *lay = new QHBoxLayout;
+    lay-&gt;setSpacing(4);
+    lay-&gt;addWidget(*mbSpin); lay-&gt;addWidget(new QLabel("Megabytes"));
+    lay-&gt;addWidget(*kbSpin); lay-&gt;addWidget(new QLabel("Kilobytes"));
+    lay-&gt;addWidget(*bSpin);  lay-&gt;addWidget(new QLabel("Bytes"));</span>
+    return lay;
+<span style = "background-color:#dfd">}</span>
+static void setSizeSpinners(QSpinBox *mb, QSpinBox *kb, QSpinBox *b, int bytes)
+<span style = "background-color:#dfd">{
+    mb-&gt;setValue(bytes / 1048576);
+    kb-&gt;setValue((bytes % 1048576) / 1024);
+    b -&gt;setValue(bytes % 1024);
+}</span>
+static int readSizeSpinners(QSpinBox *mb, QSpinBox *kb, QSpinBox *b)
+<span style = "background-color:#dfd">{
+    return mb-&gt;value() * 1048576 + kb-&gt;value() * 1024 + b-&gt;value();
+}</span>
+
+// -----------------------------------------------------------------------------
+
+bool QtPageAccess::editSpecDialog(AccessSpec &amp;spec, const QString &amp;title)
+<span style = "background-color:#dfd">{
+    QDialog dlg(this);
+    dlg.setWindowTitle(title);
+    dlg.setMinimumSize(730, 560);</span>
+
+    // Working copy of lines - edited locally until OK
+<span style = "background-color:#dfd">    QList&lt;AccessSpecLine&gt; lines(spec.lines.begin(), spec.lines.end());
+    if (lines.isEmpty()) {</span>
+        AccessSpecLine l; l.sizeBytes = 65536; l.ofSize = 100;
+<span style = "background-color:#fdd">        lines.append(l);</span>
+    }
+
+<span style = "background-color:#dfd">    bool updating = false;</span>
+
+    // -- Top row: Name + Default Assignment ----------------------------------
+<span style = "background-color:#dfd">    auto *nameEdit    = new QLineEdit(QString::fromStdString(spec.name));
+    auto *defCombo    = new QComboBox;
+    defCombo-&gt;addItems({"None", "All Managers"});
+    defCombo-&gt;setCurrentIndex(spec.defaultSpec ? 1 : 0);</span>
+
+    // -- Access-line table ----------------------------------------------------
+<span style = "background-color:#dfd">    auto *table = new QTableWidget(0, 8);
+    table-&gt;setHorizontalHeaderLabels({"Size", "% Access", "% Read", "% Random",</span>
+                                      "Delay", "Burst", "Alignment", "Reply"});
+<span style = "background-color:#dfd">    table-&gt;setSelectionBehavior(QAbstractItemView::SelectRows);
+    table-&gt;setSelectionMode(QAbstractItemView::SingleSelection);
+    table-&gt;setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table-&gt;horizontalHeader()-&gt;setSectionResizeMode(QHeaderView::ResizeToContents);
+    table-&gt;horizontalHeader()-&gt;setStretchLastSection(true);</span>
+    // Compact row height: the original Windows list control uses ~14px rows.
+    // Qt's default is ~28-30px because of cell padding; override both the
+    // section size AND the item padding via stylesheet.
+<span style = "background-color:#dfd">    table-&gt;verticalHeader()-&gt;hide();
+    table-&gt;verticalHeader()-&gt;setSectionResizeMode(QHeaderView::Fixed);
+    table-&gt;verticalHeader()-&gt;setMinimumSectionSize(1);  // remove font-height floor
+    table-&gt;verticalHeader()-&gt;setDefaultSectionSize(14);
+    table-&gt;setStyleSheet("QTableWidget::item { padding: 0px 3px; }");
+    table-&gt;setStyle(QStyleFactory::create("Fusion"));
+    table-&gt;setFixedHeight(175);</span>
+
+<span style = "background-color:#dfd">    auto *insBefBtn = new QPushButton("Insert Before");
+    auto *insAftBtn = new QPushButton("Insert After");
+    auto *delBtn    = new QPushButton("Delete");</span>
+
+    // -- Transfer Request Size ---------------------------------------------
+    QSpinBox *szMb, *szKb, *szB;
+<span style = "background-color:#dfd">    auto *szLay = makeSizeSpinners(&amp;szMb, &amp;szKb, &amp;szB);</span>
+
+    // -- % of Access Specification -----------------------------------------
+<span style = "background-color:#dfd">    auto *ofSzSlider = new QSlider(Qt::Horizontal); ofSzSlider-&gt;setRange(0,100);
+    auto *ofSzLbl    = new QLabel("100 Percent");</span>
+
+    // -- % Read/Write ------------------------------------------------------
+<span style = "background-color:#dfd">    auto *rdSlider = new QSlider(Qt::Horizontal); rdSlider-&gt;setRange(0,100);</span>
+
+    // -- % Random/Sequential -----------------------------------------------
+<span style = "background-color:#dfd">    auto *rndSlider = new QSlider(Qt::Horizontal); rndSlider-&gt;setRange(0,100);</span>
+
+    // -- Burstiness --------------------------------------------------------
+<span style = "background-color:#dfd">    auto *delaySpin = new QDoubleSpinBox;
+    delaySpin-&gt;setRange(0, 60000); delaySpin-&gt;setSuffix(" ms"); delaySpin-&gt;setFixedWidth(80);
+    auto *burstSpin = new QSpinBox;
+    burstSpin-&gt;setRange(1, 65536); burstSpin-&gt;setSuffix(" I/Os"); burstSpin-&gt;setFixedWidth(80);</span>
+
+    // -- Align I/Os on -----------------------------------------------------
+<span style = "background-color:#dfd">    auto *alReqRad  = new QRadioButton("Request Size Boundaries");
+    auto *alSectRad = new QRadioButton("Sector Boundaries");
+    auto *alCustRad = new QRadioButton;
+    auto *alBtnGrp  = new QButtonGroup(&amp;dlg);
+    alBtnGrp-&gt;addButton(alReqRad, 0);
+    alBtnGrp-&gt;addButton(alSectRad, 1);
+    alBtnGrp-&gt;addButton(alCustRad, 2);
+    alSectRad-&gt;setChecked(true);</span>
+    QSpinBox *alMb, *alKb, *alB;
+<span style = "background-color:#dfd">    auto *alLay = makeSizeSpinners(&amp;alMb, &amp;alKb, &amp;alB);</span>
+
+    // -- Reply Size --------------------------------------------------------
+<span style = "background-color:#dfd">    auto *rpNoneRad = new QRadioButton("No Reply");
+    auto *rpCustRad = new QRadioButton;
+    auto *rpBtnGrp  = new QButtonGroup(&amp;dlg);
+    rpBtnGrp-&gt;addButton(rpNoneRad, 0);
+    rpBtnGrp-&gt;addButton(rpCustRad, 1);
+    rpNoneRad-&gt;setChecked(true);</span>
+    QSpinBox *rpMb, *rpKb, *rpB;
+<span style = "background-color:#dfd">    auto *rpLay = makeSizeSpinners(&amp;rpMb, &amp;rpKb, &amp;rpB);</span>
+
+    // -- Helpers: populate table &amp; sync controls ---------------------------
+<span style = "background-color:#dfd">    auto populateTable = [&amp;]() {
+        bool wasBlocked = table-&gt;blockSignals(true);
+        int cur = table-&gt;currentRow();
+        table-&gt;setRowCount(lines.size());
+        for (int r = 0; r &lt; lines.size(); ++r) {
+            const auto &amp;l = lines[r];
+            QString align;
+            if      (l.alignBytes &lt; 0) align = "req size";
+            else if (l.alignBytes == 0) align = "sector";
+            else    align = formatSizeCompact(l.alignBytes);
+            table-&gt;setItem(r, 0, new QTableWidgetItem(formatSizeCompact(l.sizeBytes)));
+            table-&gt;setItem(r, 1, new QTableWidgetItem(QString::number(l.ofSize)));
+            table-&gt;setItem(r, 2, new QTableWidgetItem(QString::number(l.readPercent)));
+            table-&gt;setItem(r, 3, new QTableWidgetItem(QString::number(100 - l.seqPercent)));
+            table-&gt;setItem(r, 4, new QTableWidgetItem(QString::number(l.delayMs, 'f', 0)));
+            table-&gt;setItem(r, 5, new QTableWidgetItem(QString::number(l.burstLength)));
+            table-&gt;setItem(r, 6, new QTableWidgetItem(align));
+            table-&gt;setItem(r, 7, new QTableWidgetItem(l.replyBytes == 0 ? "none"</span>
+                                     : formatSizeCompact(l.replyBytes)));
+<span style = "background-color:#dfd">            table-&gt;setRowHeight(r, 14);
+        }
+        table-&gt;blockSignals(wasBlocked);
+        if (cur &gt;= 0 &amp;&amp; cur &lt; lines.size()) table-&gt;selectRow(cur);
+    };</span>
+
+<span style = "background-color:#dfd">    auto loadControls = [&amp;](int row) {
+        if (updating || row &lt; 0 || row &gt;= lines.size()) return;
+        updating = true;
+        const auto &amp;l = lines[row];
+        setSizeSpinners(szMb, szKb, szB, l.sizeBytes);
+        ofSzSlider-&gt;setValue(l.ofSize);
+        ofSzLbl-&gt;setText(QString("%1 Percent").arg(l.ofSize));
+        rdSlider-&gt;setValue(l.readPercent);
+        rndSlider-&gt;setValue(100 - l.seqPercent);
+        delaySpin-&gt;setValue(l.delayMs);
+        burstSpin-&gt;setValue(l.burstLength);
+        if      (l.alignBytes &lt; 0)  alReqRad-&gt;setChecked(true);
+        else if (l.alignBytes == 0) alSectRad-&gt;setChecked(true);</span>
+        else {
+<span style = "background-color:#dfd">            alCustRad-&gt;setChecked(true);
+            setSizeSpinners(alMb, alKb, alB, l.alignBytes);</span>
+        }
+<span style = "background-color:#dfd">        rpNoneRad-&gt;setChecked(l.replyBytes == 0);
+        rpCustRad-&gt;setChecked(l.replyBytes &gt; 0);
+        if (l.replyBytes &gt; 0) setSizeSpinners(rpMb, rpKb, rpB, l.replyBytes);
+        updating = false;
+    };</span>
+
+<span style = "background-color:#dfd">    auto saveControls = [&amp;](int row) {
+        if (updating || row &lt; 0 || row &gt;= lines.size()) return;
+        auto &amp;l = lines[row];
+        l.sizeBytes   = readSizeSpinners(szMb, szKb, szB);
+        l.ofSize      = ofSzSlider-&gt;value();
+        l.readPercent = rdSlider-&gt;value();
+        l.seqPercent  = 100 - rndSlider-&gt;value();
+        l.delayMs     = delaySpin-&gt;value();
+        l.burstLength = burstSpin-&gt;value();
+        if      (alReqRad-&gt;isChecked())  l.alignBytes = -1;
+        else if (alSectRad-&gt;isChecked()) l.alignBytes =  0;
+        else    l.alignBytes = readSizeSpinners(alMb, alKb, alB);
+        if (rpNoneRad-&gt;isChecked()) l.replyBytes = 0;</span>
+<span style = "background-color:#fdd">        else    l.replyBytes = readSizeSpinners(rpMb, rpKb, rpB);</span>
+<span style = "background-color:#dfd">        populateTable();
+    };</span>
+
+    // -- Connections -------------------------------------------------------
+<span style = "background-color:#dfd">    QObject::connect(table, &amp;QTableWidget::currentCellChanged,</span>
+<span style = "background-color:#fdd">        [&amp;](int newRow, int, int oldRow, int) {
+            if (!updating) saveControls(oldRow);
+            loadControls(newRow);
+        });</span>
+
+    // Any control change â save back to selected line
+<span style = "background-color:#dfd">    auto onCtrlChanged = [&amp;]() { saveControls(table-&gt;currentRow()); };
+    QObject::connect(szMb,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(szKb,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(szB,   QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(ofSzSlider, &amp;QSlider::valueChanged, &amp;dlg, [&amp;](int v) {</span>
+<span style = "background-color:#fdd">        ofSzLbl-&gt;setText(QString("%1 Percent").arg(v));
+        onCtrlChanged();
+    });</span>
+<span style = "background-color:#dfd">    QObject::connect(rdSlider,  &amp;QSlider::valueChanged,  &amp;dlg, onCtrlChanged);
+    QObject::connect(rndSlider, &amp;QSlider::valueChanged,  &amp;dlg, onCtrlChanged);
+    QObject::connect(delaySpin, QOverload&lt;double&gt;::of(&amp;QDoubleSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(burstSpin, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(alReqRad,  &amp;QRadioButton::toggled, &amp;dlg, onCtrlChanged);
+    QObject::connect(alSectRad, &amp;QRadioButton::toggled, &amp;dlg, onCtrlChanged);
+    QObject::connect(alCustRad, &amp;QRadioButton::toggled, &amp;dlg, onCtrlChanged);
+    QObject::connect(alMb, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(alKb, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(alB,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(rpNoneRad, &amp;QRadioButton::toggled, &amp;dlg, onCtrlChanged);
+    QObject::connect(rpCustRad, &amp;QRadioButton::toggled, &amp;dlg, onCtrlChanged);
+    QObject::connect(rpMb, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(rpKb, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);
+    QObject::connect(rpB,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged), &amp;dlg, onCtrlChanged);</span>
+
+    // Insert / Delete row buttons
+<span style = "background-color:#dfd">    QObject::connect(insBefBtn, &amp;QPushButton::clicked, &amp;dlg, [&amp;]() {</span>
+<span style = "background-color:#fdd">        int r = table-&gt;currentRow();</span>
+        if (r &lt; 0) r = 0;
+<span style = "background-color:#fdd">        AccessSpecLine l; l.ofSize = 100;
+        lines.insert(r, l);
+        populateTable();
+        table-&gt;selectRow(r);
+    });</span>
+<span style = "background-color:#dfd">    QObject::connect(insAftBtn, &amp;QPushButton::clicked, &amp;dlg, [&amp;]() {</span>
+<span style = "background-color:#fdd">        int r = table-&gt;currentRow();
+        int ins = (r &lt; 0) ? lines.size() : r + 1;
+        AccessSpecLine l; l.ofSize = 100;
+        lines.insert(ins, l);
+        populateTable();
+        table-&gt;selectRow(ins);
+    });</span>
+<span style = "background-color:#dfd">    QObject::connect(delBtn, &amp;QPushButton::clicked, &amp;dlg, [&amp;]() {</span>
+<span style = "background-color:#fdd">        int r = table-&gt;currentRow();
+        if (r &lt; 0 || lines.size() &lt;= 1) return;  // keep at least one line
+        lines.removeAt(r);
+        populateTable();
+        table-&gt;selectRow(qMin(r, lines.size() - 1));
+    });</span>
+
+    // -- Layout -----------------------------------------------------------
+<span style = "background-color:#dfd">    auto *root = new QVBoxLayout(&amp;dlg);
+    root-&gt;setSpacing(6);</span>
+
+    // Top: Name + Default Assignment
+    {
+<span style = "background-color:#dfd">        auto *row = new QHBoxLayout;
+        row-&gt;addWidget(new QLabel("Name:"));
+        row-&gt;addWidget(nameEdit, 1);
+        row-&gt;addSpacing(12);
+        row-&gt;addWidget(new QLabel("Default Assignment:"));
+        row-&gt;addWidget(defCombo);
+        root-&gt;addLayout(row);</span>
+    }
+
+    // Table + buttons
+    {
+<span style = "background-color:#dfd">        auto *row = new QHBoxLayout;
+        row-&gt;addWidget(table, 1);
+        auto *btnCol = new QVBoxLayout;
+        btnCol-&gt;addWidget(insBefBtn);
+        btnCol-&gt;addWidget(insAftBtn);
+        btnCol-&gt;addWidget(delBtn);
+        btnCol-&gt;addStretch();
+        row-&gt;addLayout(btnCol);
+        root-&gt;addLayout(row);</span>
+    }
+
+    // Editing controls - 3Ã2 grid of group boxes
+    {
+<span style = "background-color:#dfd">        auto *grid = new QGridLayout;
+        grid-&gt;setSpacing(6);</span>
+
+        // -- Transfer Request Size ----------------------------------------
+<span style = "background-color:#dfd">        auto *szGrp = new QGroupBox("Transfer Request Size");
+        auto *szGL  = new QVBoxLayout(szGrp);
+        szGL-&gt;addLayout(szLay);
+        grid-&gt;addWidget(szGrp, 0, 0);</span>
+
+        // -- % of Access Specification ---------------------------------
+<span style = "background-color:#dfd">        auto *ofGrp = new QGroupBox("Percent of Access Specification");
+        auto *ofGL  = new QVBoxLayout(ofGrp);
+        ofGL-&gt;addWidget(ofSzSlider);
+        ofGL-&gt;addWidget(ofSzLbl, 0, Qt::AlignCenter);
+        grid-&gt;addWidget(ofGrp, 0, 1);</span>
+
+        // -- % Read/Write Distribution ---------------------------------
+<span style = "background-color:#dfd">        auto *rdGrp = new QGroupBox("Percent Read/Write Distribution");
+        auto *rdGL  = new QVBoxLayout(rdGrp);
+        rdGL-&gt;addWidget(rdSlider);</span>
+        {
+<span style = "background-color:#dfd">            auto *rl = new QHBoxLayout;
+            rl-&gt;addWidget(new QLabel("0%\nWrite"));
+            rl-&gt;addStretch();
+            rl-&gt;addWidget(new QLabel("100%\nRead"));
+            rdGL-&gt;addLayout(rl);</span>
+        }
+<span style = "background-color:#dfd">        grid-&gt;addWidget(rdGrp, 0, 2);</span>
+
+        // -- % Random/Sequential ---------------------------------------
+<span style = "background-color:#dfd">        auto *rndGrp = new QGroupBox("Percent Random/Sequential Distribution");
+        auto *rndGL  = new QVBoxLayout(rndGrp);
+        rndGL-&gt;addWidget(rndSlider);</span>
+        {
+<span style = "background-color:#dfd">            auto *rl = new QHBoxLayout;
+            rl-&gt;addWidget(new QLabel("100%\nSequential"));
+            rl-&gt;addStretch();
+            rl-&gt;addWidget(new QLabel("0%\nRandom"));
+            rndGL-&gt;addLayout(rl);</span>
+        }
+<span style = "background-color:#dfd">        grid-&gt;addWidget(rndGrp, 1, 0);</span>
+
+        // -- Burstiness -----------------------------------------------
+<span style = "background-color:#dfd">        auto *bstGrp = new QGroupBox("Burstiness");
+        auto *bstGL  = new QFormLayout(bstGrp);
+        bstGL-&gt;addRow("Transfer Delay:", delaySpin);
+        bstGL-&gt;addRow("Burst Length:",   burstSpin);
+        grid-&gt;addWidget(bstGrp, 1, 1);</span>
+
+        // -- Align I/Os on --------------------------------------------
+<span style = "background-color:#dfd">        auto *alGrp = new QGroupBox("Align I/Os on");
+        auto *alGL  = new QVBoxLayout(alGrp);
+        alGL-&gt;addWidget(alReqRad);
+        alGL-&gt;addWidget(alSectRad);</span>
+        {
+<span style = "background-color:#dfd">            auto *cr = new QHBoxLayout;
+            cr-&gt;addWidget(alCustRad);
+            cr-&gt;addLayout(alLay);
+            alGL-&gt;addLayout(cr);</span>
+        }
+<span style = "background-color:#dfd">        grid-&gt;addWidget(alGrp, 1, 2);</span>
+
+<span style = "background-color:#dfd">        root-&gt;addLayout(grid);</span>
+    }
+
+    // Reply Size (below grid, left-aligned)
+    {
+<span style = "background-color:#dfd">        auto *rpGrp = new QGroupBox("Reply Size");
+        auto *rpGL  = new QVBoxLayout(rpGrp);
+        rpGL-&gt;addWidget(rpNoneRad);</span>
+        {
+<span style = "background-color:#dfd">            auto *cr = new QHBoxLayout;
+            cr-&gt;addWidget(rpCustRad);
+            cr-&gt;addLayout(rpLay);
+            rpGL-&gt;addLayout(cr);</span>
+        }
+<span style = "background-color:#dfd">        auto *row = new QHBoxLayout;
+        row-&gt;addWidget(rpGrp);
+        row-&gt;addStretch(1);
+        root-&gt;addLayout(row);</span>
+    }
+
+    // OK / Cancel
+<span style = "background-color:#dfd">    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QObject::connect(buttons, &amp;QDialogButtonBox::accepted, &amp;dlg, &amp;QDialog::accept);
+    QObject::connect(buttons, &amp;QDialogButtonBox::rejected, &amp;dlg, &amp;QDialog::reject);
+    root-&gt;addWidget(buttons);</span>
+
+    // -- Initialise -------------------------------------------------------
+<span style = "background-color:#dfd">    populateTable();
+    if (!lines.isEmpty()) {
+        table-&gt;selectRow(0);
+        loadControls(0);</span>
+    }
+
+<span style = "background-color:#dfd">    if (dlg.exec() != QDialog::Accepted) return false;</span>
+
+    // Save the currently selected row before accepting
+<span style = "background-color:#dfd">    saveControls(table-&gt;currentRow());</span>
+
+<span style = "background-color:#dfd">    spec.name        = nameEdit-&gt;text().trimmed().toStdString();
+    spec.defaultSpec = (defCombo-&gt;currentIndex() &gt; 0);
+    spec.lines.assign(lines.begin(), lines.end());
+    return true;
+}</span>
+
+// Load the engine's spec list into a transient core library so the list
+// operations (new/copy naming, removal) use the shared MFC-canonical semantics.
+static iocore::AccessSpecLibrary libraryFromEngine(QtIometerEngine *engine)
+<span style = "background-color:#dfd">{
+    iocore::AccessSpecLibrary lib;
+    std::vector&lt;AccessSpec&gt; v;
+    const auto specs = engine-&gt;accessSpecs();
+    v.reserve(specs.size());
+    for (const auto &amp;s : specs) v.push_back(s);
+    lib.setSpecs(std::move(v));
+    return lib;
+}</span>
+
+static void libraryToEngine(const iocore::AccessSpecLibrary &amp;lib, QtIometerEngine *engine)
+<span style = "background-color:#dfd">{
+    QList&lt;AccessSpec&gt; out;
+    for (const auto &amp;s : lib.specs()) out.append(s);
+    engine-&gt;setAccessSpecs(out);
+}</span>
+
+void QtPageAccess::onNewSpec()
+<span style = "background-color:#dfd">{</span>
+    // Core semantics: "Untitled n" + the default line (2 KiB, 67% read, random).
+<span style = "background-color:#dfd">    iocore::AccessSpecLibrary lib = libraryFromEngine(m_engine);
+    const int idx = lib.newSpec();
+    AccessSpec s = lib.at(idx);
+    if (!editSpecDialog(s, "New Access Specification")) return;
+    lib.at(idx) = s;
+    libraryToEngine(lib, m_engine);
+    loadSpecList();
+    m_global-&gt;setCurrentRow(m_global-&gt;count() - 1);
+}</span>
+
+void QtPageAccess::onEditSpec()
+<span style = "background-color:#dfd">{
+    const int row = m_global-&gt;currentRow();
+    if (row &lt; 0) return;
+    auto specs = m_engine-&gt;accessSpecs();
+    if (row &gt;= specs.size()) return;
+    AccessSpec s = specs[row];
+    if (!editSpecDialog(s, "Edit Access Specification")) return;</span>
+<span style = "background-color:#fdd">    specs[row] = s;
+    m_engine-&gt;setAccessSpecs(specs);
+    loadSpecList();
+    m_global-&gt;setCurrentRow(row);</span>
+<span style = "background-color:#dfd">}</span>
+
+void QtPageAccess::onEditCopySpec()
+<span style = "background-color:#dfd">{
+    const int row = m_global-&gt;currentRow();
+    if (row &lt; 0) return;</span>
+    // Core semantics: unique "Copy of &lt;name&gt; (n)" (appended at the end, as the
+    // original Iometer does).
+<span style = "background-color:#dfd">    iocore::AccessSpecLibrary lib = libraryFromEngine(m_engine);
+    if (row &gt;= lib.count()) return;
+    const int idx = lib.copySpec(row);
+    if (idx &lt; 0) return;
+    AccessSpec s = lib.at(idx);
+    if (!editSpecDialog(s, "Edit Copy of Access Specification")) return;
+    lib.at(idx) = s;
+    libraryToEngine(lib, m_engine);
+    loadSpecList();
+    m_global-&gt;setCurrentRow(m_global-&gt;count() - 1);
+}</span>
+
+void QtPageAccess::onDeleteSpec()
+<span style = "background-color:#dfd">{
+    const int row = m_global-&gt;currentRow();
+    if (row &lt; 0) return;
+    iocore::AccessSpecLibrary lib = libraryFromEngine(m_engine);
+    if (row &gt;= lib.count()) return;
+    const auto btn = QMessageBox::question(this, "Delete Spec",</span>
+        QString("Delete \"%1\"?").arg(QString::fromStdString(lib.at(row).name)));
+<span style = "background-color:#dfd">    if (btn != QMessageBox::Yes) return;
+    lib.removeAt(row);
+    libraryToEngine(lib, m_engine);
+    loadSpecList();
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

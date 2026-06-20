@@ -1,0 +1,164 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtMainWindow.h</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtMainWindow.h -- Top-level application window for the Iometer Qt GUI.
+// Equivalent to CMainFrame + CGalileoView in the MFC original.
+#pragma once
+
+#include "QtIometerTypes.h"
+#include &lt;QMainWindow&gt;
+#include &lt;QVector&gt;
+#include &lt;QFile&gt;
+
+class QtIometerEngine;
+class QtPageDisplay;
+class QtPageSetup;
+class QtPageAccess;
+class QtPageResults;
+class QtPageNetwork;
+class QTabWidget;
+class QTreeWidget;
+class QTreeWidgetItem;
+class QSplitter;
+class QLabel;
+class QAction;
+class QGroupBox;
+
+class QtMainWindow : public QMainWindow
+{
+    Q_OBJECT
+
+public:
+    explicit QtMainWindow(QtIometerEngine *engine, QWidget *parent = nullptr);
+<span style = "background-color:#fdd">    ~QtMainWindow() override = default;</span>
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
+private slots:
+    // File
+    void onNew();
+    void onOpen();
+    void onSave();
+
+    // Topology operations (map to original BNewDynamo, BNewDiskWorker, etc.)
+    void onNewDynamo();
+    void onNewDiskWorker();
+    void onNewNetWorker();
+    void onCopyWorker();
+    void onExitOne();
+
+    // Test control
+    void onStart();
+    void onStop();
+    void onStopAll();
+
+    // Help
+    void onAbout();
+
+    // Engine signals
+    void onTestStarted();
+    void onTestStopped();
+    void onResultsUpdated(QVector&lt;WorkerResult&gt; results);
+    void onStatusMessage(QString msg);
+    void onManagerConnected(ManagerInfo mgr);
+    void onManagerDisconnected(QString name);
+    void onConfigChanged();
+
+    void onWorkerTreeSelectionChanged();
+
+private:
+    void setupToolBar();
+    void setupTopologyPanel();
+    void setupTabs();
+    void setupStatusBar();
+    void rebuildWorkerTree();
+    void setRunningState(bool running);
+    void updateTopologyButtons();   // enable/disable per-selection buttons
+
+    // Icon helpers - pixel-faithful replicas of the original toolbar bitmaps
+    static QIcon makeOpenIcon();
+    static QIcon makeSaveIcon();
+    static QIcon makeNewDynamoIcon();
+    static QIcon makeNewDiskWorkerIcon();
+    static QIcon makeNewNetWorkerIcon();
+    static QIcon makeCopyWorkerIcon();
+    static QIcon makeStartIcon();
+    static QIcon makeStopIcon(bool all);
+    static QIcon makeResetIcon();        // tlb10 - curved yellow arrow
+    static QIcon makeExitOneIcon();      // tlb11 - inward red arrows
+    static QIcon makeExitIcon();         // tlb12 - green door
+    static QIcon makeHelpIcon();         // tlb13 - yellow "?"
+
+    // ---- Engine ---------------------------------------------------------------
+    QtIometerEngine *m_engine = nullptr;
+
+    // ---- Central area: topology panel (left) + tabs (right) ------------------
+<span style = "background-color:#dfd">    QSplitter   *m_splitter      = nullptr;
+    QGroupBox   *m_topoGroup     = nullptr;   // "Topology" group box
+    QTreeWidget *m_workerTree    = nullptr;
+    QTabWidget  *m_tabs          = nullptr;</span>
+
+    // ---- Tab pages -----------------------------------------------------------
+<span style = "background-color:#dfd">    QtPageSetup   *m_pageSetup     = nullptr;   // tab 0: Disk Targets
+    QtPageNetwork *m_pageNetwork   = nullptr;   // tab 1: Network Targets
+    QtPageAccess  *m_pageAccess    = nullptr;   // tab 2: Access Specifications
+    QtPageDisplay *m_pageDisplay   = nullptr;   // tab 3: Results Display
+    QtPageResults *m_pageResults   = nullptr;   // tab 4: Test Setup</span>
+
+    // ---- Toolbar actions (in original toolbar order) -------------------------
+<span style = "background-color:#dfd">    QAction *m_actOpen           = nullptr;   // ID_FILE_OPEN
+    QAction *m_actSave           = nullptr;   // ID_FILE_SAVE
+    QAction *m_actNewDynamo      = nullptr;   // BNewDynamo
+    QAction *m_actNewDiskWorker  = nullptr;   // BNewDiskWorker
+    QAction *m_actNewNetWorker   = nullptr;   // BNewNetWorker
+    QAction *m_actCopyWorker     = nullptr;   // BCopyWorker
+    QAction *m_actStart          = nullptr;   // BStart
+    QAction *m_actStop           = nullptr;   // BStop
+    QAction *m_actStopAll        = nullptr;   // BStopAll
+    QAction *m_actNew            = nullptr;   // BReset
+    QAction *m_actExitOne        = nullptr;   // BExitOne
+    QAction *m_actExit           = nullptr;   // Exit Iometer
+    QAction *m_actHelp           = nullptr;   // ID_APP_ABOUT
+    QAction *m_actBigMeter       = nullptr;   // Presentation Meter (menu only)</span>
+
+    // ---- Status bar ----------------------------------------------------------
+<span style = "background-color:#dfd">    QLabel *m_statusLeft         = nullptr;
+    QLabel *m_statusRight        = nullptr;</span>
+
+    // ---- Current topology selection (drives button enable/disable) -----------
+    QString m_selManagerName;
+    QString m_selWorkerId;
+<span style = "background-color:#dfd">    int     m_deletedWorkerPos = -1;</span>
+
+<span style = "background-color:#dfd">    bool    m_running      = false;
+    QFile  *m_resultsFile  = nullptr;</span>
+
+    // Spec cycling state
+    QList&lt;AccessSpec&gt; m_runQueue;        // specs to run in order this test session
+<span style = "background-color:#dfd">    int               m_runQueueIdx  = 0;
+    bool              m_specAdvancing = false;  // true = Stop was "advance", false = abort</span>
+};</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

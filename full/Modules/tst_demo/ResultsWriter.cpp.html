@@ -1,0 +1,134 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>ResultsWriter.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "ResultsWriter.h"
+#include "ResultsAggregator.h"
+#include "ResultsCsv.h"      // canonical results-CSV schema + row writer (shared with MFC)
+#include &lt;fstream&gt;
+#include &lt;string&gt;
+#include &lt;ctime&gt;
+
+// Format a timestamp matching the original Iometer output ("yyyy/MM/dd hh:mm:ss")
+static std::string currentTimestamp()
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    std::time_t now = std::time(nullptr);
+    std::tm tmv{};
+#if defined(_WIN32)</span>
+<span style = "background-color:#fdd">    localtime_s(&amp;tmv, &amp;now);</span>
+<span style = "background-color:#dfd">#else</span>
+    localtime_r(&amp;now, &amp;tmv);
+#endif
+    char buf[32];
+<span style = "background-color:#fdd">    std::strftime(buf, sizeof(buf), "%Y/%m/%d %H:%M:%S", &amp;tmv);</span>
+<span style = "background-color:#dfd">    return std::string(buf);
+}
+</span>
+// Replace commas / CR / LF with spaces so a name can't break the CSV column
+// layout. The canonical writer emits names raw (matching the MFC GUI, which
+// sanitizes rather than quotes), so do the same sanitization here.
+static std::string sanitizeName(const std::string &amp;s)
+<span style = "background-color:#dfd">{
+    std::string out = s;
+    for (char &amp;c : out)</span>
+<span style = "background-color:#fdd">        if (c == ',' || c == '\n' || c == '\r') c = ' ';</span>
+    return out;
+<span style = "background-color:#fdd">}</span>
+
+// Copy the measured columns Qt actually computes into a canonical row. Columns
+<span style = "background-color:#dfd">// Qt does not track (read/write binary MBps split, transactions/connections,
+// the read/write/transaction/connection latency variants, raw counters, network)
+// stay at their zero defaults.
+static void fillFromWorker(iocore::ResultRow &amp;row, const WorkerResult &amp;wr)
+{
+    row.iops = wr.iops; row.readIops = wr.readIops; row.writeIops = wr.writeIops;</span>
+<span style = "background-color:#fdd">    row.mbpsBin = wr.mbpsBin;
+    row.mbpsDec = wr.mbpsDec; row.readMbpsDec = wr.readMbpsDec; row.writeMbpsDec = wr.writeMbpsDec;</span>
+<span style = "background-color:#dfd">    row.aveLatency = wr.avgLatencyMs;</span>
+<span style = "background-color:#fdd">    row.maxLatency = wr.maxLatencyMs;
+    row.totalErrors = static_cast&lt;unsigned long&gt;(wr.errors &lt; 0 ? 0 : wr.errors);
+}</span>
+
+<span style = "background-color:#dfd">bool ResultsWriter::writeBatchResultsCsv(const std::string &amp;filepath,
+                                         const std::vector&lt;WorkerResult&gt; &amp;results,</span>
+                                         const TestConfig &amp;cfg)
+<span style = "background-color:#fdd">{
+    std::ofstream out(filepath);
+    if (!out) return false;</span>
+
+    // -- File preamble -----------------------------------------------------
+<span style = "background-color:#fdd">    out &lt;&lt; "'Iometer Output File\n";
+    out &lt;&lt; "Version 1.1.0 \n";
+    out &lt;&lt; "'Test Description\n\t" &lt;&lt; cfg.description &lt;&lt; "\n";
+    out &lt;&lt; "'Time Stamp\n\t" &lt;&lt; currentTimestamp() &lt;&lt; "\n";
+    out &lt;&lt; "'Run Time\n'\thours      minutes    seconds\n";
+    out &lt;&lt; "\t" &lt;&lt; cfg.runHours</span>
+        &lt;&lt; "          " &lt;&lt; cfg.runMinutes
+        &lt;&lt; "          " &lt;&lt; cfg.runSeconds &lt;&lt; "\n";
+<span style = "background-color:#fdd">    out &lt;&lt; "'Ramp Up Time (s)\n\t" &lt;&lt; cfg.rampSeconds &lt;&lt; "\n";</span>
+
+<span style = "background-color:#dfd">    // -- Canonical results section (the same 80-column schema + row writer the</span>
+    //    MFC GUI uses). Qt fills the columns it computes; the rest stay 0/blank.
+<span style = "background-color:#dfd">    iocore::writeResultsHeader(out);
+</span>
+    // ALL aggregate row, built from the non-aggregate worker rows (shared core).
+<span style = "background-color:#fdd">    const iocore::AggregateResult aggRes = iocore::aggregateResults(results);</span>
+    const WorkerResult &amp;agg = aggRes.all;
+<span style = "background-color:#fdd">    const int workerCount   = aggRes.workerCount;
+    const int mgCount       = aggRes.managerCount;</span>
+    {
+<span style = "background-color:#fdd">        iocore::ResultRow row;
+        fillFromWorker(row, agg);
+        row.targetType = "ALL";
+        row.targetName = "All";
+        row.managers = std::to_string(mgCount);</span>
+<span style = "background-color:#dfd">        row.workers  = std::to_string(workerCount);</span>
+<span style = "background-color:#fdd">        row.disks    = std::to_string(workerCount);   // Qt: one disk target per worker
+        row.rawBlock = false;                         // ALL row blanks the raw block (like MFC)
+        row.cpuNetBlock = true;                       // ALL row carries the aggregate CPU
+        row.cpuUtil[0] = agg.cpuUtil;                 // % CPU Utilization (total)</span>
+        row.cpuUtil[1] = agg.cpuUser;                 // % User Time
+<span style = "background-color:#fdd">        row.cpuUtil[2] = agg.cpuKernel;               // % Privileged Time
+        row.procSpeedPresent = false;
+        iocore::writeResultRow(out, row);
+    }</span>
+
+    // Per-worker rows (canonical WORKER rows; CPU/network blank, like the MFC GUI).
+<span style = "background-color:#dfd">    for (const auto &amp;wr : results) {
+        if (wr.isAggregate) continue;
+        iocore::ResultRow row;</span>
+<span style = "background-color:#fdd">        fillFromWorker(row, wr);
+        row.targetType = "WORKER";
+        row.targetName = sanitizeName(wr.workerName);
+        row.disks = "1";                              // one disk target per Qt worker
+        row.rawBlock = true;                          // worker rows fill the raw block (0; Qt has no raw counters)
+        row.cpuNetBlock = false;
+        row.procSpeedPresent = false;
+        iocore::writeResultRow(out, row);
+    }</span>
+
+<span style = "background-color:#fdd">    out.close();</span>
+<span style = "background-color:#dfd">    return true;
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

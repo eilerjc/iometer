@@ -1,0 +1,1590 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>PageDisk.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Iometer / PageDisk.cpp                                             ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: Implementation of the CPageDisk class, which is       ## */
+/* ##               responsible for the "Disk Targets" tab in Iometer's   ## */
+/* ##               main window.                                          ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - changes so VC++ 7 (.NET) will compile correctly.    ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - added new header info.                              ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "PageDisk.h"
+#include "ManagerList.h"
+#include "GalileoView.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CPageDisk property page
+
+<span style = "background-color:#dfd">IMPLEMENT_DYNCREATE(CPageDisk, CPropertyPage)</span>
+
+<span style = "background-color:#dfd">CPageDisk::CPageDisk():CPropertyPage(CPageDisk::IDD)
+{
+	m_RepeatingBytesMessageBox_Shown = false;</span>
+	m_PseudoRandomMessageBox_Shown = false;
+<span style = "background-color:#dfd">	m_FullRandomMessageBox_Shown = false;</span>
+	//{{AFX_DATA_INIT(CPageDisk)
+	//}}AFX_DATA_INIT
+<span style = "background-color:#dfd">}</span>
+
+CPageDisk::~CPageDisk()
+<span style = "background-color:#dfd">{
+}</span>
+
+void CPageDisk::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CPropertyPage::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CPageDisk)
+<span style = "background-color:#dfd">	DDX_Control(pDX, EQueueDepth, m_EQueueDepth);
+	DDX_Control(pDX, SConnectionRate, m_SConnectionRate);
+	DDX_Control(pDX, CConnectionRate, m_CConnectionRate);
+	DDX_Control(pDX, CDataPattern, m_CDataPattern);
+	DDX_Control(pDX, CUseFixedSeed, m_CUseFixedSeed);
+	DDX_Control(pDX, TTargets, m_TTargets);
+	DDX_Control(pDX, EConnectionRate, m_EConnectionRate);
+	DDX_Control(pDX, EFixedSeed, m_EFixedSeed);
+	DDX_Control(pDX, EDiskStart, m_EDiskStart);
+	DDX_Control(pDX, EDiskSize, m_EDiskSize);</span>
+	//}}AFX_DATA_MAP
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CPageDisk, CPropertyPage)</span>
+    //{{AFX_MSG_MAP(CPageDisk)
+    ON_EN_KILLFOCUS(EQueueDepth, OnKillfocusEQueueDepth)
+    ON_EN_KILLFOCUS(EDiskSize, OnKillfocusEDiskSize)
+    ON_EN_KILLFOCUS(EDiskStart, OnKillfocusEDiskStart)
+    ON_EN_SETFOCUS(EQueueDepth, OnSetfocusEQueueDepth)
+    ON_EN_SETFOCUS(EDiskSize, OnSetfocusEDiskSize)
+    ON_EN_SETFOCUS(EDiskStart, OnSetfocusEDiskStart)
+    ON_NOTIFY(TVN_KEYDOWN, TTargets, OnKeydownTTargets)
+    ON_NOTIFY(NM_CLICK, TTargets, OnClickTTargets)
+    ON_EN_KILLFOCUS(EConnectionRate, OnKillfocusEConnectionRate)
+    ON_EN_SETFOCUS(EConnectionRate, OnSetfocusEConnectionRate)
+    ON_NOTIFY(UDN_DELTAPOS, SConnectionRate, OnDeltaposSConnectionRate)
+    ON_BN_CLICKED(CConnectionRate, OnCConnectionRate)
+	ON_CBN_SELCHANGE(CDataPattern, OnSelChangedDataPattern)
+    ON_NOTIFY(NM_SETFOCUS, TTargets, OnSetfocusTTargets)
+ON_NOTIFY(TVN_SELCHANGING, TTargets, OnSelchangingTTargets)
+    //}}AFX_MSG_MAP
+	ON_EN_CHANGE(EDiskSize, OnEnChangeEdisksize) // removed &amp;CPageDisk::XYZ syntax -- WDK does not like it
+	ON_EN_CHANGE(EDiskStart, OnEnChangeEdiskstart)
+	ON_EN_KILLFOCUS(EFixedSeed, OnKillfocusEFixedSeed)
+	ON_BN_CLICKED(CUseFixedSeed, OnCUseFixedSeed)
+	ON_EN_SETFOCUS(EFixedSeed, OnSetfocusEFixedSeed)
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+/////////////////////////////////////////////////////////////////////////////
+// CPageDisk message handlers
+BOOL CPageDisk::OnInitDialog()
+<span style = "background-color:#dfd">{
+	CPropertyPage::OnInitDialog();</span>
+
+	// Associate the image list with the TTargets tree control
+<span style = "background-color:#dfd">	m_ImageList.Create(IDB_TARGET_ICONS, TARGET_ICON_SIZE, TARGET_ICON_EXPAND, TARGET_ICON_BGCOLOR);
+	m_TTargets.SetImageList(&amp;m_ImageList, TVSIL_NORMAL);
+	m_TTargets.SetImageList(&amp;m_ImageList, TVSIL_STATE);	// Use the same image list for state images</span>
+
+	// Set the spin control to translate an up click into a positive movement.
+<span style = "background-color:#dfd">	m_SConnectionRate.SetRange(0, UD_MAXVAL);</span>
+
+<span style = "background-color:#dfd">	Reset();</span>
+	return TRUE;		// return TRUE unless you set the focus to a control
+	// EXCEPTION: OCX Property Pages should return FALSE
+<span style = "background-color:#dfd">}</span>
+
+//
+// Resetting contents of display.
+//
+void CPageDisk::Reset()
+<span style = "background-color:#dfd">{</span>
+	// Clear the target list.
+<span style = "background-color:#dfd">	m_TTargets.DeleteAllItems();</span>
+
+	// Display the conneciton rate, disk settings, and random data check.
+<span style = "background-color:#dfd">	ShowConnectionRate();
+	ShowSettings();
+	ShowDataPattern();
+	ShowFixedSeedValue();</span>
+
+<span style = "background-color:#dfd">	selected = NULL;</span>
+	highlighted = NULL;
+
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+//
+// Enabling controls on the form for user access.
+//
+void CPageDisk::EnableWindow(BOOL enable)
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+	CWnd *last_focused;
+
+	// Only enable things if a test is not running.
+<span style = "background-color:#dfd">	if (theApp.test_state != TestIdle)</span>
+		return;
+
+	// Get the current worker and manager selections.
+<span style = "background-color:#dfd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+		// Enable the target list only if the selected worker is a disk worker.
+<span style = "background-color:#dfd">		enable = enable &amp;&amp; IsType(worker-&gt;Type(), GenericDiskType);
+		m_TTargets.EnableWindow(enable);</span>
+
+		// If the selected worker is not a disk worker, switch to the network
+		// target page.
+<span style = "background-color:#dfd">		if (!IsType(worker-&gt;Type(), GenericDiskType) &amp;&amp;</span>
+		    theApp.pView-&gt;m_pPropSheet-&gt;GetActiveIndex() == DISK_PAGE) {
+<span style = "background-color:#fdd">			last_focused = GetFocus();
+			theApp.pView-&gt;m_pPropSheet-&gt;SetActivePage(NETWORK_PAGE);
+			if (last_focused)
+				last_focused-&gt;SetFocus();</span>
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case MANAGER:
+		// Enable the target list only if the selected manager has a 
+		// disk worker.
+<span style = "background-color:#dfd">		enable = enable &amp;&amp; manager-&gt;WorkerCount(GenericDiskType);
+		m_TTargets.EnableWindow(enable);</span>
+
+		// If the selected manager has no disk workers but has network server
+		// workers, switch to the network target page.
+		if (!manager-&gt;WorkerCount(GenericDiskType) &amp;&amp;
+<span style = "background-color:#dfd">		    manager-&gt;WorkerCount(GenericServerType) &amp;&amp;</span>
+		    theApp.pView-&gt;m_pPropSheet-&gt;GetActiveIndex() == DISK_PAGE) {
+<span style = "background-color:#fdd">			enable = FALSE;
+			last_focused = GetFocus();
+			theApp.pView-&gt;m_pPropSheet-&gt;SetActivePage(NETWORK_PAGE);
+			if (last_focused)
+				last_focused-&gt;SetFocus();</span>
+		}
+		break;
+	case ALL_MANAGERS:
+		// Only enable the connection rate controls if there exists a
+		// GenericDiskType worker.
+<span style = "background-color:#dfd">		enable = enable &amp;&amp; theApp.manager_list.WorkerCount(GenericDiskType);</span>
+
+		// The target list is disabled for all managers.
+<span style = "background-color:#dfd">		m_TTargets.EnableWindow(FALSE);</span>
+	}
+
+	// Enable the connection rate check box.
+<span style = "background-color:#dfd">	m_CConnectionRate.EnableWindow(enable);</span>
+
+	// Enable the random data combo box and set the default value
+<span style = "background-color:#dfd">	m_CDataPattern.EnableWindow(enable);</span>
+
+	// Enable the connection rate edit box and spin control if the connection 
+	// rate check box is checked.
+<span style = "background-color:#dfd">	m_EConnectionRate.EnableWindow(enable &amp;&amp; m_CConnectionRate.GetCheck() == 1);
+	m_SConnectionRate.EnableWindow(enable &amp;&amp; m_CConnectionRate.GetCheck() == 1);</span>
+
+	// Enable the Use Fixed Seed check box and Edit Box.
+<span style = "background-color:#dfd">	m_CUseFixedSeed.EnableWindow(enable);
+	m_EFixedSeed.EnableWindow(enable &amp;&amp; m_CUseFixedSeed.GetCheck() == 1);</span>
+
+
+	// Enable the disk parameter controls.
+<span style = "background-color:#dfd">	m_EDiskStart.EnableWindow(enable);
+	m_EDiskSize.EnableWindow(enable);
+	m_EQueueDepth.EnableWindow(enable);</span>
+
+	// The spin button sometimes needs to be redrawn even if it didn't change
+	// when the edit box was partially redrawn.
+<span style = "background-color:#dfd">	m_SConnectionRate.Invalidate(TRUE);</span>
+
+	// Redraw the page.  Note that all the child windows will be redrawn too.
+	// Also note that only windows that have already been invalidated will get
+	// redrawn, avoiding much flicker.
+<span style = "background-color:#dfd">	RedrawWindow(NULL, NULL, RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_ERASE);
+}</span>
+
+//
+// Displays the values from memory in the GUI.
+//
+void CPageDisk::ShowData()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// Only enable the display if a disk worker or a manager with disk 
+	// interfaces is selected.
+<span style = "background-color:#dfd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+	if ((theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType() == ALL_MANAGERS) ||
+<span style = "background-color:#dfd">	    (manager &amp;&amp; !manager-&gt;InterfaceCount(GenericDiskType)) ||</span>
+	    (worker &amp;&amp; !IsType(worker-&gt;Type(), GenericDiskType))) {
+<span style = "background-color:#dfd">		Reset();</span>
+		return;
+	}
+	// This is a new view of the target assignment.  
+	// It has not been modified.
+<span style = "background-color:#dfd">	selected = NULL;</span>
+	highlighted = NULL;
+	// Show the target list.
+<span style = "background-color:#dfd">	ShowTargets();</span>
+	// Set the target selection check boxes.
+<span style = "background-color:#dfd">	ShowTargetSelection();</span>
+	// Bold the last selected item.
+<span style = "background-color:#dfd">	ShowFocus();</span>
+	// Show the connection rate settings.
+<span style = "background-color:#dfd">	ShowConnectionRate();</span>
+	// Show data pattern setting
+<span style = "background-color:#dfd">	ShowDataPattern();</span>
+	// Show the Fixed Seed settings.
+<span style = "background-color:#dfd">	ShowFixedSeedValue();</span>
+	// Show the disk specific settings.
+<span style = "background-color:#dfd">	ShowSettings();</span>
+	// Enable the apropriate windows and redraw the page.
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+//
+// Fill in the target list.
+//
+void CPageDisk::ShowTargets()
+<span style = "background-color:#dfd">{</span>
+	int i, iface_count;
+	Manager *manager;
+	Target_Spec *disk;
+	TV_INSERTSTRUCT tvstruct;
+	HTREEITEM hLastLogicalParent = NULL, hLastPhysicalParent = NULL;
+
+<span style = "background-color:#dfd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	if (!manager)</span>
+		return;
+
+<span style = "background-color:#dfd">	tvstruct.item.mask = TVIF_IMAGE | TVIF_SELECTEDIMAGE | TVIF_TEXT | TVIF_STATE;</span>
+	// Set the state mask to indicate that the state parameter refers to the
+	// index of the state image in the state image list.
+<span style = "background-color:#dfd">	tvstruct.item.stateMask = TVIS_STATEIMAGEMASK;</span>
+
+	// position the disk in the tree
+	//tvstruct.hParent = TVI_ROOT;
+<span style = "background-color:#dfd">	tvstruct.hInsertAfter = TVI_LAST;</span>
+
+	// Clear the contents.
+<span style = "background-color:#dfd">	m_TTargets.DeleteAllItems();</span>
+
+<span style = "background-color:#dfd">	iface_count = manager-&gt;InterfaceCount(GenericDiskType);
+	for (i = 0; i &lt; iface_count; i++) {</span>
+		// name the disk
+<span style = "background-color:#dfd">		disk = manager-&gt;GetInterface(i, GenericDiskType);</span>
+		
+<span style = "background-color:#dfd">		tvstruct.hParent = TVI_ROOT;
+		tvstruct.item.pszText = disk-&gt;name;</span>
+
+		// set the icon associated with the disk
+<span style = "background-color:#dfd">		switch (disk-&gt;type) {</span>
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+		case PhysicalDiskTypeHasPartitions:
+			// If we know the physical disk has partitions, and the checkbox has not been
+			// selected, exclude this disk.
+			//if (IsDlgButtonChecked(m_CShowAllPhysical) == 0)
+			//	continue;
+
+<span style = "background-color:#fdd">			tvstruct.hParent = hLastLogicalParent; // continue on</span>
+#endif
+		case PhysicalDiskType:
+			// If this is an orphaned disk, we can still have valueable data on
+			// unrecognized partitions, so check the checkbox here again.
+			//if (IsDlgButtonChecked(m_CShowAllPhysical) == 0 &amp;&amp; disk-&gt;disk_info.has_partitions) 
+			//	continue;
+
+<span style = "background-color:#fdd">			tvstruct.item.iImage = TARGET_ICON_PHYSDISK;
+			tvstruct.item.iSelectedImage = TARGET_ICON_PHYSDISK;
+			tvstruct.item.state = INDEXTOSTATEIMAGEMASK(TARGET_STATE_UNKNOWN);</span>
+
+<span style = "background-color:#fdd">			hLastPhysicalParent = m_TTargets.InsertItem(&amp;tvstruct); </span>
+			
+<span style = "background-color:#fdd">			if (hLastPhysicalParent	== NULL) {
+				ErrorMessage("InsertItem() failed in CPageDisk::ShowTargets() for physical disk");
+				return;</span>
+			}
+#ifdef USE_NEW_DISCOVERY_MECHANISM
+			// Expand the items rooted at the prior
+<span style = "background-color:#fdd">			if (disk-&gt;type == PhysicalDiskTypeHasPartitions)
+				m_TTargets.Expand(hLastLogicalParent, TVE_EXPAND);</span>
+#endif
+<span style = "background-color:#fdd">			break;</span>
+
+		case LogicalDiskType:
+<span style = "background-color:#dfd">			if (disk-&gt;disk_info.ready) {
+				tvstruct.item.iImage = TARGET_ICON_LOGDISK_PREPARED;</span>
+				tvstruct.item.iSelectedImage = TARGET_ICON_LOGDISK_PREPARED;
+<span style = "background-color:#dfd">			} else {</span>
+<span style = "background-color:#fdd">				tvstruct.item.iImage = TARGET_ICON_LOGDISK_UNPREPARED;
+				tvstruct.item.iSelectedImage = TARGET_ICON_LOGDISK_UNPREPARED;</span>
+			}
+
+<span style = "background-color:#dfd">			tvstruct.item.state = INDEXTOSTATEIMAGEMASK(TARGET_STATE_UNKNOWN);</span>
+
+<span style = "background-color:#dfd">			hLastLogicalParent = m_TTargets.InsertItem(&amp;tvstruct);</span>
+
+<span style = "background-color:#dfd">			if (hLastLogicalParent == NULL) {</span>
+<span style = "background-color:#fdd">				ErrorMessage("InsertItem() failed in CPageDisk::ShowTargets() for logical disk");</span>
+				return;
+			}
+
+			break;
+		default:
+<span style = "background-color:#fdd">			ErrorMessage("Unexpected disk type in CPageDisk::ShowTargets()");
+			return;</span>
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+void CPageDisk::ShowTargetSelection()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+	HTREEITEM hiface;
+	int w, i, expected_worker, iface_count, wkr_count;
+	TargetSelType state;
+	Target_Spec target_info;
+
+	// Get the selected manager.
+<span style = "background-color:#dfd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();</span>
+	// Get the first disk item from the target tree.
+<span style = "background-color:#dfd">	hiface = m_TTargets.GetRootItem();</span>
+
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+		// A worker is selected, show its assigned targets.
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+		// Loop through the manager's disks, and mark which ones are selected
+		// for the worker.
+<span style = "background-color:#dfd">		iface_count = manager-&gt;InterfaceCount(GenericDiskType);
+		for (i = 0; i &lt; iface_count; i++) {
+			if (worker-&gt;IsTargetAssigned(manager-&gt;GetInterface(i, GenericDiskType)))</span>
+				SetSelectionCheck(hiface, TargetChecked);
+			else
+				SetSelectionCheck(hiface, TargetUnChecked);
+
+<span style = "background-color:#dfd">			hiface = GetNextTreeObject(hiface);</span>
+		}
+<span style = "background-color:#dfd">		break;</span>
+
+	case MANAGER:
+		// Show the targets assigned to a manager's workers if possible.
+<span style = "background-color:#dfd">		expected_worker = 0;</span>
+
+		// Loop through the manager's disks, and see if they are assigned
+		// to the expected worker.  If not, gray all of them and return.
+<span style = "background-color:#dfd">		iface_count = manager-&gt;InterfaceCount(GenericDiskType);
+		wkr_count = manager-&gt;WorkerCount(GenericDiskType);
+		for (i = 0; i &lt; iface_count; i++) {
+			memcpy(&amp;target_info, manager-&gt;GetInterface(i, GenericDiskType), sizeof(Target_Spec));
+			state = TargetUnChecked;
+			for (w = 0; w &lt; wkr_count; w++) {</span>
+				// If the disk is selected by any other than expected
+				// worker, all the disk check boxes are grayed.
+<span style = "background-color:#dfd">				if (manager-&gt;GetWorker(w, GenericDiskType)-&gt;IsTargetAssigned(&amp;target_info)) {
+					if (w != expected_worker || state != TargetUnChecked) {</span>
+<span style = "background-color:#fdd">						SetAllCheck(TargetGrayed);</span>
+						return;
+					}
+					state = TargetChecked;
+<span style = "background-color:#dfd">					if (++expected_worker == wkr_count) {</span>
+						expected_worker = 0;
+					}
+				}
+			}
+			
+<span style = "background-color:#dfd">			SetSelectionCheck(hiface, state);</span>
+			
+<span style = "background-color:#dfd">			hiface = GetNextTreeObject(hiface);</span>
+		}
+		break;
+	default:
+		SetAllCheck(TargetGrayed);
+		break;
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Displays the connection rate settings for the current selection in the
+// worker view.  If the selection is a manager or all managers, displays
+// a value if all the children's values are the same.
+//
+void CPageDisk::ShowConnectionRate()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+<span style = "background-color:#fdd">	int trans_per_conn = 0;
+	int test_connection_rate = 0;</span>
+
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+		// update controls with worker's data
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		if (IsType(worker-&gt;Type(), GenericDiskType)) {
+			trans_per_conn = worker-&gt;GetTransPerConn(GenericDiskType);
+			test_connection_rate = worker-&gt;GetConnectionRate(GenericDiskType);</span>
+		}
+<span style = "background-color:#dfd">		break;</span>
+	case MANAGER:
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		trans_per_conn = manager-&gt;GetTransPerConn(GenericDiskType);
+		test_connection_rate = manager-&gt;GetConnectionRate(GenericDiskType);</span>
+		break;
+	default:
+<span style = "background-color:#dfd">		trans_per_conn = theApp.manager_list.GetTransPerConn(GenericDiskType);
+		test_connection_rate = theApp.manager_list.GetConnectionRate(GenericDiskType);</span>
+		break;
+	}
+	// If the test connection rate settings are different between a manager's
+	// workers, set the state of the check box to AUTO3STATE and disable the
+	// edit box and spin control.
+<span style = "background-color:#dfd">	SetDlgItemInt(EConnectionRate, trans_per_conn);
+	if (test_connection_rate == AMBIGUOUS_VALUE) {
+		m_CConnectionRate.SetButtonStyle(BS_AUTO3STATE);
+		m_EConnectionRate.SetPasswordChar(32);
+		m_EConnectionRate.Invalidate(TRUE);</span>
+
+		// Set check box to undetermined state.
+<span style = "background-color:#dfd">		CheckDlgButton(CConnectionRate, 2);</span>
+	} else {
+<span style = "background-color:#dfd">		m_CConnectionRate.SetButtonStyle(BS_AUTOCHECKBOX);
+		CheckDlgButton(CConnectionRate, test_connection_rate);</span>
+
+<span style = "background-color:#dfd">		if (test_connection_rate == ENABLED_VALUE &amp;&amp; trans_per_conn != AMBIGUOUS_VALUE) {
+			m_EConnectionRate.SetPasswordChar(0);</span>
+		} else {
+<span style = "background-color:#dfd">			m_EConnectionRate.SetPasswordChar(32);
+			m_EConnectionRate.Invalidate();</span>
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+
+void CPageDisk::ShowDataPattern()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+	int data_pattern = 1;
+
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+		// update controls with worker's data
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		if (IsType(worker-&gt;Type(), GenericDiskType)) {
+			data_pattern = worker-&gt;GetDataPattern(GenericDiskType);</span>
+		}
+<span style = "background-color:#dfd">		break;</span>
+	case MANAGER:
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		data_pattern = manager-&gt;GetDataPattern(GenericDiskType);</span>
+		break;
+	default:
+<span style = "background-color:#dfd">		data_pattern = theApp.manager_list.GetDataPattern(GenericDiskType);</span>
+		break;
+	}
+<span style = "background-color:#dfd">	m_CDataPattern.SetCurSel(data_pattern);
+}</span>
+
+//
+// Displays the fixed seed value for the current selection in the
+// worker view.  If the selection is a manager or all managers, displays
+// a value if all the children's values are the same.
+//
+void CPageDisk::ShowFixedSeedValue()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+<span style = "background-color:#fdd">	DWORDLONG fixed_seed_value = 0;
+	BOOL use_fixed_seed = 0;</span>
+
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+		// update controls with worker's data
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		if (IsType(worker-&gt;Type(), GenericDiskType)) {
+			fixed_seed_value = worker-&gt;GetFixedSeedValue(GenericDiskType);
+			use_fixed_seed = worker-&gt;GetUseFixedSeed(GenericDiskType);</span>
+		}
+<span style = "background-color:#dfd">		break;</span>
+	case MANAGER:
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		fixed_seed_value = manager-&gt;GetFixedSeedValue(GenericDiskType);
+		use_fixed_seed = manager-&gt;GetUseFixedSeed(GenericDiskType);</span>
+		break;
+	default:
+<span style = "background-color:#dfd">		fixed_seed_value = theApp.manager_list.GetFixedSeedValue(GenericDiskType);
+		use_fixed_seed = theApp.manager_list.GetUseFixedSeed(GenericDiskType);</span>
+		break;
+	}
+	// If the fixed seed values are different between a manager's
+	// workers, set the state of the check box to AUTO3STATE and disable the
+	// edit box and spin control.
+<span style = "background-color:#dfd">	SetDlgItemInt64(EFixedSeed, fixed_seed_value, false);
+	if (use_fixed_seed == AMBIGUOUS_VALUE) {
+		m_CUseFixedSeed.SetButtonStyle(BS_AUTO3STATE);
+		m_EFixedSeed.SetPasswordChar(32);
+		m_EFixedSeed.Invalidate(TRUE);</span>
+
+		// Set check box to undetermined state.
+<span style = "background-color:#dfd">		CheckDlgButton(CUseFixedSeed, 2);</span>
+	} else {
+<span style = "background-color:#dfd">		m_CUseFixedSeed.SetButtonStyle(BS_AUTOCHECKBOX);
+		CheckDlgButton(CUseFixedSeed, use_fixed_seed);</span>
+
+<span style = "background-color:#dfd">		if (use_fixed_seed == ENABLED_VALUE &amp;&amp; fixed_seed_value != (DWORDLONG)AMBIGUOUS_VALUE) {
+			m_EFixedSeed.SetPasswordChar(0);</span>
+		} else {
+<span style = "background-color:#dfd">			m_EFixedSeed.SetPasswordChar(32);
+			m_EFixedSeed.Invalidate();</span>
+		}
+	}
+<span style = "background-color:#dfd">}</span>
+	
+//
+// Shows the selected item's disk starting sector, size, and queue depth.
+//
+void CPageDisk::ShowSettings()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+	DWORDLONG disk_size;
+	DWORDLONG disk_start;
+	int queue_depth;
+	int data_pattern;
+
+	// Get the values for the disk settings from memory.
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#dfd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		disk_size = worker-&gt;GetDiskSize(GenericDiskType);
+		disk_start = worker-&gt;GetDiskStart(GenericDiskType);
+		queue_depth = worker-&gt;GetQueueDepth(GenericDiskType);
+		data_pattern = worker-&gt;GetDataPattern(GenericDiskType);
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#dfd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		disk_size = manager-&gt;GetDiskSize(GenericDiskType);
+		disk_start = manager-&gt;GetDiskStart(GenericDiskType);
+		queue_depth = manager-&gt;GetQueueDepth(GenericDiskType);
+		data_pattern = manager-&gt;GetDataPattern(GenericDiskType);</span>
+		break;
+	default:
+<span style = "background-color:#dfd">		disk_size = theApp.manager_list.GetDiskSize(GenericDiskType);
+		disk_start = theApp.manager_list.GetDiskStart(GenericDiskType);
+		queue_depth = theApp.manager_list.GetQueueDepth(GenericDiskType);
+		data_pattern = theApp.manager_list.GetDataPattern(GenericDiskType);</span>
+	}
+	// If there is a displayable value, display it.  Otherwise, hide the content
+	// of the edit box.
+<span style = "background-color:#dfd">	if (disk_size == AMBIGUOUS_VALUE) {
+		m_EDiskSize.SetPasswordChar(32);
+		m_EDiskSize.Invalidate();
+	} else {
+		m_EDiskSize.SetPasswordChar(0);
+		SetDlgItemInt64(EDiskSize, disk_size, false);</span>
+	}
+
+<span style = "background-color:#dfd">	if (disk_start == AMBIGUOUS_VALUE) {
+		m_EDiskStart.SetPasswordChar(32);
+		m_EDiskStart.Invalidate();
+	} else {
+		m_EDiskStart.SetPasswordChar(0);
+		SetDlgItemInt64(EDiskStart, disk_start, false);</span>
+	}
+
+<span style = "background-color:#dfd">	if (queue_depth == AMBIGUOUS_VALUE) {
+		m_EQueueDepth.SetPasswordChar(32);
+		m_EQueueDepth.Invalidate();
+	} else {
+		m_EQueueDepth.SetPasswordChar(0);
+		SetDlgItemInt(EQueueDepth, queue_depth);</span>
+	}
+
+<span style = "background-color:#dfd">	if (data_pattern == AMBIGUOUS_VALUE) {
+		m_CDataPattern.SetCurSel(-1);</span>
+	} else {
+<span style = "background-color:#dfd">		m_CDataPattern.SetCurSel(data_pattern);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Sets the focus to the item specified by cursor movement.
+//
+void CPageDisk::ShowFocus()
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM hdisk;
+	
+<span style = "background-color:#dfd">	hdisk = m_TTargets.GetRootItem();</span>
+	// recurse into tree; assumes only 2 levels!!!
+<span style = "background-color:#dfd">	while(hdisk) {</span>
+		if (hdisk == highlighted) {
+			m_TTargets.SetItemState(hdisk, TVIS_SELECTED, TVIS_SELECTED);
+		} else {
+			m_TTargets.SetItemState(hdisk, NULL, TVIS_SELECTED);
+		}
+
+<span style = "background-color:#dfd">		hdisk = GetNextTreeObject(hdisk);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Used to select one or more targets.  May or may not clear any pervious
+// selection depending on the replace parameter.
+//
+void CPageDisk::SelectRange(HTREEITEM hstart, HTREEITEM hend, BOOL replace, TargetSelType state)
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hdisk;
+	BOOL in_range;
+
+<span style = "background-color:#fdd">	if (!hstart || !hend) {
+		ErrorMessage("Unexpectedly found start or end point of selection"</span>
+			     " range equal NULL in CPageDisk::SelectRange().");
+		return;
+	}
+	// Clear all the check boxes if forced to or if a multiple selection occurs.
+<span style = "background-color:#fdd">	if (replace)
+		SetAllCheck(TargetUnChecked);</span>
+
+	// The last selection is the start point.
+<span style = "background-color:#fdd">	selected = hstart;
+	highlighted = hend;</span>
+
+	// Note that if both endpoints are the same, other selections will be 
+	// unchecked depending on the value of the 'replace' variable.
+<span style = "background-color:#fdd">	if (hstart == hend) {
+		SetSelectionCheck(hstart, state);</span>
+		return;
+	}
+	// Since we don't know the relationship between the clicked item
+	// and the last selection (up or down), we do not know what
+	// direction to select targets in.  Do a linear seach of the target tree
+	// until we find either the start or end point.  From there, mark
+	// all the targets the specified selection type until we reach the end or
+	// start (whichever we didn't get before).
+<span style = "background-color:#fdd">	in_range = FALSE;
+	hdisk = m_TTargets.GetRootItem();</span>
+	// recurse into tree; assumes only 2 levels!!!
+<span style = "background-color:#fdd">	while(hdisk) {</span>
+		// Do we have either the previously selected item or the
+		// clicked item?                        
+<span style = "background-color:#fdd">		if (hdisk == hstart || hdisk == hend)
+			in_range = !in_range;</span>
+
+<span style = "background-color:#fdd">		if (in_range || hdisk == hstart || hdisk == hend)
+			SetSelectionCheck(hdisk, state);</span>
+
+<span style = "background-color:#fdd">		hdisk = GetNextTreeObject(hdisk);</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Sets the specified tree item's check box to the specified state.
+//
+void CPageDisk::SetSelectionCheck(HTREEITEM hitem, TargetSelType selection)
+<span style = "background-color:#dfd">{</span>
+	UINT state;
+
+<span style = "background-color:#dfd">	switch (selection) {</span>
+	case TargetUnChecked:
+<span style = "background-color:#dfd">		state = INDEXTOSTATEIMAGEMASK(TARGET_STATE_UNCHECKED);
+		break;</span>
+	case TargetChecked:
+<span style = "background-color:#dfd">		state = INDEXTOSTATEIMAGEMASK(TARGET_STATE_CHECKED);</span>
+		break;
+	case TargetGrayed:
+	default:
+<span style = "background-color:#fdd">		state = INDEXTOSTATEIMAGEMASK(TARGET_STATE_UNKNOWN);</span>
+		break;
+	}
+	// set the interface icon's associated state icon
+<span style = "background-color:#dfd">	if (!m_TTargets.SetItemState(hitem, state, TVIS_STATEIMAGEMASK))</span>
+	{
+<span style = "background-color:#fdd">		DWORD error = GetLastError();
+		ErrorMessage("SetItemState() failed in CPageDisk::SetSelectionCheck()");</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Retrieves the target's check box state.
+//
+TargetSelType CPageDisk::GetSelectionCheck(HTREEITEM hitem)
+<span style = "background-color:#fdd">{
+	switch (STATEIMAGEMASKTOINDEX(m_TTargets.GetItemState(hitem, TVIS_STATEIMAGEMASK))) {</span>
+	case TARGET_STATE_CHECKED:
+<span style = "background-color:#fdd">		return TargetChecked;</span>
+	case TARGET_STATE_UNCHECKED:
+<span style = "background-color:#fdd">		return TargetUnChecked;</span>
+	case TARGET_STATE_UNKNOWN:
+	default:
+<span style = "background-color:#fdd">		return TargetGrayed;</span>
+	}
+<span style = "background-color:#fdd">}</span>
+
+//
+// Sets all the interface's check box to the specified state.
+//
+void CPageDisk::SetAllCheck(TargetSelType selection)
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hdisk;
+
+	// Get the first manager item of the target tree
+<span style = "background-color:#fdd">	hdisk = m_TTargets.GetRootItem();</span>
+	// recurse into tree; assumes only 2 levels!!!
+<span style = "background-color:#fdd">	while(hdisk) {
+		SetSelectionCheck(hdisk, selection);
+		hdisk = GetNextTreeObject(hdisk);</span>
+	}
+
+<span style = "background-color:#fdd">}</span>
+
+//
+// Updates the queue depth if necessary.
+//
+void CPageDisk::OnKillfocusEQueueDepth()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// If the disk queue was left blank, use the previous value
+<span style = "background-color:#dfd">	if (!m_EQueueDepth.LineLength()) {</span>
+<span style = "background-color:#fdd">		ShowSettings();
+	}</span>
+	// Verify that the queue depth is &gt; 0.
+<span style = "background-color:#dfd">	else if (GetDlgItemInt(EQueueDepth) &lt;= 0) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("# of Outstanding I/Os cannot be 0.");
+		ShowSettings();</span>
+		return;
+	} else {
+		// Seeing what kind of item is selected.
+<span style = "background-color:#dfd">		switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+		case WORKER:
+<span style = "background-color:#fdd">			worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+			worker-&gt;SetQueueDepth(GetDlgItemInt(EQueueDepth));
+			break;</span>
+		case MANAGER:
+<span style = "background-color:#fdd">			manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+			manager-&gt;SetQueueDepth(GetDlgItemInt(EQueueDepth), GenericDiskType);
+			break;</span>
+		case ALL_MANAGERS:
+<span style = "background-color:#dfd">			theApp.manager_list.SetQueueDepth(GetDlgItemInt(EQueueDepth), GenericDiskType);</span>
+			break;
+		}
+	}
+
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+//
+// Updates the disk size to access if necessary.
+//
+void CPageDisk::OnKillfocusEDiskSize()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// If the disk size was left blank, use the previous value.
+<span style = "background-color:#dfd">	if (!m_EDiskSize.LineLength())</span>
+<span style = "background-color:#fdd">		ShowSettings();</span>
+	else {
+		// Seeing what kind of item is selected.
+<span style = "background-color:#dfd">		switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+		case WORKER:
+			// Recording disk attributes.
+<span style = "background-color:#dfd">			worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+			worker-&gt;SetDiskSize(GetDlgItemInt64(EDiskSize));
+			break;</span>
+		case MANAGER:
+<span style = "background-color:#fdd">			manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+			manager-&gt;SetDiskSize(GetDlgItemInt64(EDiskSize));
+			break;</span>
+		case ALL_MANAGERS:
+<span style = "background-color:#fdd">			theApp.manager_list.SetDiskSize(GetDlgItemInt64(EDiskSize));</span>
+			break;
+		}
+	}
+
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+//
+// Updates the starting sector if necessary.
+//
+void CPageDisk::OnKillfocusEDiskStart()
+<span style = "background-color:#dfd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// If the disk starting sector was left blank, use the previous value.
+<span style = "background-color:#dfd">	if (!m_EDiskStart.LineLength())</span>
+<span style = "background-color:#fdd">		ShowSettings();</span>
+	else
+		// Seeing what kind of item is selected.
+<span style = "background-color:#dfd">		switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+		case WORKER:
+<span style = "background-color:#dfd">			worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+			worker-&gt;SetDiskStart(GetDlgItemInt64(EDiskStart));
+			break;</span>
+		case MANAGER:
+<span style = "background-color:#fdd">			manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+			manager-&gt;SetDiskStart(GetDlgItemInt64(EDiskStart));
+			break;</span>
+		case ALL_MANAGERS:
+<span style = "background-color:#fdd">			theApp.manager_list.SetDiskStart(GetDlgItemInt64(EDiskStart));</span>
+			break;
+		}
+
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+///////////////////////////////////////////////////////////////////////////////
+// 
+// Makes the contents of the edit boxes visible when they receive the focus.
+//
+///////////////////////////////////////////////////////////////////////////////
+void CPageDisk::OnSetfocusEQueueDepth()
+<span style = "background-color:#dfd">{
+	EditSetfocus(&amp;m_EQueueDepth);</span>
+}
+
+void CPageDisk::OnSetfocusEDiskSize()
+<span style = "background-color:#dfd">{
+	EditSetfocus(&amp;m_EDiskSize);</span>
+}
+
+void CPageDisk::OnSetfocusEDiskStart()
+<span style = "background-color:#dfd">{
+	EditSetfocus(&amp;m_EDiskStart);</span>
+}
+
+void CPageDisk::EditSetfocus(CEdit * edit)
+<span style = "background-color:#dfd">{
+	if (!edit-&gt;GetPasswordChar())</span>
+		return;
+
+	// Select everything in the edit box.
+<span style = "background-color:#fdd">	edit-&gt;SetSel(0, -1);</span>
+	// Clear selection.
+<span style = "background-color:#fdd">	edit-&gt;Clear();</span>
+	// Make the characters visible.
+<span style = "background-color:#fdd">	edit-&gt;SetPasswordChar(0);</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Mouse click handler for target tree.
+//
+void CPageDisk::OnClickTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	CPoint point;</span>
+	TV_HITTESTINFO test_info;
+	TargetSelType state;
+
+	// Get the cursor position.
+<span style = "background-color:#fdd">	GetCursorPos(&amp;point);
+	test_info.pt = point;
+	m_TTargets.ScreenToClient(&amp;(test_info.pt));</span>
+
+	// Check to see whether the cursor is on an item.
+<span style = "background-color:#fdd">	m_TTargets.HitTest(&amp;test_info);</span>
+
+	// Check that we have an disk item.
+<span style = "background-color:#fdd">	if (!test_info.hItem)</span>
+		return;
+
+	// A new target assignment is being made.  Clear the results since they are
+	// for a configuration we no longer have.
+<span style = "background-color:#fdd">	theApp.pView-&gt;ResetDisplayforNewTest();</span>
+
+	// Toggle the selection if the control key is pressed.
+<span style = "background-color:#fdd">	if (GetKeyState(VK_CONTROL) &amp; 0x8000 &amp;&amp; GetSelectionCheck(test_info.hItem) == TargetChecked) {
+		state = TargetUnChecked;</span>
+	} else {
+<span style = "background-color:#fdd">		state = TargetChecked;</span>
+	}
+
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+	case MANAGER:
+		// A shift click extends the selection from the last selected item
+		// to the currently focused item.  When the control key is also
+		// pressed, any previous selection is not cleared.
+<span style = "background-color:#fdd">		if ((GetKeyState(VK_SHIFT) &amp; 0x8000) &amp;&amp; selected) {</span>
+			// We have a previous item (not the first click) and the shift
+			// key is down.
+<span style = "background-color:#fdd">			SelectRange(selected, test_info.hItem, !(GetKeyState(VK_CONTROL) &amp; 0x8000));
+		} else if (GetKeyState(VK_CONTROL) &amp; 0x8000) {</span>
+			// The control key is down.
+<span style = "background-color:#fdd">			SelectRange(test_info.hItem, test_info.hItem, FALSE, state);
+		} else {
+			SelectRange(test_info.hItem, test_info.hItem, TRUE, state);</span>
+		}
+		break;
+	default:
+<span style = "background-color:#fdd">		ErrorMessage("Unexpected selection type in CPageNetwork::" "OnClickTTargets().");</span>
+		return;
+	}
+
+	// immediately refresh the display (create/delete NetClients as needed)
+<span style = "background-color:#fdd">	StoreTargetSelection();</span>
+
+<span style = "background-color:#fdd">	*pResult = 0;
+}</span>
+
+//
+// Multi selection keyboard handler for the tree control.
+//
+void CPageDisk::KeyMultiSel(WORD wVKey)
+<span style = "background-color:#fdd">{
+	BOOL shift = GetKeyState(VK_SHIFT) &amp; 0x8000;
+	BOOL control = GetKeyState(VK_CONTROL) &amp; 0x8000;</span>
+
+	// Make sure there are disks.
+<span style = "background-color:#fdd">	if (!highlighted)</span>
+		return;
+
+<span style = "background-color:#fdd">	switch (wVKey) {</span>
+	case VK_UP:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;
+		SetFocusUp();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+		break;
+	case VK_DOWN:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;</span>
+
+<span style = "background-color:#fdd">		SetFocusDown();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_HOME:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;</span>
+
+<span style = "background-color:#fdd">		SetFocusHome();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_END:
+<span style = "background-color:#fdd">		if (!selected &amp;&amp; shift)
+			selected = highlighted;</span>
+
+<span style = "background-color:#fdd">		SetFocusEnd();</span>
+		// Only select items if the shift key is pressed.
+		if (shift) {
+			SelectRange(selected, highlighted, !control, TargetChecked);
+			StoreTargetSelection();
+		}
+<span style = "background-color:#fdd">		break;</span>
+	case VK_SPACE:
+<span style = "background-color:#fdd">		if (shift) {</span>
+			// Extend the selection. Clear any other items if the control
+			// key is not pressed.
+<span style = "background-color:#fdd">			SelectRange(selected, highlighted, !control, TargetChecked);
+		} else if (control) {	// toggle.</span>
+			// Toggle the selection, but do not clear any other items.
+<span style = "background-color:#fdd">			if (GetSelectionCheck(highlighted) == TargetChecked) {</span>
+				SelectRange(highlighted, highlighted, FALSE, TargetUnChecked);
+			} else {
+				SelectRange(highlighted, highlighted, FALSE, TargetChecked);
+			}
+<span style = "background-color:#fdd">		} else {	// normal</span>
+			// Select only the highlighted item and clear any other.
+<span style = "background-color:#fdd">			SelectRange(highlighted, highlighted, TRUE, TargetChecked);</span>
+		}
+
+<span style = "background-color:#fdd">		ShowFocus();</span>
+		StoreTargetSelection();
+<span style = "background-color:#fdd">		break;</span>
+	case 'A':
+<span style = "background-color:#fdd">		if (control) {
+			SetAllCheck(TargetChecked);</span>
+			StoreTargetSelection();
+		}
+	}
+<span style = "background-color:#fdd">}</span>
+
+// 
+// The SetFocusUp, Down, Home, and End functions handle keyboard input for
+// the target tree and move the focus.
+//
+void CPageDisk::SetFocusUp()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hdisk;
+
+<span style = "background-color:#fdd">	hdisk = m_TTargets.GetPrevSiblingItem(highlighted);</span>
+
+<span style = "background-color:#fdd">	if (!hdisk) 
+		hdisk = m_TTargets.GetParentItem(highlighted);
+	else if (m_TTargets.ItemHasChildren(hdisk)) {
+		while (m_TTargets.GetChildItem(hdisk)) {
+			hdisk = m_TTargets.GetNextSiblingItem(hdisk);</span>
+		}
+	}
+	// Does the currently selected interface have a previous sibling?
+<span style = "background-color:#fdd">	if (!hdisk)</span>
+		return;
+
+	// Yes. Set the focus to the sibling.
+<span style = "background-color:#fdd">	highlighted = hdisk;</span>
+
+	// Make the newly focused disk visible.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+void CPageDisk::SetFocusDown()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hdisk;
+
+	//hdisk = m_TTargets.GetNextSiblingItem(highlighted);
+	
+<span style = "background-color:#fdd">	hdisk = GetNextTreeObject(highlighted);</span>
+
+	// Does the currently selected disk have a next sibling?
+<span style = "background-color:#fdd">	if (!hdisk)</span>
+		return;
+
+	// Yes. Set the focus to the sibling.
+<span style = "background-color:#fdd">	highlighted = hdisk;</span>
+
+	// Make the newly focused disk visible.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+void CPageDisk::SetFocusHome()
+<span style = "background-color:#fdd">{</span>
+	// Set the focus to the first disk.
+<span style = "background-color:#fdd">	highlighted = m_TTargets.GetRootItem();</span>
+	// Make the newly focused disk visible.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+//
+// Highlight the last interface of the last manager.
+//
+void CPageDisk::SetFocusEnd()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hdisk;
+
+	// Get the last disk.
+<span style = "background-color:#fdd">	hdisk = m_TTargets.GetRootItem();
+	while (m_TTargets.GetNextSiblingItem(hdisk))
+		hdisk = m_TTargets.GetNextSiblingItem(hdisk);</span>
+
+<span style = "background-color:#fdd">	highlighted = hdisk;</span>
+
+	// Make the newly focused disk visible.
+<span style = "background-color:#fdd">	m_TTargets.EnsureVisible(highlighted);
+	ShowFocus();
+}</span>
+
+void CPageDisk::OnKeydownTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	TV_KEYDOWN *pTVKeyDown = (TV_KEYDOWN *) pNMHDR;
+
+	// A new target assignment is being made.  Clear the results since they are
+	// for a configuration we no longer have.
+<span style = "background-color:#fdd">	theApp.pView-&gt;ResetDisplayforNewTest();</span>
+
+<span style = "background-color:#fdd">	KeyMultiSel(pTVKeyDown-&gt;wVKey);</span>
+	*pResult = 0;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Stores the targets that have been selected by the user with the appropriate
+// worker.
+//
+void CPageDisk::StoreTargetSelection()
+<span style = "background-color:#fdd">{</span>
+	HTREEITEM hdisk;
+	Manager *manager;
+	Worker *worker;
+	int target = 0;
+	int next_worker;
+
+	// Get the selected manager and worker.
+<span style = "background-color:#fdd">	manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+	worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();</span>
+
+	// Make sure we have a selected manager (or worker).
+<span style = "background-color:#fdd">	if (!manager) {
+		ErrorMessage("Unexpectedly found no selected manager in " "CPageDisk::StoreTargetSelection.");</span>
+		return;
+	}
+
+<span style = "background-color:#fdd">	if (worker) {</span>
+		// Assign the targets to the selected worker in the order that they
+		// appear in the GUI.
+<span style = "background-color:#fdd">		worker-&gt;RemoveTargets(GenericDiskType);</span>
+#if 0
+		for (hdisk = m_TTargets.GetRootItem(); hdisk; hdisk = m_TTargets.GetNextSiblingItem(hdisk)) {
+			if (GetSelectionCheck(hdisk) == TargetChecked)
+				worker-&gt;AddTarget(manager-&gt;GetInterface(target, GenericDiskType));
+			target++;
+		}
+#else
+<span style = "background-color:#fdd">		hdisk = m_TTargets.GetRootItem();</span>
+		// recurse into tree; assumes only 2 levels!!!
+<span style = "background-color:#fdd">		while(hdisk) {
+			if (GetSelectionCheck(hdisk) == TargetChecked)
+				worker-&gt;AddTarget(manager-&gt;GetInterface(target, GenericDiskType));
+			target++;</span>
+
+			//hdisk = GetNextTreeObject(hdisk);
+<span style = "background-color:#fdd">			hdisk = m_TTargets.GetNextVisibleItem(hdisk);</span>
+		}
+#endif
+<span style = "background-color:#fdd">	} else {</span>
+		// Clear the assigned targets from all the manager's workers.
+<span style = "background-color:#fdd">		manager-&gt;RemoveTargets(GenericDiskType);</span>
+
+		// Set the first worker to receive targets.
+<span style = "background-color:#fdd">		worker = manager-&gt;GetWorker(0, GenericDiskType);
+		next_worker = 0;</span>
+
+<span style = "background-color:#fdd">		hdisk = m_TTargets.GetRootItem();</span>
+		// recurse into tree; assumes only 2 levels!!!
+<span style = "background-color:#fdd">		while(hdisk) {
+			if (GetSelectionCheck(hdisk) == TargetChecked) {
+				worker-&gt;AddTarget(manager-&gt;GetInterface(target, GenericDiskType));</span>
+
+				// Update who the next worker to receive a target is.
+<span style = "background-color:#fdd">				if (++next_worker &gt;= manager-&gt;WorkerCount(GenericDiskType))</span>
+					next_worker = 0;
+<span style = "background-color:#fdd">				worker = manager-&gt;GetWorker(next_worker, GenericDiskType);</span>
+			}
+<span style = "background-color:#fdd">			target++;</span>
+
+<span style = "background-color:#fdd">			hdisk = m_TTargets.GetNextVisibleItem(hdisk); //GetNextTreeObject(hdisk);</span>
+		}
+	}
+<span style = "background-color:#fdd">	ShowTargetSelection();
+}</span>
+
+void CPageDisk::OnKillfocusEConnectionRate()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// Restores the previous value if the edit box was left blank.
+<span style = "background-color:#fdd">	if (!m_EConnectionRate.LineLength()) {
+		ShowConnectionRate();</span>
+		return;
+	}
+	// Seeing what kind of item is selected.
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#fdd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		worker-&gt;SetTransPerConn(GetDlgItemInt(EConnectionRate));
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#fdd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		manager-&gt;SetTransPerConn(GetDlgItemInt(EConnectionRate), GenericDiskType);
+		break;</span>
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		theApp.manager_list.SetTransPerConn(GetDlgItemInt(EConnectionRate), GenericDiskType);</span>
+		break;
+	}
+
+<span style = "background-color:#fdd">	EnableWindow();
+}</span>
+
+void CPageDisk::OnSetfocusEConnectionRate()
+<span style = "background-color:#fdd">{</span>
+	// Select everything in the edit box.
+<span style = "background-color:#fdd">	EditSetfocus(&amp;m_EConnectionRate);</span>
+}
+
+//
+// Sets the focus to the first disk item.
+//
+void CPageDisk::OnSetfocusTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	if (!highlighted) {</span>
+		//Find the first disk.
+<span style = "background-color:#fdd">		highlighted = m_TTargets.GetRootItem();</span>
+	}
+	// If we found a disk, show the focus.
+<span style = "background-color:#fdd">	if (highlighted) {
+		ShowFocus();</span>
+	}
+	*pResult = 0;
+<span style = "background-color:#fdd">}</span>
+
+void CPageDisk::OnDeltaposSConnectionRate(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{
+	int trans_per_conn = GetDlgItemInt(EConnectionRate);</span>
+	NM_UPDOWN *pNMUpDown = (NM_UPDOWN *) pNMHDR;
+
+<span style = "background-color:#fdd">	trans_per_conn += pNMUpDown-&gt;iDelta;</span>
+	if (trans_per_conn &lt; 0) {
+		trans_per_conn = 0;
+	}
+<span style = "background-color:#fdd">	SetDlgItemInt(EConnectionRate, trans_per_conn);</span>
+	*pResult = 0;
+<span style = "background-color:#fdd">}</span>
+
+//
+// Enables and disables the connection rate edit box depending on the check box state.
+void CPageDisk::OnCConnectionRate()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// change the check box to true/false only (having clicked, cannot 
+	// return to intermediate state)
+<span style = "background-color:#fdd">	m_CConnectionRate.SetButtonStyle(BS_AUTOCHECKBOX);
+	if (IsDlgButtonChecked(CConnectionRate) == 1 &amp;&amp; GetDlgItemInt(EConnectionRate) != AMBIGUOUS_VALUE) {</span>
+		// Connection rate testing is enabled.  Update the edit box.
+<span style = "background-color:#fdd">		m_EConnectionRate.SetPasswordChar(0);
+	} else {
+		m_EConnectionRate.SetPasswordChar(32);</span>
+	}
+	// Seeing what kind of item is selected.
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#fdd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		worker-&gt;SetConnectionRate(m_CConnectionRate.GetCheck());
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#fdd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		manager-&gt;SetConnectionRate(m_CConnectionRate.GetCheck(), GenericDiskType);
+		break;</span>
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		theApp.manager_list.SetConnectionRate(m_CConnectionRate.GetCheck(), GenericDiskType);</span>
+		break;
+	}
+<span style = "background-color:#fdd">	EnableWindow();
+}</span>
+
+void CPageDisk::OnSelChangedDataPattern()
+<span style = "background-color:#dfd">{
+	switch (m_CDataPattern.GetCurSel()) {</span>
+		case DATA_PATTERN_REPEATING_BYTES:
+<span style = "background-color:#dfd">			if(m_RepeatingBytesMessageBox_Shown==false)
+				AfxMessageBox("'Repeating bytes' is defined as: Each IO having a unique set of repeating bytes (ex: First IO is all A's, second IO is all B's)\n\nThe command to command delay is slightly (~12%, but can be longer in high IO environments) longer with this configuration.");
+			m_RepeatingBytesMessageBox_Shown = true;</span>
+			break;
+		case DATA_PATTERN_PSEUDO_RANDOM:
+<span style = "background-color:#fdd">			if(m_PseudoRandomMessageBox_Shown==false)
+				AfxMessageBox("'Pseudo random' is defined as: A buffer being filled with random data and is reused for every write IO.\n\nNote: This was the behavior of all IOMeter versions up to and including 2006.07.27");
+			m_PseudoRandomMessageBox_Shown = true;
+			break;</span>
+		case DATA_PATTERN_FULL_RANDOM:
+<span style = "background-color:#fdd">			if(m_FullRandomMessageBox_Shown==false)
+				AfxMessageBox("'Full random' is defind as: A 16MB buffer is generated by IOMeter which is filled with random data. Each write IO randomly indexes into this buffer.\n\nNote: The 16MB buffer may impact performance tests that are sensitive to memory utilization. Drives that implement dedupe compression may still compress this data.");
+			m_FullRandomMessageBox_Shown = true;</span>
+			break;
+	}
+
+	Manager *manager;
+	Worker *worker;
+
+	// Seeing what kind of item is selected.
+<span style = "background-color:#dfd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+		case WORKER:
+<span style = "background-color:#dfd">			worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+			worker-&gt;SetDataPattern(m_CDataPattern.GetCurSel());
+			break;</span>
+		case MANAGER:
+<span style = "background-color:#fdd">			manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+			manager-&gt;SetDataPattern(m_CDataPattern.GetCurSel(), GenericDiskType);
+			break;</span>
+		case ALL_MANAGERS:
+<span style = "background-color:#fdd">			theApp.manager_list.SetDataPattern(m_CDataPattern.GetCurSel(), GenericDiskType);</span>
+			break;
+	}
+<span style = "background-color:#dfd">	EnableWindow();
+}</span>
+
+void CPageDisk::OnSelchangingTTargets(NMHDR * pNMHDR, LRESULT * pResult)
+<span style = "background-color:#fdd">{</span>
+	NM_TREEVIEW *pNMTreeView = (NM_TREEVIEW *) pNMHDR;
+
+<span style = "background-color:#fdd">	theApp.pView-&gt;ResetDisplayforNewTest();
+	ShowFocus();</span>
+
+	// Return 1 so that the control doesn't update the selection since
+	// we are managing it.
+	*pResult = 1;
+<span style = "background-color:#fdd">}</span>
+
+HTREEITEM CPageDisk::GetNextTreeObject(HTREEITEM hnode)
+<span style = "background-color:#dfd">{</span>
+	HTREEITEM htemp;
+
+	// Always go depth-first, so try a child first
+<span style = "background-color:#dfd">	if (m_TTargets.ItemHasChildren(hnode))</span>
+<span style = "background-color:#fdd">		htemp = m_TTargets.GetChildItem(hnode);</span>
+<span style = "background-color:#dfd">	else if (m_TTargets.GetNextSiblingItem(hnode))</span>
+		htemp = m_TTargets.GetNextSiblingItem(hnode);
+	else {
+		 // to handle more than 2 level
+<span style = "background-color:#dfd">		htemp = m_TTargets.GetParentItem(hnode);
+		while (htemp) {</span>
+<span style = "background-color:#fdd">			if (m_TTargets.GetNextSiblingItem(htemp)) {</span>
+				htemp = m_TTargets.GetNextSiblingItem(htemp);
+				break;
+			}
+			else
+<span style = "background-color:#fdd">				htemp = m_TTargets.GetParentItem(htemp);</span>
+		}
+	}
+
+	return htemp;
+<span style = "background-color:#fdd">}</span>
+
+
+DWORDLONG CPageDisk::GetDlgItemInt64(int nID, BOOL* lpTrans, BOOL bSigned, int *lpRadix )
+<span style = "background-color:#dfd">{
+	CString dlgCString;
+	unsigned __int64 dlgUInt64 = 0;
+	BOOL bSuccess = FALSE;</span>
+	LPSTR dlgString;
+<span style = "background-color:#dfd">	int radix = 10;</span>
+
+<span style = "background-color:#dfd">	if (GetDlgItemText(nID, dlgCString))</span>
+	{
+<span style = "background-color:#dfd">		dlgCString.MakeLower();
+		dlgString = dlgCString.GetBuffer(10);</span>
+
+		// lets only resolve hex vs decimal
+<span style = "background-color:#dfd">		if (dlgString[0] == '0' &amp;&amp; dlgString[1] == 'x')</span>
+		{
+			sscanf(dlgString, "0x%I64x", &amp;dlgUInt64);
+<span style = "background-color:#fdd">			radix = 16;
+		}</span>
+		else
+<span style = "background-color:#dfd">			sscanf(dlgString, "%I64d", &amp;dlgUInt64);</span>
+		
+<span style = "background-color:#dfd">		dlgCString.ReleaseBuffer();</span>
+
+		bSuccess = TRUE;
+	}
+	
+<span style = "background-color:#dfd">	if (lpTrans)</span>
+<span style = "background-color:#fdd">		*lpTrans = bSuccess;</span>
+
+<span style = "background-color:#dfd">	if (lpRadix)</span>
+<span style = "background-color:#fdd">		*lpRadix = radix;</span>
+
+<span style = "background-color:#dfd">	return dlgUInt64;
+}</span>
+
+void CPageDisk::SetDlgItemInt64(int nID, __int64 nValue, BOOL bSigned, int nRadix) 
+<span style = "background-color:#dfd">{
+	CString dlgCString;
+	LPSTR lpString = dlgCString.GetBuffer(32); // preallocate enough space</span>
+	unsigned __int64 unValue = (unsigned __int64) nValue; // setup an unsigned version
+
+<span style = "background-color:#dfd">	if (bSigned)</span>
+<span style = "background-color:#fdd">		_i64toa(nValue, lpString, nRadix);</span>
+	else
+<span style = "background-color:#dfd">		_ui64toa(unValue, lpString, nRadix);</span>
+	
+<span style = "background-color:#dfd">	SetDlgItemText(nID, lpString);
+	dlgCString.ReleaseBuffer();
+}</span>
+
+void CPageDisk::OnEnChangeEdisksize()
+<span style = "background-color:#dfd">{</span>
+	// TODO:  If this is a RICHEDIT control, the control will not
+	// send this notification unless you override the CPropertyPage::OnInitDialog()
+	// function and call CRichEditCtrl().SetEventMask()
+	// with the ENM_CHANGE flag ORed into the mask.
+
+	// TODO:  Add your control notification handler code here
+<span style = "background-color:#dfd">}</span>
+
+void CPageDisk::OnEnChangeEdiskstart()
+<span style = "background-color:#dfd">{</span>
+	// TODO:  If this is a RICHEDIT control, the control will not
+	// send this notification unless you override the CPropertyPage::OnInitDialog()
+	// function and call CRichEditCtrl().SetEventMask()
+	// with the ENM_CHANGE flag ORed into the mask.
+
+	// TODO:  Add your control notification handler code here
+<span style = "background-color:#dfd">}</span>
+
+//
+// Enables and disables the Fixed Seed edit box depending on the check box state.
+void CPageDisk::OnCUseFixedSeed()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// change the check box to true/false only (having clicked, cannot 
+	// return to intermediate state)
+<span style = "background-color:#fdd">	m_CUseFixedSeed.SetButtonStyle(BS_AUTOCHECKBOX);
+	if (IsDlgButtonChecked(CUseFixedSeed) == 1 &amp;&amp; GetDlgItemInt64(EFixedSeed) != AMBIGUOUS_VALUE) {</span>
+		// Fixed Seed is enabled.  Update the edit box.
+<span style = "background-color:#fdd">		m_EFixedSeed.SetPasswordChar(0);
+	} else {
+		m_EFixedSeed.SetPasswordChar(32);</span>
+	}
+	// Seeing what kind of item is selected.
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#fdd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		worker-&gt;SetUseFixedSeed(m_CUseFixedSeed.GetCheck());
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#fdd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		manager-&gt;SetUseFixedSeed(m_CUseFixedSeed.GetCheck(), GenericDiskType);
+		break;</span>
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		theApp.manager_list.SetUseFixedSeed(m_CUseFixedSeed.GetCheck(), GenericDiskType);</span>
+		break;
+	}
+<span style = "background-color:#fdd">	EnableWindow();
+}</span>
+
+
+void CPageDisk::OnKillfocusEFixedSeed()
+<span style = "background-color:#fdd">{</span>
+	Manager *manager;
+	Worker *worker;
+
+	// Restores the previous value if the edit box was left blank.
+<span style = "background-color:#fdd">	if (!m_EFixedSeed.LineLength()) {
+		ShowFixedSeedValue();</span>
+		return;
+	}
+	// Seeing what kind of item is selected.
+<span style = "background-color:#fdd">	switch (theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedType()) {</span>
+	case WORKER:
+<span style = "background-color:#fdd">		worker = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedWorker();
+		worker-&gt;SetFixedSeedValue(GetDlgItemInt64(EFixedSeed));
+		break;</span>
+	case MANAGER:
+<span style = "background-color:#fdd">		manager = theApp.pView-&gt;m_pWorkerView-&gt;GetSelectedManager();
+		manager-&gt;SetFixedSeedValue(GetDlgItemInt64(EFixedSeed), GenericDiskType);
+		break;</span>
+	case ALL_MANAGERS:
+<span style = "background-color:#fdd">		theApp.manager_list.SetFixedSeedValue(GetDlgItemInt64(EFixedSeed), GenericDiskType);</span>
+		break;
+	}
+
+<span style = "background-color:#fdd">	EnableWindow();
+}</span>
+
+void CPageDisk::OnSetfocusEFixedSeed()
+<span style = "background-color:#fdd">{</span>
+	// Select everything in the edit box.
+<span style = "background-color:#fdd">	EditSetfocus(&amp;m_EFixedSeed);</span>
+}
+
+
+</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

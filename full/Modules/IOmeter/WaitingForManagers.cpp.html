@@ -1,0 +1,393 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>WaitingForManagers.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+/* ######################################################################### */
+/* ##                                                                     ## */
+/* ##  Iometer / WaitingForManagers.cpp                                   ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Job .......: This is the Waiting for Managers dialog in Iometer.   ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Intel Open Source License                                          ## */
+/* ##                                                                     ## */
+/* ##  Copyright (c) 2001 Intel Corporation                               ## */
+/* ##  All rights reserved.                                               ## */
+/* ##  Redistribution and use in source and binary forms, with or         ## */
+/* ##  without modification, are permitted provided that the following    ## */
+/* ##  conditions are met:                                                ## */
+/* ##                                                                     ## */
+/* ##  Redistributions of source code must retain the above copyright     ## */
+/* ##  notice, this list of conditions and the following disclaimer.      ## */
+/* ##                                                                     ## */
+/* ##  Redistributions in binary form must reproduce the above copyright  ## */
+/* ##  notice, this list of conditions and the following disclaimer in    ## */
+/* ##  the documentation and/or other materials provided with the         ## */
+/* ##  distribution.                                                      ## */
+/* ##                                                                     ## */
+/* ##  Neither the name of the Intel Corporation nor the names of its     ## */
+/* ##  contributors may be used to endorse or promote products derived    ## */
+/* ##  from this software without specific prior written permission.      ## */
+/* ##                                                                     ## */
+/* ##  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND             ## */
+/* ##  CONTRIBUTORS ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,      ## */
+/* ##  INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF           ## */
+/* ##  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE           ## */
+/* ##  DISCLAIMED. IN NO EVENT SHALL THE INTEL OR ITS  CONTRIBUTORS BE    ## */
+/* ##  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,   ## */
+/* ##  OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,           ## */
+/* ##  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,    ## */
+/* ##  OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY    ## */
+/* ##  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR     ## */
+/* ##  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT    ## */
+/* ##  OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY    ## */
+/* ##  OF SUCH DAMAGE.                                                    ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Remarks ...: &lt;none&gt;                                                ## */
+/* ##                                                                     ## */
+/* ## ------------------------------------------------------------------- ## */
+/* ##                                                                     ## */
+/* ##  Changes ...: 2004-03-18 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Changed the "truly batch oriented" patch behaviour. ## */
+/* ##               2003-10-17 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Moved to the use of the IOMTR_[OSFAMILY|OS|CPU]_*   ## */
+/* ##                 global defines.                                     ## */
+/* ##               2003-08-03 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Integrated the patch submitted by Sander Pool to    ## */
+/* ##                 get Iometer "truly batch oriented".                 ## */
+/* ##               - Integrated the License Statement into this header.  ## */
+/* ##               2003-04-25 (daniel.scheibli@edelbyte.org)             ## */
+/* ##               - Updated the global debug flag (_DEBUG) handling     ## */
+/* ##                 of the source file (check for platform etc.).       ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - changes so VC++ 7 (.NET) will compile correctly.    ## */
+/* ##               2003-03-28 (joe@eiler.net)                            ## */
+/* ##               - added new header info.                              ## */
+/* ##                                                                     ## */
+/* ######################################################################### */
+
+#include "stdafx.h"
+#include "IOCommon.h"
+#include "WaitingForManagers.h"
+#include "GalileoView.h"
+
+// Needed for MFC Library support for assisting in finding memory leaks
+//
+// NOTE: Based on the documentation[1] I found, it should be enough to have
+//       a "#define new DEBUG_NEW" statement for the case, that we are
+//       running Windows. There should be no need for checking the _DEBUG
+//       flag and no need for redefiniting the THIS_FILE string. Maybe there
+//       will be a MFC hacker who could advice here.
+//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
+//
+#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
+#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+#endif
+
+enum { TIMER_COUNTDOWN = 1 };
+
+// Check for an empty waiting list 2 times a second.
+const int CWaitingForManagers::polling_frequency = 2;
+
+/////////////////////////////////////////////////////////////////////////////
+// CWaitingForManagers dialog
+
+CWaitingForManagers::CWaitingForManagers()
+<span style = "background-color:#dfd">:  CDialog(CWaitingForManagers::IDD)
+{</span>
+	//{{AFX_DATA_INIT(CWaitingForManagers)
+<span style = "background-color:#dfd">	m_TCountdown = _T("");</span>
+	//}}AFX_DATA_INIT
+
+<span style = "background-color:#dfd">	Reset();
+}</span>
+
+void CWaitingForManagers::DoDataExchange(CDataExchange * pDX)
+<span style = "background-color:#dfd">{</span>
+	CDialog::DoDataExchange(pDX);
+	//{{AFX_DATA_MAP(CWaitingForManagers)
+<span style = "background-color:#dfd">	DDX_Control(pDX, LManagers, m_LManagers);
+	DDX_Text(pDX, TCountdown, m_TCountdown);</span>
+	//}}AFX_DATA_MAP
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">BEGIN_MESSAGE_MAP(CWaitingForManagers, CDialog)</span>
+    //{{AFX_MSG_MAP(CWaitingForManagers)
+ON_WM_TIMER()
+    //}}AFX_MSG_MAP
+<span style = "background-color:#dfd">END_MESSAGE_MAP()</span>
+
+//
+// Prepares the waiting list dialog for reuse.
+//
+void CWaitingForManagers::Reset()
+<span style = "background-color:#dfd">{</span>
+	// Set the arrays to size 0.
+<span style = "background-color:#dfd">	names.RemoveAll();
+	addresses.RemoveAll();
+}</span>
+
+//
+// Overrides the base class Create function for modeless dialog boxes.
+//
+// If all managers on the waiting list log in successfully, the dialog will
+// call back the CGalileoView::OpenConfigFile() with parameters indicating
+// the file to restore (CString infilename), which options to restore
+// (BOOL flags[]), and how to restore the settings (BOOL replace).  These
+// options are passed in here and stored in the callback_* member
+// variables for later use (when the callback occurs).
+//
+// If the dialog is aborted or not all managers log in, no callback will occur.
+//
+BOOL CWaitingForManagers::Create(const CString &amp; infilename, BOOL * flags, BOOL replace)
+<span style = "background-color:#dfd">{</span>
+	// Store the parameters to the callback function (CGalileoView::OpenConfigFile())
+<span style = "background-color:#dfd">	callback_infilename = infilename;
+	callback_replace = replace;</span>
+	for (int counter = 0; counter &lt; NumICFFlags; counter++)
+<span style = "background-color:#dfd">		callback_flags[counter] = flags[counter];</span>
+
+	// Create the dialog (modeless)
+<span style = "background-color:#dfd">	if (!CDialog::Create(IDD_WAITING_FOR_MANAGERS)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Couldn't create CWaitingForManagers dialog.  " "Please report this as an Iometer bug.");
+		return FALSE;</span>
+	}
+	// Disable the Iometer main frame
+<span style = "background-color:#dfd">	GetParent()-&gt;EnableWindow(FALSE);</span>
+	// Enable this dialog, specifically (it was disabled by the main frame disable call)
+<span style = "background-color:#dfd">	EnableWindow(TRUE);</span>
+	// *** Make sure the main frame is always re-enabled!
+
+	return TRUE;
+<span style = "background-color:#dfd">}</span>
+
+//
+// Called to remove the OS resources (timer and window).
+//
+BOOL CWaitingForManagers::Close()
+<span style = "background-color:#dfd">{
+	if (!KillTimer(TIMER_COUNTDOWN)) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Couldn't kill the CWaitingForManagers TIMER_COUNTDOWN "</span>
+			     "timer.  Please report this as an Iometer bug.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+	// Re-enable the Iometer main frame.
+<span style = "background-color:#dfd">	GetParent()-&gt;EnableWindow(TRUE);</span>
+
+<span style = "background-color:#dfd">	if (!DestroyWindow()) {</span>
+<span style = "background-color:#fdd">		ErrorMessage("Couldn't close the CWaitingForManagers window.  "</span>
+			     "Please report this as an Iometer bug.");
+<span style = "background-color:#fdd">		return FALSE;</span>
+	}
+
+<span style = "background-color:#dfd">	return TRUE;
+}</span>
+
+//
+// Abort button handler (there is no Cancel button)
+// Triggered when the user clicks Abort, presses Alt-F4, or closes the window.
+// NOT triggered when countdown reaches zero.
+//
+void CWaitingForManagers::OnCancel()
+<span style = "background-color:#fdd">{</span>
+	// The user performed some mouse or keyboard action to abort
+	// the dialog, so make sure Iometer goes to interactive mode.
+<span style = "background-color:#fdd">	theApp.OverrideBatchMode();</span>
+
+<span style = "background-color:#fdd">	(void)Close();</span>
+
+	// Clear the manager map and the CWaitingForManagers waiting list.
+<span style = "background-color:#fdd">	theApp.manager_list.loadmap.Reset();
+}</span>
+
+//
+// Called when Dialog first appears.
+//
+BOOL CWaitingForManagers::OnInitDialog()
+<span style = "background-color:#dfd">{</span>
+	RECT rect;
+	int width;
+
+<span style = "background-color:#dfd">	CDialog::OnInitDialog();</span>
+
+	// Initialize the countdown.
+<span style = "background-color:#dfd">	remaining_seconds = theApp.cmdline.GetTimeout();
+	UpdateCountdown();</span>
+
+	// Tell Windows to call OnTimer every xxxx ms to check
+	// for an empty list and to decrement the countdown.
+<span style = "background-color:#dfd">	SetTimer(TIMER_COUNTDOWN, 1000 / polling_frequency, NULL);</span>
+
+	// Figure out the width of the waiting manager list control
+<span style = "background-color:#dfd">	m_LManagers.GetWindowRect(&amp;rect);</span>
+	width = rect.right - rect.left + 1;
+	width -= 5;		// necessary to avoid seeing a scrollbar (for some reason?)
+
+	// Initialize the manager waiting list CListCtrl
+<span style = "background-color:#dfd">	m_LManagers.InsertColumn(0, "Name", LVCFMT_LEFT, width / 2);
+	m_LManagers.InsertColumn(1, "Address", LVCFMT_LEFT, width / 2, 1);</span>
+
+	// Update the waiting list
+<span style = "background-color:#dfd">	DisplayManagers();</span>
+
+<span style = "background-color:#dfd">	return TRUE;		// return TRUE unless you set the focus to a control
+}</span>
+
+//
+// Timer handler -- decrements countdown every second.
+//
+void CWaitingForManagers::OnTimer(UINT_PTR nIDEvent)
+<span style = "background-color:#dfd">{</span>
+	static int accumulator = 0;
+
+<span style = "background-color:#dfd">	switch (nIDEvent) {</span>
+	case TIMER_COUNTDOWN:
+<span style = "background-color:#dfd">		accumulator += 1000 / polling_frequency;</span>
+
+		// Has a second gone by?
+<span style = "background-color:#dfd">		if (accumulator &gt;= 1000) {</span>
+			accumulator -= 1000;
+<span style = "background-color:#dfd">			remaining_seconds--;
+			UpdateCountdown();</span>
+		}
+
+<span style = "background-color:#dfd">		if (names.GetSize() == 0) {
+			theApp.pView-&gt;OpenConfigFile(callback_infilename, callback_flags, callback_replace);
+			(void)Close();</span>
+
+			// If we are in batch mode, start the test.
+			// (In batch mode, this dialog will always appear.)
+<span style = "background-color:#dfd">			if (theApp.IsBatchMode())
+				theApp.pView-&gt;Go();
+		} else if (remaining_seconds &lt;= 0) {</span>
+			// theApp.OverrideBatchMode();
+
+<span style = "background-color:#fdd">			if (theApp.IsBatchMode()) {
+				exit(1);</span>
+			}
+
+<span style = "background-color:#fdd">			(void)Close();</span>
+
+<span style = "background-color:#fdd">			ErrorMessage("Time expired.  Not all managers specified in the config file "</span>
+				     "were available in Iometer, so loading was aborted.");
+		}
+		break;
+	default:
+<span style = "background-color:#fdd">		CDialog::OnTimer(nIDEvent);</span>
+	}
+<span style = "background-color:#dfd">}</span>
+
+//
+// Displays the countdown notice.
+//
+void CWaitingForManagers::UpdateCountdown()
+<span style = "background-color:#dfd">{</span>
+	char string[10];	// assuming no delay will be longer than 10 digits long
+
+<span style = "background-color:#dfd">	_itoa(remaining_seconds, string, 10);</span>
+
+<span style = "background-color:#dfd">	m_TCountdown = "Automatically aborting in " + (CString) string + " seconds...";
+	UpdateData(FALSE);	// update the GUI
+}</span>
+
+//
+// Add a manager's entry to the waiting list.
+//
+void CWaitingForManagers::AddWaitingManager(const CString &amp; name, const CString &amp; address)
+<span style = "background-color:#dfd">{
+	names.SetSize(names.GetSize() + 1);
+	addresses.SetSize(addresses.GetSize() + 1);
+	names[names.GetSize() - 1] = name;
+	addresses[addresses.GetSize() - 1] = address;
+}</span>
+
+//
+// Remove a manager's entry from the waiting list.
+//
+BOOL CWaitingForManagers::RemoveWaitingManager(const CString &amp; name, const CString &amp; address)
+<span style = "background-color:#dfd">{
+	for (int counter = 0; counter &lt; names.GetSize(); counter++) {</span>
+		// Do these managers match?
+		if ((name.CompareNoCase(names[counter]) == 0 &amp;&amp; address.CompareNoCase(addresses[counter]) == 0)
+<span style = "background-color:#dfd">		    || ((addresses[counter] == "")	// "special local host" case</span>
+			&amp;&amp; (names[counter].Compare(HOSTNAME_LOCAL) == 0))) {
+			// Remove this entry from the waiting list
+<span style = "background-color:#dfd">			names.RemoveAt(counter);
+			addresses.RemoveAt(counter);</span>
+
+			// It wouldn't be a good idea to put code here to test
+			// for an empty waiting list and call the appropriate
+			// handler, because the calling function has to do some
+			// more preparation before the file can be restored.
+
+			// Update the waiting list
+<span style = "background-color:#dfd">			DisplayManagers();</span>
+
+<span style = "background-color:#dfd">			return TRUE;</span>
+		}
+	}
+
+<span style = "background-color:#fdd">	return FALSE;</span>
+<span style = "background-color:#dfd">}</span>
+
+//
+// Fills in the m_LManagers CListCtrl with the contents of the name and address CArrays
+//
+void CWaitingForManagers::DisplayManagers()
+<span style = "background-color:#dfd">{
+	m_LManagers.LockWindowUpdate();</span>
+
+	// Clear the manager waiting list CListCtrl.
+<span style = "background-color:#dfd">	m_LManagers.DeleteAllItems();</span>
+
+<span style = "background-color:#dfd">	for (int counter = 0; counter &lt; names.GetSize(); counter++) {</span>
+		// Insert a row into the list
+<span style = "background-color:#dfd">		m_LManagers.InsertItem(counter, NULL);</span>
+
+		// Fill in the manager name
+<span style = "background-color:#dfd">		if (!m_LManagers.SetItemText(counter, 0, names[counter])) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("Couldn't SetItemText for the name column in the CListCtrl.  "</span>
+				     "Please report this as an Iometer bug.");
+			return;
+		}
+		// Fill in the address
+<span style = "background-color:#dfd">		if (!m_LManagers.SetItemText(counter, 1, addresses[counter])) {</span>
+<span style = "background-color:#fdd">			ErrorMessage("Couldn't SetItemText for the address column in the CListCtrl.  "</span>
+				     "Please report this as an Iometer bug.");
+			return;
+		}
+	}
+
+<span style = "background-color:#dfd">	m_LManagers.UnlockWindowUpdate();
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

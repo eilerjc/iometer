@@ -1,0 +1,909 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>IcfDocument.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+#include "IcfDocument.h"
+#include "IcfStream.h"
+#include "AccessSpecCatalog.h"   // smartNameText (shared with the live SmartName)
+#include &lt;cctype&gt;
+#include &lt;cstdlib&gt;
+#include &lt;limits&gt;
+
+namespace iocore {
+
+// ---- CString-semantics helpers (match the MFC parse code) ----------------------
+
+<span style = "background-color:#dfd">static bool equalsNoCase(const std::string &amp;a, const char *b)
+{
+    std::size_t i = 0;
+    for (; b[i]; ++i) {
+        if (i &gt;= a.size())
+            return false;
+        if (std::tolower(static_cast&lt;unsigned char&gt;(a[i])) !=
+            std::tolower(static_cast&lt;unsigned char&gt;(b[i])))
+            return false;
+    }
+    return i == a.size();
+}</span>
+
+<span style = "background-color:#dfd">static bool startsWithNoCase(const std::string &amp;s, const char *prefix)
+{
+    for (std::size_t i = 0; prefix[i]; ++i) {
+        if (i &gt;= s.size())
+            return false;
+        if (std::tolower(static_cast&lt;unsigned char&gt;(s[i])) !=
+            std::tolower(static_cast&lt;unsigned char&gt;(prefix[i])))
+            return false;
+    }
+    return true;
+}</span>
+
+<span style = "background-color:#dfd">static void trimBoth(std::string &amp;s)
+{
+    const std::size_t b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) { s.clear(); return; }
+    const std::size_t e = s.find_last_not_of(" \t\r\n");
+    s = s.substr(b, e - b + 1);
+}</span>
+
+<span style = "background-color:#fdd">static void trimRight(std::string &amp;s)</span>
+<span style = "background-color:#dfd">{
+    const std::size_t e = s.find_last_not_of(" \t\r\n");
+    s = (e == std::string::npos) ? std::string() : s.substr(0, e + 1);
+}</span>
+
+// Parse a cycling line: ints (2 or 3 of them) then LINEAR/EXPONENTIAL/legacy int.
+// Returns false (caller emits its own message) when an int is missing.
+<span style = "background-color:#dfd">static bool parseCyclingTail(std::string &amp;value, IcfTestSetup::Cycling &amp;c, bool hasEnd)
+{
+    if (!IcfStream::extractFirstInt(value, c.start))
+        return false;
+    if (hasEnd &amp;&amp; !IcfStream::extractFirstInt(value, c.end))
+        return false;
+    if (!IcfStream::extractFirstInt(value, c.step))</span>
+<span style = "background-color:#fdd">        return false;</span>
+<span style = "background-color:#dfd">
+    const std::string token = IcfStream::extractFirstToken(value);
+    if (equalsNoCase(token, "LINEAR"))
+        c.stepType = 0;                          // StepLinear
+    else if (equalsNoCase(token, "EXPONENTIAL"))
+        c.stepType = 1;                          // StepExponential</span>
+<span style = "background-color:#fdd">    else                                         // value used to be an integer</span>
+<span style = "background-color:#dfd">        c.stepType = std::atoi(token.c_str());
+    return true;
+}</span>
+
+// ---- 'TEST SETUP (port of CPageSetup::LoadConfig) -------------------------------
+
+<span style = "background-color:#dfd">bool IcfDocument::loadTestSetup(IcfTestSetup &amp;io)
+{
+    m_errors.clear();
+    IcfStream infile(m_path);
+
+    const uint64_t version = infile.getVersion();
+    if (version == IcfStream::BadVersion) {</span>
+<span style = "background-color:#fdd">        m_errors = infile.errors();</span>
+        return false;
+<span style = "background-color:#dfd">    }
+    if (!infile.skipTo("'TEST SETUP"))
+        return true;   // no test setup to restore (this is OK)
+
+    std::string key, value, token;
+    while (true) {
+        if (!infile.getPair(key, value)) {</span>
+<span style = "background-color:#fdd">            m_errors.push_back("File is improperly formatted.  Expected "</span>
+                               "test setup data or \"END test setup\".");
+            return false;
+        }
+<span style = "background-color:#dfd">
+        if (equalsNoCase(key, "'END test setup")) {
+            break;
+        } else if (equalsNoCase(key, "'Test Description")) {
+            io.testName = value;
+        } else if (equalsNoCase(key, "'Run Time")) {</span>
+            if (!IcfStream::extractFirstInt(value, io.hours)
+<span style = "background-color:#dfd">                || !IcfStream::extractFirstInt(value, io.minutes)
+                || !IcfStream::extractFirstInt(value, io.seconds)) {
+                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Run time\" should be specified as three integer values "
+                    "(hours, minutes, seconds).");
+                return false;
+<span style = "background-color:#dfd">            }
+        } else if (startsWithNoCase(key, "'Ramp Up Time")) {
+            if (!IcfStream::extractFirstInt(value, io.rampTime)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Ramp up time\" should be specified as an integer value.");
+                return false;
+            }
+        }
+<span style = "background-color:#dfd">        // For backward compatibility...
+        else if (equalsNoCase(key, "'Default Workers to Spawn")) {
+            if (!IcfStream::extractFirstInt(value, io.diskWorkerCount)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Default workers to spawn\" should be "
+                    "specified as an integer value.");
+                return false;
+<span style = "background-color:#fdd">            }</span>
+<span style = "background-color:#dfd">            if (io.diskWorkerCount == 0)   // "# of CPUs" used to be 0,
+                io.diskWorkerCount = -1;   // now it is -1.
+        } else if (equalsNoCase(key, "'Default Disk Workers to Spawn")) {
+            token = IcfStream::extractFirstToken(value);
+            if (equalsNoCase(token, "NUMBER_OF_CPUS"))
+                io.diskWorkerCount = -1;
+            else
+                io.diskWorkerCount = std::atoi(token.c_str());
+        } else if (equalsNoCase(key, "'Default Network Workers to Spawn")) {
+            token = IcfStream::extractFirstToken(value);
+            if (equalsNoCase(token, "NUMBER_OF_CPUS"))
+                io.netWorkerCount = -1;</span>
+<span style = "background-color:#fdd">            else</span>
+<span style = "background-color:#dfd">                io.netWorkerCount = std::atoi(token.c_str());
+        } else if (equalsNoCase(key, "'Record Results")) {
+            trimBoth(value);
+            if (equalsNoCase(value, "ALL"))              io.resultType = 0;
+            else if (equalsNoCase(value, "NO_TARGETS"))  io.resultType = 1;
+            else if (equalsNoCase(value, "NO_WORKERS"))  io.resultType = 2;
+            else if (equalsNoCase(value, "NO_MANAGERS")) io.resultType = 3;
+            else if (equalsNoCase(value, "NONE"))        io.resultType = 4;
+            // This value used to be stored as an integer.
+            else if (!IcfStream::extractFirstInt(value, io.resultType)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "For \"Record results\", expected a legal identifier or an "
+                    "integer value.  See the documentation for details.");
+                return false;
+<span style = "background-color:#dfd">            }
+        } else if (equalsNoCase(key, "'Worker Cycling")) {
+            if (!parseCyclingTail(value, io.workerCycling, false)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Worker cycling\" start and step should be specified as "
+                    "integer values.");
+                return false;
+<span style = "background-color:#dfd">            }
+        } else if (equalsNoCase(key, "'Disk Cycling")) {
+            if (!parseCyclingTail(value, io.targetCycling, false)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Disk cycling\" start and step should be specified as "
+                    "integer values.");
+                return false;
+<span style = "background-color:#dfd">            }
+        } else if (equalsNoCase(key, "'Queue Depth Cycling")) {
+            if (!parseCyclingTail(value, io.queueCycling, true)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Queue depth cycling\" start, end, and step should be "
+                    "specified as integer values.");
+                return false;
+<span style = "background-color:#dfd">            }
+        } else if (equalsNoCase(key, "'Test Type")) {
+            trimBoth(value);
+            if (equalsNoCase(value, "NORMAL"))                                io.testType = 0;
+            else if (equalsNoCase(value, "CYCLE_TARGETS"))                    io.testType = 1;
+            else if (equalsNoCase(value, "CYCLE_WORKERS"))                    io.testType = 2;
+            else if (equalsNoCase(value, "INCREMENT_TARGETS_PARALLEL"))       io.testType = 3;
+            else if (equalsNoCase(value, "INCREMENT_TARGETS_SERIAL"))         io.testType = 4;
+            else if (equalsNoCase(value, "CYCLE_WORKERS_AND_TARGETS"))        io.testType = 5;
+            else if (equalsNoCase(value, "CYCLE_OUTSTANDING_IOS"))            io.testType = 6;
+            else if (equalsNoCase(value, "CYCLE_OUTSTANDING_IOS_AND_TARGETS")) io.testType = 7;
+            // This value used to be stored as an integer.
+            else if (!IcfStream::extractFirstInt(value, io.testType)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "For \"Test type\", expected a legal identifier or an "
+                    "integer value.  See the documentation for details.");
+                return false;
+            }
+<span style = "background-color:#fdd">        } else {   // Unrecognized comment</span>
+<span style = "background-color:#dfd">            if (version &gt;= 19990217) {
+                m_errors.push_back("File is improperly formatted.  TEST SETUP "</span>
+                    "section contained an unrecognized \"" + key + "\" comment.");
+                return false;
+            }
+            // Versions as recent as 1998.10.08 have no 'End test setup.
+            break;
+        }
+    }
+<span style = "background-color:#dfd">
+    return true;
+}</span>
+
+// ---- 'RESULTS DISPLAY (port of CPageDisplay::LoadConfig) -------------------------
+
+<span style = "background-color:#fdd">bool IcfDocument::loadResultsDisplay(IcfDisplaySettings &amp;io)</span>
+<span style = "background-color:#dfd">{
+    m_errors.clear();
+    IcfStream infile(m_path);</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">    const uint64_t version = infile.getVersion();
+    if (version == IcfStream::BadVersion) {</span>
+<span style = "background-color:#fdd">        m_errors = infile.errors();</span>
+        return false;
+<span style = "background-color:#fdd">    }</span>
+<span style = "background-color:#dfd">    if (!infile.skipTo("'RESULTS DISPLAY"))
+        return true;   // no results display to restore (this is OK)</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">    std::string key, value;</span>
+<span style = "background-color:#fdd">    while (true) {</span>
+<span style = "background-color:#dfd">        if (!infile.getPair(key, value)) {</span>
+<span style = "background-color:#fdd">            m_errors.push_back("File is improperly formatted.  Expected results "</span>
+                               "display data or \"END results display\".");
+            return false;
+        }
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">        if (equalsNoCase(key, "'END results display")) {</span>
+<span style = "background-color:#fdd">            break;</span>
+<span style = "background-color:#dfd">        } else if (equalsNoCase(key, "'Record Last Update Results,Update Frequency,Update Type")) {
+            const std::string recordTok = IcfStream::extractFirstToken(value);
+            io.updateLinePresent = true;
+            io.recordLastUpdate  = equalsNoCase(recordTok, "ENABLED");</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            if (!IcfStream::extractFirstInt(value, io.updateFrequency)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Update frequency\" should be specified as an integer value.");
+                return false;
+            }
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            std::string updateType = value;
+            trimRight(updateType);
+            if (equalsNoCase(updateType, "LAST_UPDATE"))
+                io.whichPerf = 1;                  // LAST_UPDATE_PERF
+            else if (equalsNoCase(updateType, "WHOLE_TEST"))
+                io.whichPerf = 0;                  // WHOLE_TEST_PERF</span>
+<span style = "background-color:#fdd">            else {</span>
+<span style = "background-color:#dfd">                m_errors.push_back("File is improperly formatted.  In RESULTS "</span>
+                    "DISPLAY section, Update Frequency was not followed by "
+<span style = "background-color:#fdd">                    "an appropriate Update Type string.");</span>
+<span style = "background-color:#dfd">                return false;</span>
+<span style = "background-color:#fdd">            }</span>
+<span style = "background-color:#dfd">        } else if (startsWithNoCase(key, "'Bar chart")) {
+            int barNumber = 0;
+            if (!IcfStream::extractFirstInt(key, barNumber)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("Error while reading file.  "</span>
+                    "\"Bar chart\" should be followed by an integer value.");
+                return false;
+            }
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            std::string barItem = key;
+            trimBoth(barItem);</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            if (barNumber &lt; 1 || barNumber &gt; 6) {   // NUM_STATUS_BARS
+                m_errors.push_back("Invalid bar chart number in RESULTS DISPLAY "</span>
+<span style = "background-color:#fdd">                    "section.  Ignoring this bar setting.");</span>
+<span style = "background-color:#dfd">                continue;</span>
+<span style = "background-color:#fdd">            }</span>
+<span style = "background-color:#dfd">            barNumber--;   // one-based in the file, zero-based internally</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            IcfDisplaySettings::Bar bar;
+            bar.index = barNumber;
+            if (equalsNoCase(barItem, "statistic")) {
+                bar.kind = IcfDisplaySettings::Bar::Statistic;
+                bar.name = value;</span>
+<span style = "background-color:#fdd">                io.bars.push_back(bar);</span>
+<span style = "background-color:#dfd">            } else if (equalsNoCase(barItem, "manager ID, manager name")) {
+                if (!IcfStream::extractFirstInt(value, bar.id)) {</span>
+<span style = "background-color:#fdd">                    m_errors.push_back("Error while reading file.  "</span>
+                        "Expected a manager ID integer after \"manager ID, manager name\""
+                        "comment in RESULTS DISPLAY section.");
+                    return false;
+<span style = "background-color:#fdd">                }</span>
+<span style = "background-color:#dfd">                bar.kind = IcfDisplaySettings::Bar::Manager;</span>
+<span style = "background-color:#fdd">                bar.name = value;</span>
+<span style = "background-color:#dfd">                io.bars.push_back(bar);
+            } else if (equalsNoCase(barItem, "worker ID, worker name")) {
+                if (!IcfStream::extractFirstInt(value, bar.id)) {</span>
+<span style = "background-color:#fdd">                    m_errors.push_back("Error while reading file.  "</span>
+                        "Expected a worker ID integer after \"worker ID, worker name\""
+<span style = "background-color:#fdd">                        "comment in RESULTS DISPLAY section.");
+                    return false;
+                }</span>
+<span style = "background-color:#dfd">                bar.kind = IcfDisplaySettings::Bar::Worker;
+                bar.name = value;
+                io.bars.push_back(bar);</span>
+<span style = "background-color:#fdd">            } else {</span>
+<span style = "background-color:#dfd">                m_errors.push_back("Invalid bar chart item name \"" + barItem</span>
+                    + "\" for bar #" + std::to_string(barNumber)
+<span style = "background-color:#fdd">                    + " in RESULTS DISPLAY section.  Ignoring this bar setting.");</span>
+<span style = "background-color:#dfd">                continue;</span>
+<span style = "background-color:#fdd">            }</span>
+<span style = "background-color:#dfd">        } else {
+            m_errors.push_back("File is improperly formatted.  RESULTS DISPLAY "</span>
+                "section contained an unrecognized \"" + key + "\" comment.");
+            return false;
+        }
+<span style = "background-color:#fdd">    }
+</span>
+<span style = "background-color:#dfd">    return true;
+}</span>
+
+<span style = "background-color:#fdd">uint64_t IcfDocument::readVersion() const</span>
+<span style = "background-color:#dfd">{
+    IcfStream infile(m_path);
+    return infile.getVersion();
+}</span>
+
+// ---- 'MANAGER LIST (port of ManagerList/Manager/Worker::LoadConfig parsing) -----
+
+namespace {
+
+// Worker::LoadConfigDefault - the 'Default target settings for worker block.
+// `errs` collects MFC error texts; returns false on a malformed/invalid block.
+bool loadWorkerDefaults(IcfStream &amp;infile, IcfWorkerConfig &amp;w,
+<span style = "background-color:#dfd">                        std::vector&lt;std::string&gt; &amp;errs)
+{
+    w.hasDefaultSettings = true;
+    std::string key, value, token;
+    while (true) {
+        if (!infile.getPair(key, value)) {</span>
+<span style = "background-color:#fdd">            errs.push_back("File is improperly formatted.  Expected more default target "</span>
+                "settings for worker or an \"End default target settings for worker\" comment.");
+            return false;
+<span style = "background-color:#dfd">        }
+        if (equalsNoCase(key, "'End default target settings for worker"))
+            return true;</span>
+
+<span style = "background-color:#dfd">        if (equalsNoCase(key, "'Number of outstanding IOs,test connection rate,transactions per connection")
+            || equalsNoCase(key, "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value")) {
+            const bool hasSeed = equalsNoCase(key,
+                "'Number of outstanding IOs,test connection rate,transactions per connection,use fixed seed,fixed seed value");
+            w.ioSettingsPresent = true;
+            if (hasSeed) w.fixedSeedPresent = true;
+            int n = 0;
+            if (!IcfStream::extractFirstInt(value, n)) {</span>
+<span style = "background-color:#fdd">                errs.push_back("Error while reading file.  "</span>
+                    "\"Number of outstanding IOs\" should be specified as an integer value.");
+<span style = "background-color:#fdd">                return false;</span>
+<span style = "background-color:#dfd">            }
+            w.queueDepth = n;
+            token = IcfStream::extractFirstToken(value);
+            if (equalsNoCase(token, "ENABLED"))       w.testConnRate = true;
+            else if (equalsNoCase(token, "DISABLED"))  w.testConnRate = false;</span>
+<span style = "background-color:#fdd">            else {
+                errs.push_back("Error restoring worker " + w.name + ".  "
+                    "\"Test connection rate\" should be set to ENABLED or DISABLED.");
+                return false;</span>
+<span style = "background-color:#dfd">            }
+            if (!IcfStream::extractFirstInt(value, n)) {</span>
+<span style = "background-color:#fdd">                errs.push_back("Error while reading file.  "
+                    "\"Transactions per connection\" should be specified as an integer value.");
+                return false;</span>
+<span style = "background-color:#dfd">            }
+            w.transPerConn = n;
+            if (hasSeed) {
+                token = IcfStream::extractFirstToken(value);
+                if (equalsNoCase(token, "ENABLED"))       w.useFixedSeed = true;
+                else if (equalsNoCase(token, "DISABLED"))  w.useFixedSeed = false;</span>
+<span style = "background-color:#fdd">                else {
+                    errs.push_back("Error restoring worker " + w.name + ".  "
+                        "\"Use fixed seed\" should be set to ENABLED or DISABLED.");
+                    return false;</span>
+<span style = "background-color:#dfd">                }
+                uint64_t v64 = 0;
+                if (!IcfStream::extractFirstUInt64(value, v64)) {</span>
+<span style = "background-color:#fdd">                    errs.push_back("Error while reading file.  "
+                        "\"Fixed seed value\" should be specified as an integer value.");
+                    return false;</span>
+<span style = "background-color:#dfd">                }
+                w.fixedSeedValue = v64;</span>
+            }
+<span style = "background-color:#dfd">        } else if (equalsNoCase(key, "'Disk maximum size,starting sector")
+                || equalsNoCase(key, "'Disk maximum size,starting sector,Data pattern")) {
+            const bool hasPattern = equalsNoCase(key, "'Disk maximum size,starting sector,Data pattern");
+            w.diskSizePresent = true;
+            if (hasPattern) w.dataPatternPresent = true;
+            if (w.kind != IcfWorkerKind::Disk) {
+                errs.push_back("Error restoring worker " + w.name + ".  "</span>
+<span style = "background-color:#fdd">                    "Cannot specify \"Disk maximum size,starting sector\" for a non-disk worker.");</span>
+<span style = "background-color:#dfd">                return false;
+            }
+            uint64_t v64 = 0;
+            if (!IcfStream::extractFirstUInt64(value, v64)) {</span>
+<span style = "background-color:#fdd">                errs.push_back("Error while reading file.  "
+                    "\"Disk maximum size\" should be specified as an integer value.");
+                return false;</span>
+<span style = "background-color:#dfd">            }
+            w.diskMaxSize = v64;
+            if (!IcfStream::extractFirstUInt64(value, v64)) {</span>
+<span style = "background-color:#fdd">                errs.push_back("Error while reading file.  "
+                    "\"Starting sector\" should be specified as an integer value.");
+                return false;</span>
+<span style = "background-color:#dfd">            }
+            w.startingSector = v64;
+            if (hasPattern) {
+                int n = 0;
+                if (!IcfStream::extractFirstInt(value, n)) {
+                    errs.push_back("Error while reading file.  "</span>
+                        "\"Data pattern\" should be specified as an integer value.");
+<span style = "background-color:#fdd">                    return false;</span>
+<span style = "background-color:#dfd">                }
+                w.dataPattern = n;
+            }
+        } else if (equalsNoCase(key, "'Local network interface")) {
+            if (w.kind != IcfWorkerKind::NetTCP &amp;&amp; w.kind != IcfWorkerKind::NetVI) {
+                errs.push_back("Error restoring worker " + w.name + ".  "</span>
+<span style = "background-color:#fdd">                    "Cannot specify \"Local network interface\" for a non-TCP worker.");</span>
+<span style = "background-color:#dfd">                return false;
+            }
+            w.localNetIfacePresent = true;
+            w.localNetworkInterface = value;
+        } else if (equalsNoCase(key, "'VI outstanding IOs")) {
+            if (w.kind != IcfWorkerKind::NetVI) {
+                errs.push_back("Error restoring worker " + w.name + ".  "</span>
+<span style = "background-color:#fdd">                    "Cannot specify \"VI outstanding IOs\" for a non-VI worker.");</span>
+<span style = "background-color:#dfd">                return false;</span>
+<span style = "background-color:#fdd">            }</span>
+<span style = "background-color:#dfd">            int n = 0;
+            if (!IcfStream::extractFirstInt(value, n)) {
+                errs.push_back("Error while reading file.  "</span>
+                    "\"VI outstanding IOs\" should be specified as an integer value.");
+<span style = "background-color:#fdd">                return false;
+            }</span>
+<span style = "background-color:#dfd">            w.viIosPresent = true;
+            w.viOutstandingIos = n;
+        } else {
+            errs.push_back("File is improperly formatted.  "</span>
+                "DEFAULT TARGET SETTINGS FOR WORKER section contained an unrecognized \""
+<span style = "background-color:#fdd">                + key + "\"comment.");</span>
+<span style = "background-color:#dfd">            return false;</span>
+        }
+<span style = "background-color:#dfd">    }
+}</span>
+
+} // namespace
+
+bool IcfDocument::loadManagerList(std::vector&lt;IcfManagerConfig&gt; &amp;out,
+<span style = "background-color:#dfd">                                  bool loadAspecs, bool loadTargets)
+{
+    m_errors.clear();
+    IcfStream infile(m_path);
+
+    if (infile.getVersion() == IcfStream::BadVersion) {</span>
+<span style = "background-color:#fdd">        m_errors = infile.errors();</span>
+        return false;
+<span style = "background-color:#dfd">    }
+    if (!infile.skipTo("'MANAGER LIST"))</span>
+        return true;   // no manager list to restore (this is OK)
+
+<span style = "background-color:#dfd">    while (true) {
+        const std::string key = infile.getNextLine();
+        if (equalsNoCase(key, "'END manager list"))
+            break;
+        if (!equalsNoCase(key, "'Manager ID, manager name")) {</span>
+<span style = "background-color:#fdd">            m_errors.push_back("File is improperly formatted.  Expected another "</span>
+                "manager or \"End manager list\" comment.");
+            return false;
+        }
+
+<span style = "background-color:#dfd">        // GetManagerInfo: "&lt;id&gt;,&lt;name&gt;" line, then 'Manager network address pair.
+        IcfManagerConfig mgr;
+        std::string idLine = infile.getNextLine();
+        if (idLine.empty()) {</span>
+<span style = "background-color:#fdd">            m_errors.push_back("File is improperly formatted.  "</span>
+                "Error retrieving manager name or empty manager name.");
+            return false;
+<span style = "background-color:#dfd">        }
+        if (!IcfStream::extractFirstInt(idLine, mgr.id)) {
+            m_errors.push_back("File is improperly formatted.  "</span>
+                "Error retrieving manager ID.  This value must be an integer.");
+            return false;
+<span style = "background-color:#dfd">        }
+        mgr.name = idLine;
+        std::string k2, v2;
+        if (!infile.getPair(k2, v2)) {</span>
+<span style = "background-color:#fdd">            m_errors.push_back("File is improperly formatted.  "</span>
+                "Error retrieving manager network address.");
+            return false;
+<span style = "background-color:#dfd">        }
+        if (!equalsNoCase(k2, "'Manager network address")) {</span>
+<span style = "background-color:#fdd">            m_errors.push_back("File is improperly formatted.  Expected a "</span>
+                "\"Manager network address\" comment after manager ID.");
+            return false;
+<span style = "background-color:#dfd">        }
+        mgr.address = v2;</span>
+
+        // Manager::LoadConfig - workers until 'End manager.
+        // wkrType is function-scope in MFC (wkr_type_hex), so a bad NETWORK subtype
+<span style = "background-color:#dfd">        // (which does not abort) leaves it at the previous worker's value.
+        IcfWorkerKind wkrType = IcfWorkerKind::Invalid;
+        while (true) {
+            std::string wk, wv;
+            if (!infile.getPair(wk, wv)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("File is improperly formatted.  Expected a "</span>
+                    "worker or \"End manager\".");
+                return false;
+<span style = "background-color:#dfd">            }
+            if (equalsNoCase(wk, "'End manager"))
+                break;
+            if (!equalsNoCase(wk, "'Worker")) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("File is improperly formatted.  MANAGER section "</span>
+                    "contained an unrecognized \"" + wk + "\" comment.");
+                return false;
+            }
+<span style = "background-color:#dfd">
+            IcfWorkerConfig w;
+            w.name = wv;</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            std::string tk, tv;
+            if (!infile.getPair(tk, tv)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("File is improperly formatted.  Expected "</span>
+                    "\"Worker type\".");
+                return false;
+<span style = "background-color:#dfd">            }
+            if (!equalsNoCase(tk, "'Worker type")) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("File is improperly formatted.  Worker name "</span>
+                    "should be followed by \"Worker type\" comment.");
+                return false;
+<span style = "background-color:#dfd">            }
+            std::string tok = IcfStream::extractFirstToken(tv);
+            if (equalsNoCase(tok, "DISK")) {
+                wkrType = IcfWorkerKind::Disk;
+            } else if (equalsNoCase(tok, "NETWORK")) {
+                tok = IcfStream::extractFirstToken(tv);
+                if (equalsNoCase(tok, "TCP"))      wkrType = IcfWorkerKind::NetTCP;
+                else if (equalsNoCase(tok, "VI"))  wkrType = IcfWorkerKind::NetVI;</span>
+                else {
+                    // MFC records the error but does NOT abort; wkr_type_hex keeps
+<span style = "background-color:#fdd">                    // its prior value (InvalidType for the first such worker).</span>
+<span style = "background-color:#dfd">                    m_errors.push_back("Unknown network worker subtype encountered "</span>
+                        "for worker \"" + w.name + "\": \"" + tok
+                        + "\".  Should be either TCP or VI.");
+                }
+<span style = "background-color:#fdd">            } else {</span>
+<span style = "background-color:#dfd">                m_errors.push_back("Unknown worker type encountered for worker \""</span>
+                    + w.name + "\": \"" + tok + "\".  Should be either DISK or NETWORK.");
+                return false;
+<span style = "background-color:#dfd">            }
+            w.kind = wkrType;</span>
+
+            // Worker::LoadConfig - sub-sections via GetNextLine.
+<span style = "background-color:#dfd">            while (true) {
+                const std::string comment = infile.getNextLine();
+                if (equalsNoCase(comment, "'End worker"))
+                    break;
+                if (equalsNoCase(comment, "'Default target settings for worker")) {
+                    if (!loadWorkerDefaults(infile, w, m_errors))
+                        return false;
+                } else if (equalsNoCase(comment, "'Assigned access specs")) {
+                    if (loadAspecs) {
+                        while (true) {
+                            const std::string sv = infile.getNextLine();
+                            if (equalsNoCase(sv, "'End assigned access specs"))
+                                break;
+                            w.assignedSpecNames.push_back(sv);
+                        }
+                    } else if (!infile.skipTo("'End assigned access specs")) {</span>
+<span style = "background-color:#fdd">                        m_errors.push_back("File is improperly formatted.  Couldn't "</span>
+                            "find an \"End assigned access specs\" comment.");
+                        return false;
+<span style = "background-color:#dfd">                    }
+                } else if (equalsNoCase(comment, "'Target assignments")) {
+                    if (!loadTargets) {
+                        if (!infile.skipTo("'End target assignments")) {</span>
+<span style = "background-color:#fdd">                            m_errors.push_back("File is improperly formatted.  Couldn't "</span>
+                                "find an \"End target assignments\" comment.");
+                            return false;
+                        }
+                        continue;
+                    }
+<span style = "background-color:#dfd">                    while (true) {
+                        std::string c, n;
+                        if (!infile.getPair(c, n)) {</span>
+<span style = "background-color:#fdd">                            m_errors.push_back("File is improperly formatted.  Expected a "</span>
+                                "target or \"End target assignments\".");
+                            return false;
+<span style = "background-color:#dfd">                        }
+                        if (equalsNoCase(c, "'End target assignments"))
+                            break;
+                        if (!equalsNoCase(c, "'Target")) {</span>
+<span style = "background-color:#fdd">                            m_errors.push_back("File is improperly formatted.  Expected "</span>
+                                "a \"Target\" comment inside TARGET ASSIGNMENTS section.");
+                            return false;
+<span style = "background-color:#dfd">                        }
+                        IcfTargetConfig tgt;
+                        tgt.name = n;
+                        std::string tc, ts;
+                        if (!infile.getPair(tc, ts)) {</span>
+<span style = "background-color:#fdd">                            m_errors.push_back("File is improperly formatted.  Expected "</span>
+                                "\"Target type\".");
+                            return false;
+<span style = "background-color:#dfd">                        }
+                        if (!equalsNoCase(tc, "'Target type")) {</span>
+<span style = "background-color:#fdd">                            m_errors.push_back("File is improperly formatted.  Expected "</span>
+                                "a \"Target type\" comment after target name.");
+                            return false;
+<span style = "background-color:#dfd">                        }
+                        std::string ttok = IcfStream::extractFirstToken(ts);
+                        if (equalsNoCase(ttok, "DISK")) {
+                            tgt.kind = IcfWorkerKind::Disk;
+                            // Disk target: the 'End target line follows directly.
+                            const std::string end = infile.getNextLine();
+                            if (!equalsNoCase(end, "'End target")) {</span>
+<span style = "background-color:#fdd">                                m_errors.push_back("File is improperly formatted.  "
+                                    "Expected an \"End target\" comment.");
+                                return false;</span>
+<span style = "background-color:#dfd">                            }
+                        } else if (equalsNoCase(ttok, "NETWORK")) {
+                            ttok = IcfStream::extractFirstToken(ts);
+                            if (equalsNoCase(ttok, "TCP"))      tgt.kind = IcfWorkerKind::NetTCP;
+                            else if (equalsNoCase(ttok, "VI"))  tgt.kind = IcfWorkerKind::NetVI;</span>
+<span style = "background-color:#fdd">                            else {</span>
+<span style = "background-color:#dfd">                                m_errors.push_back("Error restoring target " + tgt.name</span>
+                                    + ".  Network target type is neither TCP nor VI.");
+                                return false;
+                            }
+                            // A network target carries an extra "Target manager ID,
+                            // manager name" pair (the remote manager that owns the
+                            // NIC). We parse the identity here; the live NIC matching
+<span style = "background-color:#dfd">                            // / CreateNetClient stays in the front-end adapter.
+                            std::string mc, mi;
+                            if (!infile.getPair(mc, mi)) {</span>
+<span style = "background-color:#fdd">                                m_errors.push_back("File is improperly formatted.  Expected "</span>
+                                    "network target manager ID and name.");
+                                return false;
+<span style = "background-color:#dfd">                            }
+                            if (!equalsNoCase(mc, "'Target manager ID, manager name")) {
+                                m_errors.push_back("File is improperly formatted.  Expected "</span>
+                                    "a \"Target manager ID, manager name\" comment after \"Target type\".");
+                                return false;
+<span style = "background-color:#dfd">                            }
+                            if (!IcfStream::extractFirstInt(mi, tgt.targetManagerId)) {
+                                m_errors.push_back("Error while reading file.  "</span>
+                                    "\"Target manager ID\" should be specified as an integer value.");
+                                return false;
+<span style = "background-color:#dfd">                            }
+                            if (mi.empty()) {
+                                m_errors.push_back("File is improperly formatted.  Expected "</span>
+                                    "a target \"manager name\".");
+                                return false;
+<span style = "background-color:#dfd">                            }
+                            tgt.targetManagerName = mi;</span>
+<span style = "background-color:#fdd">                            // 'End target follows directly (MFC reads it via GetNextLine).</span>
+<span style = "background-color:#dfd">                            const std::string end = infile.getNextLine();
+                            if (!equalsNoCase(end, "'End target")) {
+                                m_errors.push_back("File is improperly formatted.  "</span>
+<span style = "background-color:#fdd">                                    "Expected an \"End target\" comment.");</span>
+<span style = "background-color:#dfd">                                return false;
+                            }
+                        } else {
+                            m_errors.push_back("Error restoring target " + tgt.name</span>
+<span style = "background-color:#fdd">                                + ".  Target type is neither DISK nor NETWORK.");</span>
+<span style = "background-color:#dfd">                            return false;
+                        }
+                        w.targets.push_back(tgt);
+                    }</span>
+<span style = "background-color:#fdd">                } else {</span>
+<span style = "background-color:#dfd">                    m_errors.push_back("File is improperly formatted.  WORKER section "</span>
+<span style = "background-color:#fdd">                        "contained an unrecognized line: \"" + comment + "\".");</span>
+<span style = "background-color:#dfd">                    return false;
+                }
+            }
+
+            mgr.workers.push_back(w);
+        }
+
+        out.push_back(mgr);
+    }
+
+    return true;
+}</span>
+
+// ---- 'ACCESS SPECIFICATIONS (port of AccessSpecList::LoadConfig{New,Old}) -------
+
+namespace {
+
+struct NamePool {
+    const std::vector&lt;std::string&gt;      *existing;   // caller's live list (may be null)
+    const std::vector&lt;IcfAccessSpec&gt;    *loaded;     // specs loaded so far
+    const std::string                   *pending;    // current spec's name (may be null)
+<span style = "background-color:#fdd">
+    bool contains(const std::string &amp;name) const {
+        if (existing)
+            for (const auto &amp;n : *existing)
+                if (equalsNoCase(name, n.c_str())) return true;
+        for (const auto &amp;s : *loaded)
+            if (equalsNoCase(name, s.name.c_str())) return true;
+        if (pending &amp;&amp; equalsNoCase(name, pending-&gt;c_str())) return true;
+        return false;
+    }
+    // MFC NextUntitled: count "Untitled*" names, then increment until unique.</span>
+<span style = "background-color:#dfd">    std::string nextUntitled() const {
+        int n = 0;
+        if (existing)
+            for (const auto &amp;s : *existing) if (s.rfind("Untitled", 0) == 0) ++n;
+        for (const auto &amp;s : *loaded)       if (s.name.rfind("Untitled", 0) == 0) ++n;
+        if (pending &amp;&amp; pending-&gt;rfind("Untitled", 0) == 0) ++n;
+        std::string name;
+        do { name = "Untitled " + std::to_string(++n); } while (contains(name));
+        return name;
+    }</span>
+};
+
+} // namespace
+
+bool IcfDocument::loadAccessSpecs(std::vector&lt;IcfAccessSpec&gt; &amp;out,
+<span style = "background-color:#dfd">                                  const std::vector&lt;std::string&gt; *existingNames)
+{
+    m_errors.clear();
+    IcfStream infile(m_path);
+
+    const uint64_t version = infile.getVersion();
+    if (version == IcfStream::BadVersion) {</span>
+<span style = "background-color:#fdd">        m_errors = infile.errors();</span>
+        return false;
+<span style = "background-color:#dfd">    }
+    if (!infile.skipTo("'ACCESS SPECIFICATIONS"))
+        return true;   // no access spec list to restore (this is OK)</span>
+
+    std::ifstream &amp;f = infile.raw();
+<span style = "background-color:#dfd">
+    if (version &gt;= 19980521) {
+        // ---- modern named format (LoadConfigNew) -----------------------------
+        std::string key, value;
+        while (true) {
+            if (!infile.getPair(key, value)) {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("File is improperly formatted.  Expected an "</span>
+                    "access specification or \"END access specifications\".");
+                return false;
+<span style = "background-color:#dfd">            }
+            if (equalsNoCase(key, "'END access specifications"))
+                break;
+            if (equalsNoCase(key, "'Access specification name,default assignment")) {
+                // Replace-by-name: the lookup uses everything left of the comma.
+                const std::size_t comma = value.find(',');
+                const std::string lookup = (comma == std::string::npos)
+                                           ? std::string() : value.substr(0, comma);
+                std::size_t idx = out.size();
+                for (std::size_t k = 0; k &lt; out.size(); ++k) {
+                    if (equalsNoCase(lookup, out[k].name.c_str())) { idx = k; break; }
+                }
+                if (idx == out.size())
+                    out.push_back(IcfAccessSpec());
+                IcfAccessSpec &amp;spec = out[idx];
+                spec.lines.clear();
+
+                spec.name = IcfStream::extractFirstToken(value, true);
+
+                const std::string token = IcfStream::extractFirstToken(value);
+                if (equalsNoCase(token, "NONE"))      spec.defaultAssignment = 0;
+                else if (equalsNoCase(token, "ALL"))  spec.defaultAssignment = 1;
+                else if (equalsNoCase(token, "DISK")) spec.defaultAssignment = 2;
+                else if (equalsNoCase(token, "NET"))  spec.defaultAssignment = 3;
+                else spec.defaultAssignment = std::atoi(token.c_str());
+
+                const std::string comment = infile.getNextLine();
+                if (comment.empty() || comment[0] != '\'') {
+                    m_errors.push_back("File is improperly formatted.  Expected a "</span>
+                        "comment line to follow the access specification name.");
+                    return false;
+                }
+
+                // Data rows: 8 comma-separated fields, atoi'd (junk parses as 0).
+<span style = "background-color:#dfd">                int total_access = 0;
+                std::string str;
+                while (f.peek() != '\'') {
+                    IcfAccessSpecLine l;
+                    std::getline(f, str, ','); l.size    = std::atoi(str.c_str());
+                    std::getline(f, str, ','); l.ofSize  = std::atoi(str.c_str());
+                    std::getline(f, str, ','); l.reads   = std::atoi(str.c_str());
+                    std::getline(f, str, ','); l.random  = std::atoi(str.c_str());
+                    std::getline(f, str, ','); l.delay   = std::atoi(str.c_str());
+                    std::getline(f, str, ','); l.burst   = std::atoi(str.c_str());
+                    std::getline(f, str, ','); l.align   = std::atoi(str.c_str());
+                    std::getline(f, str);      l.reply   = std::atoi(str.c_str());</span>
+
+<span style = "background-color:#dfd">                    if (l.ofSize &gt; 100 || l.reads &gt; 100 || l.random &gt; 100
+                        || l.ofSize &lt; 0 || l.reads &lt; 0 || l.random &lt; 0) {</span>
+<span style = "background-color:#fdd">                        out.erase(out.begin() + idx);   // MFC Delete(spec)
+                        m_errors.push_back("Error loading global access specifications.  "</span>
+                                           "Invalid value encountered.");
+                        return false;
+<span style = "background-color:#dfd">                    }
+                    total_access += l.ofSize;
+                    spec.lines.push_back(l);</span>
+                }
+<span style = "background-color:#dfd">
+                if (total_access != 100) {
+                    m_errors.push_back("Error loading global access specifications.  "
+                                       "Percentages don't add to 100.");
+                    out.erase(out.begin() + idx);       // MFC Delete(spec)
+                    return false;
+                }
+            } else {</span>
+<span style = "background-color:#fdd">                m_errors.push_back("File is improperly formatted.  Global ACCESS "</span>
+                    "SPECIFICATION section contained an unrecognized \"" + key + "\" comment.");
+                return false;
+            }
+<span style = "background-color:#dfd">        }</span>
+<span style = "background-color:#fdd">        return true;</span>
+    }
+
+<span style = "background-color:#fdd">    // ---- old numeric format, pre-1998.05.21 (LoadConfigOld) ---------------------</span>
+<span style = "background-color:#dfd">    infile.getNextLine();   // read and discard the initial comment line</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">    NamePool pool{ existingNames, &amp;out, nullptr };
+    IcfAccessSpec cur;
+    cur.name = pool.nextUntitled();   // MFC New() names the spec immediately
+    pool.pending = &amp;cur.name;
+    int total_access = 0;</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">    while (!f.rdstate()) {
+        const int pk = f.peek();
+        if (pk == '\'' || pk == EOF)</span>
+            return true;              // the trailing in-progress spec is dropped
+
+        // InitAccessSpecLine defaults; only SIX fields are read in the old
+        // format, so align stays 2048 and reply stays 0 (a faithful quirk).
+<span style = "background-color:#fdd">        IcfAccessSpecLine l;</span>
+<span style = "background-color:#dfd">        l.size = 2048; l.ofSize = 100; l.reads = 67; l.random = 100;
+        l.delay = 0;   l.burst = 1;    l.align = 2048; l.reply = 0;</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">        f &gt;&gt; l.size &gt;&gt; l.ofSize &gt;&gt; l.reads &gt;&gt; l.random &gt;&gt; l.delay &gt;&gt; l.burst;</span>
+        // Skip the rest of the line up to and INCLUDING the newline. The old
+        // ignore(1,'\n') consumed only one char, so a CRLF ('\r\n') left the '\n'
+<span style = "background-color:#fdd">        // behind and corrupted the next read (MFC's text-mode stream never saw</span>
+        // the '\r'; IcfStream is binary). Robust for LF and CRLF alike.
+<span style = "background-color:#dfd">        f.ignore(std::numeric_limits&lt;std::streamsize&gt;::max(), '\n');</span>
+<span style = "background-color:#fdd">
+        if (l.ofSize &gt; 100 || l.reads &gt; 100 || l.random &gt; 100</span>
+<span style = "background-color:#dfd">            || l.ofSize &lt; 0 || l.reads &lt; 0 || l.random &lt; 0)</span>
+<span style = "background-color:#fdd">            break;
+</span>
+<span style = "background-color:#dfd">        if (l.ofSize) {
+            total_access += l.ofSize;
+            cur.lines.push_back(l);
+        } else {</span>
+<span style = "background-color:#fdd">            m_errors.push_back("Found an access specification line that makes up 0% of the test.  "</span>
+                               "This line will be discarded.");
+<span style = "background-color:#fdd">        }
+</span>
+<span style = "background-color:#dfd">        if (total_access &gt; 100)</span>
+            break;
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">        if (total_access == 100) {
+            cur.defaultAssignment = 1;   // AssignAll</span>
+<span style = "background-color:#fdd">
+            // SmartName: single-line specs get a descriptive, unique name.</span>
+<span style = "background-color:#dfd">            if (cur.lines.size() == 1) {</span>
+<span style = "background-color:#fdd">                const IcfAccessSpecLine &amp;sl = cur.lines[0];</span>
+<span style = "background-color:#dfd">                std::string name = smartNameText(sl.size, sl.random, sl.reads);
+                const std::string base = name;
+                int spec_number = 1;
+                pool.pending = nullptr;   // MFC RefByName can't match the spec itself here
+                while (pool.contains(name))
+                    name = base + " " + std::to_string(++spec_number);
+                cur.name = name;
+            }
+
+            out.push_back(cur);</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            cur = IcfAccessSpec();
+            pool.pending = nullptr;
+            cur.name = pool.nextUntitled();
+            pool.pending = &amp;cur.name;
+            total_access = 0;
+        }</span>
+    }
+
+<span style = "background-color:#fdd">    m_errors.push_back("Error loading access specification.  Invalid access specification.");
+    return false;</span>
+<span style = "background-color:#dfd">}</span>
+
+} // namespace iocore</pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

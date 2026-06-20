@@ -1,0 +1,289 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtBigMeterWidget.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtBigMeterWidget.cpp
+// Qt port of CBigMeter - Iometer "Presentation Meter" window.
+//
+// Layout (top to bottom) matches the original:
+//   1. Speedometer gauge - fills most of the window
+//   2. Large numeric value with units  (blue, ~22pt bold)
+//   3. Subtitle "All Managers - &lt;metric name&gt;"  (plain, smaller)
+//   4. Separator
+//   5. Two side-by-side groups: [Settings] | [Test Controls]
+
+#include "QtBigMeterWidget.h"
+#include "QtMeterWidget.h"
+
+#include &lt;QVBoxLayout&gt;
+#include &lt;QHBoxLayout&gt;
+#include &lt;QLabel&gt;
+#include &lt;QPushButton&gt;
+#include &lt;QCheckBox&gt;
+#include &lt;QSpinBox&gt;
+#include &lt;QComboBox&gt;
+#include &lt;QGroupBox&gt;
+#include &lt;QFont&gt;
+#include &lt;QSizePolicy&gt;
+#include &lt;QFrame&gt;
+#include &lt;QPalette&gt;
+
+// -----------------------------------------------------------------------------
+// Construction
+// -----------------------------------------------------------------------------
+
+QtBigMeterWidget::QtBigMeterWidget(QWidget *parent)
+<span style = "background-color:#dfd">    : QWidget(parent)
+{
+    setupUi();
+    setWindowTitle("Iometer - Presentation Meter");
+    resize(600, 580);
+}</span>
+
+void QtBigMeterWidget::setupUi()
+<span style = "background-color:#dfd">{
+    auto *root = new QVBoxLayout(this);
+    root-&gt;setSpacing(4);
+    root-&gt;setContentsMargins(8, 8, 8, 8);</span>
+
+    // -- 1. Speedometer (takes up most of the space) ----------------------
+<span style = "background-color:#dfd">    m_meter = new QtMeterWidget;
+    m_meter-&gt;setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    root-&gt;addWidget(m_meter, 1);</span>
+
+    // -- 2. Large numeric readout with units ------------------------------
+<span style = "background-color:#dfd">    m_valueLabel = new QLabel("0");
+    QFont vf("Arial", 22, QFont::Bold);
+    m_valueLabel-&gt;setFont(vf);
+    m_valueLabel-&gt;setAlignment(Qt::AlignCenter);</span>
+    // Use palette for colour - avoids a global stylesheet
+<span style = "background-color:#dfd">    QPalette vp = m_valueLabel-&gt;palette();
+    vp.setColor(QPalette::WindowText, QColor(0x44, 0x88, 0xbb));
+    m_valueLabel-&gt;setPalette(vp);
+    root-&gt;addWidget(m_valueLabel);</span>
+
+    // -- 3. Subtitle: "All Managers - &lt;metric&gt;" ---------------------------
+    // m_titleLabel kept as a (hidden) member for setTitle() back-compat;
+    // setTitle() now routes to setWindowTitle() so we don't add it to the layout.
+<span style = "background-color:#dfd">    m_titleLabel  = new QLabel;
+    m_workerLabel = new QLabel;
+    QFont wf("Arial", 10);
+    m_workerLabel-&gt;setFont(wf);
+    m_workerLabel-&gt;setAlignment(Qt::AlignCenter);
+    root-&gt;addWidget(m_workerLabel);</span>
+
+    // -- 4. Separator -----------------------------------------------------
+<span style = "background-color:#dfd">    auto *sep = new QFrame;
+    sep-&gt;setFrameShape(QFrame::HLine);
+    sep-&gt;setFrameShadow(QFrame::Sunken);
+    root-&gt;addWidget(sep);</span>
+
+    // -- 5. Bottom: [Settings] | [Test Controls] --------------------------
+<span style = "background-color:#dfd">    auto *bottomRow = new QHBoxLayout;</span>
+
+    // Settings group
+<span style = "background-color:#dfd">    auto *settingsGroup = new QGroupBox("Settings");
+    auto *settingsLay   = new QVBoxLayout(settingsGroup);
+    settingsLay-&gt;setSpacing(4);</span>
+
+<span style = "background-color:#dfd">    m_resultType = new QComboBox;
+    m_resultType-&gt;addItems({</span>
+        "IOps",
+        "MBps (Decimal)",
+        "MBps (Binary)",
+        "Read IOps",
+        "Write IOps",
+        "Read MBps (Dec)",
+        "Write MBps (Dec)",
+        "Average Latency (ms)",
+        "Max Latency (ms)",
+        "CPU Utilization (%)",
+        "CPU User (%)",
+        "CPU Kernel (%)",
+    });
+<span style = "background-color:#dfd">    settingsLay-&gt;addWidget(m_resultType);</span>
+
+<span style = "background-color:#dfd">    auto *rangeRow = new QHBoxLayout;
+    auto *rangeLbl = new QLabel("Range");
+    m_maxRangeSpin = new QSpinBox;
+    m_maxRangeSpin-&gt;setRange(0, 10000000);
+    m_maxRangeSpin-&gt;setValue(0);
+    m_maxRangeSpin-&gt;setFixedWidth(80);
+    m_watermarkChk = new QCheckBox("Show Trace");
+    rangeRow-&gt;addWidget(rangeLbl);
+    rangeRow-&gt;addWidget(m_maxRangeSpin);
+    rangeRow-&gt;addSpacing(8);
+    rangeRow-&gt;addWidget(m_watermarkChk);
+    rangeRow-&gt;addStretch();
+    settingsLay-&gt;addLayout(rangeRow);</span>
+
+<span style = "background-color:#dfd">    bottomRow-&gt;addWidget(settingsGroup, 1);</span>
+
+    // Test Controls group
+<span style = "background-color:#dfd">    auto *ctrlGroup = new QGroupBox("Test Controls");
+    auto *ctrlLay   = new QHBoxLayout(ctrlGroup);
+    m_startNextBtn = new QPushButton("Start");
+    m_stopBtn      = new QPushButton("Stop");
+    ctrlLay-&gt;addStretch();
+    ctrlLay-&gt;addWidget(m_startNextBtn);
+    ctrlLay-&gt;addWidget(m_stopBtn);
+    bottomRow-&gt;addWidget(ctrlGroup);</span>
+
+<span style = "background-color:#dfd">    root-&gt;addLayout(bottomRow);</span>
+
+    // -- Wire up signals ---------------------------------------------------
+<span style = "background-color:#dfd">    connect(m_startNextBtn, &amp;QPushButton::clicked,</span>
+            this,           &amp;QtBigMeterWidget::onStartNextClicked);
+<span style = "background-color:#dfd">    connect(m_stopBtn,      &amp;QPushButton::clicked,</span>
+            this,           &amp;QtBigMeterWidget::onStopClicked);
+<span style = "background-color:#dfd">    connect(m_watermarkChk, &amp;QCheckBox::toggled,</span>
+            this,           &amp;QtBigMeterWidget::onWatermarkToggled);
+<span style = "background-color:#dfd">    connect(m_maxRangeSpin, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged),</span>
+            this,           &amp;QtBigMeterWidget::onMaxRangeChanged);
+<span style = "background-color:#dfd">    connect(m_resultType,   &amp;QComboBox::currentTextChanged,</span>
+            this,           &amp;QtBigMeterWidget::onResultTypeChanged);
+
+    // Initialise the meter and button states
+<span style = "background-color:#dfd">    m_meter-&gt;setRange(0, 100, true);
+    updateButtons();
+}</span>
+
+// -----------------------------------------------------------------------------
+// Public API
+// -----------------------------------------------------------------------------
+
+void QtBigMeterWidget::setTitle(const QString &amp;testTitle)
+<span style = "background-color:#dfd">{</span>
+    // Route to the OS window title bar - no separate in-window title label.
+<span style = "background-color:#dfd">    setWindowTitle(testTitle.isEmpty() ? "Iometer - Presentation Meter" : testTitle);
+}</span>
+
+void QtBigMeterWidget::setWorkerResult(const QString &amp;workerName,
+                                     const QString &amp;resultName)
+<span style = "background-color:#dfd">{
+    m_workerName = workerName;
+    m_resultName = resultName;</span>
+
+<span style = "background-color:#dfd">    if (workerName.isEmpty())</span>
+<span style = "background-color:#fdd">        m_workerLabel-&gt;setText(resultName);</span>
+<span style = "background-color:#dfd">    else if (resultName.isEmpty())</span>
+<span style = "background-color:#fdd">        m_workerLabel-&gt;setText(workerName);</span>
+    else
+<span style = "background-color:#dfd">        m_workerLabel-&gt;setText(workerName + " - " + resultName);  // em-dash</span>
+
+    // Sync the combo box without triggering the resultTypeChanged signal
+<span style = "background-color:#dfd">    if (!resultName.isEmpty()) {
+        const int idx = m_resultType-&gt;findText(resultName);
+        if (idx &gt;= 0) {
+            QSignalBlocker guard(m_resultType);
+            m_resultType-&gt;setCurrentIndex(idx);
+        }</span>
+    }
+<span style = "background-color:#dfd">}</span>
+
+void QtBigMeterWidget::updateDisplay(double value, const QString &amp;formattedText)
+<span style = "background-color:#dfd">{
+    m_meter-&gt;setValue(value);
+    m_valueLabel-&gt;setText(</span>
+        formattedText.isEmpty()
+            ? QString::number(value, 'f', (value &lt; 100.0 ? 1 : 0))
+            : formattedText);
+<span style = "background-color:#dfd">}</span>
+
+void QtBigMeterWidget::resetWatermark()
+<span style = "background-color:#dfd">{
+    m_meter-&gt;resetWatermark();</span>
+}
+
+void QtBigMeterWidget::setButtonState(bool canStart, bool canStop, bool canStopAll)
+<span style = "background-color:#dfd">{
+    m_canStart   = canStart;
+    m_canStop    = canStop;
+    m_canStopAll = canStopAll;
+    updateButtons();</span>
+}
+
+// -----------------------------------------------------------------------------
+// Private helpers
+// -----------------------------------------------------------------------------
+
+void QtBigMeterWidget::updateButtons()
+<span style = "background-color:#dfd">{</span>
+    // Logic mirrors CBigMeter::UpdateButtons
+<span style = "background-color:#dfd">    if (m_canStart) {
+        m_startNextBtn-&gt;setText("Start");
+        m_startNextBtn-&gt;setEnabled(true);
+        m_stopBtn-&gt;setEnabled(false);
+    } else if (m_canStop || m_canStopAll) {
+        m_startNextBtn-&gt;setText("Next &gt;&gt;");
+        m_startNextBtn-&gt;setEnabled(m_canStopAll);
+        m_stopBtn-&gt;setEnabled(true);</span>
+    } else {
+<span style = "background-color:#dfd">        m_startNextBtn-&gt;setText("Start");
+        m_startNextBtn-&gt;setEnabled(false);
+        m_stopBtn-&gt;setEnabled(false);</span>
+    }
+<span style = "background-color:#dfd">}</span>
+
+// -----------------------------------------------------------------------------
+// Slots
+// -----------------------------------------------------------------------------
+
+void QtBigMeterWidget::onStartNextClicked()
+<span style = "background-color:#dfd">{
+    if (m_canStart) {
+        m_meter-&gt;resetWatermark();
+        emit startRequested();</span>
+    } else {
+<span style = "background-color:#fdd">        emit nextRequested();</span>
+    }
+<span style = "background-color:#dfd">}</span>
+
+void QtBigMeterWidget::onStopClicked()
+<span style = "background-color:#fdd">{
+    emit stopRequested();</span>
+}
+
+void QtBigMeterWidget::onWatermarkToggled(bool checked)
+<span style = "background-color:#dfd">{
+    m_meter-&gt;showWatermark = checked;
+    m_meter-&gt;resetWatermark();
+    m_meter-&gt;update();
+}</span>
+
+void QtBigMeterWidget::onMaxRangeChanged(int value)
+<span style = "background-color:#dfd">{</span>
+    if (value == 0)
+        m_meter-&gt;setRange(0, 100, /*auto=*/true);
+    else
+        m_meter-&gt;setRange(0, value, /*auto=*/false);
+<span style = "background-color:#dfd">}</span>
+
+void QtBigMeterWidget::onResultTypeChanged(const QString &amp;text)
+<span style = "background-color:#fdd">{
+    m_resultName = text;
+    setWorkerResult(m_workerName, text);   // update the subtitle label
+    emit resultTypeChanged(text);
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

@@ -1,0 +1,1264 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtDynamoEngine.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtDynamoEngine.cpp
+#include "QtDynamoEngine.h"
+#include "QtIometerEngine.h"
+#include "../core/ResultsWriter.h"
+#include "../core/ResultsAggregator.h"
+#include "../core/ResultDecode.h"
+#include "../core/IcfFile.h"
+#include "../core/NetworkSetup.h"
+#include &lt;QTcpServer&gt;
+#include &lt;QTcpSocket&gt;
+#include &lt;QHostAddress&gt;
+#include &lt;QDataStream&gt;
+#include &lt;QDebug&gt;
+#include &lt;QFile&gt;
+#include &lt;QTextStream&gt;
+#include &lt;QRegularExpression&gt;
+#include &lt;QDateTime&gt;
+#include &lt;QSet&gt;
+#include &lt;cstring&gt;
+#include &lt;cmath&gt;
+
+// --- Helpers ------------------------------------------------------------------
+
+// Container conversions between Qt and std containers.  The *element* type is
+// the same shared core domain type in both cases - only the container differs.
+<span style = "background-color:#dfd">template &lt;class T&gt;</span>
+<span style = "background-color:#fdd">static std::vector&lt;T&gt; toVec(const QList&lt;T&gt; &amp;l) {</span>
+<span style = "background-color:#dfd">    // Note: in Qt6 QVector is an alias for QList, so this covers both.
+    return std::vector&lt;T&gt;(l.begin(), l.end());</span>
+<span style = "background-color:#fdd">}</span>
+<span style = "background-color:#dfd">template &lt;class T&gt;
+static QList&lt;T&gt; toQList(const std::vector&lt;T&gt; &amp;v) {
+    QList&lt;T&gt; l;
+    l.reserve(static_cast&lt;int&gt;(v.size()));</span>
+<span style = "background-color:#fdd">    for (const auto &amp;x : v) l.append(x);</span>
+<span style = "background-color:#dfd">    return l;
+}
+static QStringList toQStringList(const std::vector&lt;std::string&gt; &amp;v) {
+    QStringList l;</span>
+<span style = "background-color:#fdd">    for (const auto &amp;s : v) l &lt;&lt; QString::fromStdString(s);</span>
+<span style = "background-color:#dfd">    return l;
+}
+static std::vector&lt;std::string&gt; toStdStrings(const QStringList &amp;l) {
+    std::vector&lt;std::string&gt; v;
+    for (const auto &amp;s : l) v.push_back(s.toStdString());
+    return v;</span>
+<span style = "background-color:#fdd">}</span>
+
+// -----------------------------------------------------------------------------
+// QtDySession
+// -----------------------------------------------------------------------------
+
+QtDySession::QtDySession(QTcpSocket *loginSocket, QObject *parent)
+<span style = "background-color:#fdd">    : QObject(parent), m_loginSocket(loginSocket)
+{</span>
+    // The login socket belongs to us now
+<span style = "background-color:#fdd">    m_loginSocket-&gt;setParent(this);</span>
+
+<span style = "background-color:#fdd">    connect(m_loginSocket, &amp;QTcpSocket::readyRead,</span>
+            this, &amp;QtDySession::onLoginData);
+<span style = "background-color:#fdd">    connect(m_loginSocket, &amp;QTcpSocket::disconnected,
+            this, [this]{ m_loginSocket-&gt;deleteLater(); m_loginSocket = nullptr; });</span>
+
+    // Prime the state machine - expect 8-byte login Message
+<span style = "background-color:#fdd">    m_expecting   = DY_MSG_SIZE;</span>
+    m_afterExpect = State::WaitLoginMsg;
+
+    // Update timer (starts only when test is running)
+<span style = "background-color:#fdd">    m_updateTimer.setSingleShot(false);
+    connect(&amp;m_updateTimer, &amp;QTimer::timeout, this, &amp;QtDySession::onUpdateTimer);
+}</span>
+
+QtDySession::~QtDySession()
+<span style = "background-color:#fdd">{
+    m_updateTimer.stop();</span>
+<span style = "background-color:#dfd">    if (m_loginSocket) m_loginSocket-&gt;abort();
+    if (m_mainSocket)  m_mainSocket-&gt;abort();</span>
+<span style = "background-color:#fdd">}</span>
+<span style = "background-color:#dfd"></span>
+// -- Low-level socket helpers --------------------------------------------------
+<span style = "background-color:#dfd"></span>
+void QtDySession::sendMsg(int32_t purpose, int32_t data)
+<span style = "background-color:#dfd">{</span>
+<span style = "background-color:#fdd">    if (!m_mainSocket || m_mainSocket-&gt;state() != QAbstractSocket::ConnectedState)</span>
+        return;
+    DyMsg msg;
+<span style = "background-color:#dfd">    msg.purpose = purpose;</span>
+    msg.data    = data;
+<span style = "background-color:#fdd">    m_mainSocket-&gt;write(reinterpret_cast&lt;const char*&gt;(&amp;msg), sizeof(msg));
+}</span>
+<span style = "background-color:#dfd">
+void QtDySession::sendDataMsg(DyDataMessage *dm)
+{</span>
+<span style = "background-color:#fdd">    if (!m_mainSocket || m_mainSocket-&gt;state() != QAbstractSocket::ConnectedState)</span>
+        return;
+<span style = "background-color:#dfd">    dm-&gt;size  = DY_DATAMSG_SIZE;
+    dm-&gt;count = dm-&gt;count;  // already set by caller
+    m_mainSocket-&gt;write(reinterpret_cast&lt;const char*&gt;(dm), DY_DATAMSG_SIZE);
+}
+</span>
+bool QtDySession::consume(int bytes)
+<span style = "background-color:#fdd">{</span>
+    // Append any newly-arrived data into m_buf then check
+<span style = "background-color:#fdd">    return m_buf.size() &gt;= bytes;</span>
+<span style = "background-color:#dfd">}
+</span>
+QByteArray QtDySession::take(int bytes)
+<span style = "background-color:#fdd">{
+    QByteArray chunk = m_buf.left(bytes);
+    m_buf.remove(0, bytes);</span>
+<span style = "background-color:#dfd">    return chunk;
+}</span>
+
+// -- Login socket handler ------------------------------------------------------
+<span style = "background-color:#dfd">
+void QtDySession::onLoginData()</span>
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    // Append whatever arrived</span>
+<span style = "background-color:#fdd">    m_buf += m_loginSocket-&gt;readAll();</span>
+<span style = "background-color:#dfd">
+    if (m_state == State::WaitLoginMsg &amp;&amp; m_buf.size() &gt;= DY_MSG_SIZE) {</span>
+<span style = "background-color:#fdd">        processLoginMsg();</span>
+    }
+<span style = "background-color:#fdd">    if (m_state == State::WaitLoginData &amp;&amp; m_buf.size() &gt;= DY_DATAMSG_SIZE) {
+        processLoginData();
+    }
+}</span>
+
+void QtDySession::processLoginMsg()
+<span style = "background-color:#dfd">{
+    QByteArray chunk = take(DY_MSG_SIZE);
+    const DyMsg *msg = reinterpret_cast&lt;const DyMsg*&gt;(chunk.constData());
+
+    if (msg-&gt;purpose != DY_LOGIN) {</span>
+<span style = "background-color:#fdd">        qWarning() &lt;&lt; "QtDySession: expected LOGIN, got" &lt;&lt; msg-&gt;purpose;
+        m_state = State::Error;
+        emit errorOccurred(this, "Unexpected login message");</span>
+        return;
+<span style = "background-color:#dfd">    }</span>
+
+<span style = "background-color:#dfd">    // Check version compatibility (ignore sub-minor byte)</span>
+<span style = "background-color:#fdd">    const uint32_t dynVer    = static_cast&lt;uint32_t&gt;(msg-&gt;data);</span>
+<span style = "background-color:#dfd">    const uint32_t ourVer    = static_cast&lt;uint32_t&gt;(DY_VERSION);
+    if ((dynVer &amp; DY_COMPAT_MASK) != (ourVer &amp; DY_COMPAT_MASK)) {</span>
+<span style = "background-color:#fdd">        qWarning() &lt;&lt; "QtDySession: version mismatch. Dynamo=" &lt;&lt; dynVer</span>
+<span style = "background-color:#dfd">                   &lt;&lt; "Ours=" &lt;&lt; ourVer;
+        // Send WRONG_VERSION</span>
+        DyMsg reply;
+<span style = "background-color:#dfd">        reply.purpose = DY_LOGIN;</span>
+<span style = "background-color:#fdd">        reply.data    = DY_WRONG_VERSION;
+        m_loginSocket-&gt;write(reinterpret_cast&lt;const char*&gt;(&amp;reply), sizeof(reply));</span>
+<span style = "background-color:#dfd">        m_loginSocket-&gt;flush();
+        m_state = State::Error;
+        emit errorOccurred(this, QString("Version mismatch: Dynamo %1 vs Iometer %2")</span>
+                                 .arg(dynVer, 0, 16).arg(ourVer, 0, 16));
+<span style = "background-color:#dfd">        return;</span>
+<span style = "background-color:#fdd">    }
+
+    m_state = State::WaitLoginData;</span>
+    // Will be handled next time onLoginData fires with enough bytes
+<span style = "background-color:#fdd">}</span>
+
+void QtDySession::processLoginData()
+<span style = "background-color:#dfd">{</span>
+<span style = "background-color:#fdd">    QByteArray chunk = take(DY_DATAMSG_SIZE);</span>
+<span style = "background-color:#dfd">    const DyDataMessage *dm = reinterpret_cast&lt;const DyDataMessage*&gt;(chunk.constData());</span>
+<span style = "background-color:#fdd">
+    if (dm-&gt;size != DY_DATAMSG_SIZE) {
+        qWarning() &lt;&lt; "QtDySession: Data_Message size mismatch: got" &lt;&lt; dm-&gt;size</span>
+                   &lt;&lt; "expected" &lt;&lt; DY_DATAMSG_SIZE;
+<span style = "background-color:#fdd">        // Be lenient - continue anyway (might be a different build)
+    }
+
+    const DyManagerInfo &amp;mi = dm-&gt;data.manager_info;
+    m_managerName     = QString::fromLocal8Bit(mi.names[0]);
+    m_address         = QString::fromLocal8Bit(mi.names[1]);
+    m_mainPort        = mi.port_number;
+    m_timerResolution = mi.timer_resolution &gt; 0.0 ? mi.timer_resolution : 1.0;
+    m_processorCount  = mi.processors &gt; 0 ? mi.processors : 1;</span>
+
+<span style = "background-color:#dfd">    qDebug() &lt;&lt; "QtDySession: login from" &lt;&lt; m_managerName</span>
+             &lt;&lt; "main port" &lt;&lt; m_address &lt;&lt; ":" &lt;&lt; m_mainPort
+<span style = "background-color:#dfd">             &lt;&lt; "processors" &lt;&lt; m_processorCount</span>
+             &lt;&lt; "timer_res" &lt;&lt; m_timerResolution;
+
+<span style = "background-color:#dfd">    // Reply LOGIN_OK on the login socket
+    DyMsg reply;
+    reply.purpose = DY_LOGIN;</span>
+<span style = "background-color:#fdd">    reply.data    = DY_LOGIN_OK;</span>
+<span style = "background-color:#dfd">    m_loginSocket-&gt;write(reinterpret_cast&lt;const char*&gt;(&amp;reply), sizeof(reply));</span>
+<span style = "background-color:#fdd">    m_loginSocket-&gt;flush();</span>
+
+    // Login socket is done - disconnect it
+<span style = "background-color:#fdd">    disconnect(m_loginSocket, &amp;QTcpSocket::readyRead, this, &amp;QtDySession::onLoginData);
+    m_loginSocket-&gt;disconnectFromHost();</span>
+
+<span style = "background-color:#dfd">    // Connect back to Dynamo's main port
+    m_state      = State::Connecting;
+    m_mainSocket = new QTcpSocket(this);
+    connect(m_mainSocket, &amp;QTcpSocket::connected,     this, &amp;QtDySession::onMainConnected);
+    connect(m_mainSocket, &amp;QTcpSocket::readyRead,     this, &amp;QtDySession::onMainData);</span>
+<span style = "background-color:#fdd">    connect(m_mainSocket, &amp;QTcpSocket::disconnected,  this, &amp;QtDySession::onMainDisconnected);</span>
+<span style = "background-color:#dfd"></span>
+<span style = "background-color:#fdd">    QString host = m_address.isEmpty() ? "127.0.0.1" : m_address;
+    m_mainSocket-&gt;connectToHost(host, m_mainPort);
+    m_buf.clear();  // reset buffer for main-socket data
+}</span>
+
+// -- Main socket handlers ------------------------------------------------------
+<span style = "background-color:#dfd">
+void QtDySession::onMainConnected()
+{
+    qDebug() &lt;&lt; "QtDySession: main socket connected to" &lt;&lt; m_address &lt;&lt; ":" &lt;&lt; m_mainPort;</span>
+
+    // Request disk target list
+<span style = "background-color:#dfd">    m_state = State::WaitTargetsDisk;
+    sendMsg(DY_REPORT_TARGETS, DY_MANAGER);</span>
+    // Dynamo will send 3 Data_Messages: disks, TCP, VI
+<span style = "background-color:#fdd">}</span>
+<span style = "background-color:#dfd">
+void QtDySession::onMainDisconnected()
+{
+    m_updateTimer.stop();
+    m_state = State::Disconnected;</span>
+<span style = "background-color:#fdd">    emit managerDisconnected(this);</span>
+<span style = "background-color:#dfd">}
+
+void QtDySession::onMainData()
+{</span>
+<span style = "background-color:#fdd">    m_buf += m_mainSocket-&gt;readAll();
+    dispatchMainData();
+}</span>
+
+<span style = "background-color:#dfd">void QtDySession::dispatchMainData()
+{</span>
+    // Keep processing as long as we have enough data for the current state
+    bool progress = true;
+<span style = "background-color:#dfd">    while (progress) {
+        progress = false;</span>
+
+<span style = "background-color:#dfd">        switch (m_state) {</span>
+
+        // -- Target discovery --------------------------------------------------
+<span style = "background-color:#dfd">        case State::WaitTargetsDisk:
+            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {</span>
+<span style = "background-color:#fdd">                processTargetList(0); progress = true;</span>
+<span style = "background-color:#dfd">            }
+            break;</span>
+        case State::WaitTargetsTcp:
+<span style = "background-color:#fdd">            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {</span>
+<span style = "background-color:#dfd">                processTargetList(1); progress = true;
+            }
+            break;
+        case State::WaitTargetsVi:</span>
+<span style = "background-color:#fdd">            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {
+                processTargetList(2); progress = true;</span>
+<span style = "background-color:#dfd">            }</span>
+<span style = "background-color:#fdd">            break;</span>
+
+        // -- ADD_WORKERS confirmation ------------------------------------------
+        case State::WaitAddWorkers:
+<span style = "background-color:#fdd">            if (m_buf.size() &gt;= DY_MSG_SIZE) {</span>
+<span style = "background-color:#dfd">                processAddWorkersReply(); progress = true;</span>
+            }
+<span style = "background-color:#fdd">            break;</span>
+
+<span style = "background-color:#dfd">        // -- Worker setup ------------------------------------------------------
+        case State::SetupAccess:</span>
+            // Waiting for 8-byte reply to SET_ACCESS
+<span style = "background-color:#dfd">            if (m_buf.size() &gt;= DY_MSG_SIZE) {</span>
+<span style = "background-color:#fdd">                processSetAccessReply(); progress = true;</span>
+<span style = "background-color:#dfd">            }
+            break;</span>
+        case State::SetupTargetsReply:
+<span style = "background-color:#dfd">            if (m_buf.size() &gt;= DY_MSG_SIZE) {</span>
+<span style = "background-color:#fdd">                processSetTargetsReply(); progress = true;</span>
+<span style = "background-color:#dfd">            }
+            break;</span>
+        case State::SetupTargetsData:
+<span style = "background-color:#dfd">            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {</span>
+<span style = "background-color:#fdd">                processSetTargetsData(); progress = true;</span>
+            }
+<span style = "background-color:#fdd">            break;</span>
+<span style = "background-color:#dfd">
+        // -- Start sequence ----------------------------------------------------</span>
+        case State::WaitStartReply:
+<span style = "background-color:#dfd">            if (m_buf.size() &gt;= DY_MSG_SIZE) {</span>
+<span style = "background-color:#fdd">                processStartReply(); progress = true;</span>
+            }
+<span style = "background-color:#fdd">            break;</span>
+        case State::WaitBeginIoReply:
+<span style = "background-color:#dfd">            if (m_buf.size() &gt;= DY_MSG_SIZE) {
+                processBeginIoReply(); progress = true;</span>
+            }
+<span style = "background-color:#dfd">            break;</span>
+
+<span style = "background-color:#dfd">        // -- Results during test -----------------------------------------------
+        case State::WaitUpdateMgr:</span>
+<span style = "background-color:#fdd">            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {</span>
+<span style = "background-color:#dfd">                processUpdateMgr(); progress = true;</span>
+            }
+<span style = "background-color:#dfd">            break;
+        case State::WaitUpdateWorker:</span>
+<span style = "background-color:#fdd">            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {</span>
+<span style = "background-color:#dfd">                processUpdateWorker(); progress = true;</span>
+            }
+<span style = "background-color:#fdd">            break;</span>
+
+<span style = "background-color:#dfd">        // -- Stop sequence -----------------------------------------------------
+        case State::WaitRecordOff:</span>
+<span style = "background-color:#fdd">            if (m_buf.size() &gt;= DY_MSG_SIZE) {</span>
+<span style = "background-color:#dfd">                processRecordOffReply(); progress = true;</span>
+            }
+<span style = "background-color:#dfd">            break;
+        case State::WaitStop:</span>
+<span style = "background-color:#fdd">            if (m_buf.size() &gt;= DY_MSG_SIZE) {</span>
+<span style = "background-color:#dfd">                processStopReply(); progress = true;</span>
+            }
+<span style = "background-color:#fdd">            break;</span>
+        case State::WaitFinalMgr:
+<span style = "background-color:#dfd">            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {
+                processFinalMgr(); progress = true;</span>
+            }
+<span style = "background-color:#dfd">            break;</span>
+        case State::WaitFinalWorker:
+<span style = "background-color:#dfd">            if (m_buf.size() &gt;= DY_DATAMSG_SIZE) {
+                processFinalWorker(); progress = true;</span>
+            }
+<span style = "background-color:#dfd">            break;</span>
+
+        default:
+            break;
+<span style = "background-color:#dfd">        }</span>
+<span style = "background-color:#fdd">    }
+}
+</span>
+// -- Target discovery handlers -------------------------------------------------
+<span style = "background-color:#fdd">
+void QtDySession::processTargetList(int phase)
+{
+    QByteArray chunk = take(DY_DATAMSG_SIZE);
+    const DyDataMessage *dm = reinterpret_cast&lt;const DyDataMessage*&gt;(chunk.constData());
+    const int count = std::max(0, std::min(dm-&gt;count, DY_MAX_TARGETS));
+
+    switch (phase) {
+    case 0: // disk
+        m_diskTargets.clear();
+        for (int i = 0; i &lt; count; ++i)
+            m_diskTargets.append(dm-&gt;data.targets[i]);
+        m_state = State::WaitTargetsTcp;</span>
+        break;
+    case 1: // tcp
+<span style = "background-color:#fdd">        m_tcpTargets.clear();
+        for (int i = 0; i &lt; count; ++i)
+            m_tcpTargets.append(dm-&gt;data.targets[i]);
+        m_state = State::WaitTargetsVi;</span>
+<span style = "background-color:#dfd">        break;</span>
+    case 2: // vi
+<span style = "background-color:#fdd">        m_viTargets.clear();
+        for (int i = 0; i &lt; count; ++i)
+            m_viTargets.append(dm-&gt;data.targets[i]);</span>
+<span style = "background-color:#dfd">
+        // All targets discovered - create one disk worker per CPU core, matching
+        // the original Iometer AddDefaultWorkers() behaviour (disk_worker_count=-1
+        // â use manager-&gt;processors).  Workers are named "Worker 1", "Worker 2", â¦</span>
+        // None have targets pre-assigned; the user assigns them via Disk Targets tab.
+<span style = "background-color:#dfd">        m_workers.clear();</span>
+<span style = "background-color:#fdd">        for (int i = 0; i &lt; m_processorCount; ++i) {</span>
+<span style = "background-color:#dfd">            WorkerInfo w;
+            w.id          = QString("%1-disk-%2").arg(m_managerName).arg(i).toStdString();
+            w.name        = QString("Worker %1").arg(i + 1).toStdString();
+            w.type        = "Disk";</span>
+<span style = "background-color:#fdd">            w.managerName = m_managerName.toStdString();
+            w.queueDepth  = 1;</span>
+<span style = "background-color:#dfd">            w.targets     = {};   // no targets pre-assigned
+            m_workers.append(w);
+        }
+        // Tell Dynamo to create the worker threads.
+        // DY_ADD_WORKERS data = number of disk workers to create.</span>
+<span style = "background-color:#fdd">        sendMsg(DY_ADD_WORKERS, static_cast&lt;int32_t&gt;(m_workers.size()));</span>
+<span style = "background-color:#dfd">        m_state = State::WaitAddWorkers;
+        qDebug() &lt;&lt; "QtDySession: sent ADD_WORKERS(" &lt;&lt; m_workers.size() &lt;&lt; ") to"</span>
+<span style = "background-color:#fdd">                 &lt;&lt; m_managerName;</span>
+        break;
+    }
+<span style = "background-color:#fdd">}</span>
+
+// -- ADD_WORKERS reply ---------------------------------------------------------
+<span style = "background-color:#dfd">
+void QtDySession::processAddWorkersReply()
+{
+    QByteArray chunk = take(DY_MSG_SIZE);
+    const DyMsg *msg = reinterpret_cast&lt;const DyMsg*&gt;(chunk.constData());
+    const int32_t actualCount = msg-&gt;data;</span>
+<span style = "background-color:#fdd">    if (actualCount &lt;= 0) {</span>
+<span style = "background-color:#dfd">        qWarning() &lt;&lt; "QtDySession: ADD_WORKERS reply says 0 workers on" &lt;&lt; m_managerName;
+    }
+    qDebug() &lt;&lt; "QtDySession: ADD_WORKERS confirmed," &lt;&lt; actualCount
+             &lt;&lt; "workers on" &lt;&lt; m_managerName;</span>
+<span style = "background-color:#fdd">    m_state = State::Ready;
+    emit managerConnected(this);</span>
+<span style = "background-color:#dfd">}
+
+// -- Worker setup handlers -----------------------------------------------------</span>
+
+void QtDySession::beginSetupWorker(int idx)
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    if (idx &gt;= m_workers.size()) {</span>
+        // All workers configured - start the test
+<span style = "background-color:#fdd">        beginStartSequence();
+        return;</span>
+    }
+<span style = "background-color:#dfd">
+    const WorkerInfo &amp;w = m_workers[idx];
+    const int wIdx      = idx;  // worker index passed to Dynamo
+
+    // -- SET_ACCESS --</span>
+<span style = "background-color:#fdd">    DyDataMessage *dm = new DyDataMessage;
+    std::memset(dm, 0, sizeof(*dm));</span>
+<span style = "background-color:#dfd">    buildTestSpec(dm, m_accessSpecs.isEmpty()</span>
+                      ? AccessSpec{} : m_accessSpecs.first());
+<span style = "background-color:#dfd">    dm-&gt;count = 1;
+
+    sendMsg(DY_SET_ACCESS, wIdx);</span>
+<span style = "background-color:#fdd">    sendDataMsg(dm);
+    delete dm;</span>
+
+<span style = "background-color:#fdd">    m_setupWorkerIdx = idx;</span>
+<span style = "background-color:#dfd">    m_state = State::SetupAccess;
+}</span>
+
+<span style = "background-color:#dfd">void QtDySession::processSetAccessReply()
+{</span>
+<span style = "background-color:#fdd">    QByteArray chunk = take(DY_MSG_SIZE);
+    const DyMsg *msg = reinterpret_cast&lt;const DyMsg*&gt;(chunk.constData());</span>
+<span style = "background-color:#dfd">    if (!msg-&gt;data) {</span>
+<span style = "background-color:#fdd">        qWarning() &lt;&lt; "QtDySession: SET_ACCESS failed for worker" &lt;&lt; m_setupWorkerIdx;</span>
+    }
+
+<span style = "background-color:#dfd">    // -- SET_TARGETS --
+    const WorkerInfo &amp;w = m_workers[m_setupWorkerIdx];
+    DyDataMessage *dm = new DyDataMessage;</span>
+<span style = "background-color:#fdd">    std::memset(dm, 0, sizeof(*dm));</span>
+<span style = "background-color:#dfd">    buildTargetMsg(dm, w);</span>
+
+<span style = "background-color:#dfd">    sendMsg(DY_SET_TARGETS, m_setupWorkerIdx);
+    sendDataMsg(dm);
+    delete dm;</span>
+
+<span style = "background-color:#dfd">    m_state = State::SetupTargetsReply;
+}
+</span>
+void QtDySession::processSetTargetsReply()
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    QByteArray chunk = take(DY_MSG_SIZE);
+    const DyMsg *msg = reinterpret_cast&lt;const DyMsg*&gt;(chunk.constData());
+    if (!msg-&gt;data) {
+        qWarning() &lt;&lt; "QtDySession: SET_TARGETS failed for worker" &lt;&lt; m_setupWorkerIdx;</span>
+<span style = "background-color:#fdd">    }</span>
+    // Dynamo also sends a Data_Message back with updated target info
+<span style = "background-color:#fdd">    m_state = State::SetupTargetsData;
+}</span>
+<span style = "background-color:#dfd">
+void QtDySession::processSetTargetsData()
+{
+    // Consume the reply Data_Message (we use it only for error info)</span>
+<span style = "background-color:#fdd">    take(DY_DATAMSG_SIZE);</span>
+<span style = "background-color:#dfd">    // Move to next worker
+    beginSetupWorker(m_setupWorkerIdx + 1);
+}</span>
+
+<span style = "background-color:#dfd">void QtDySession::advanceSetupWorkers()
+{</span>
+<span style = "background-color:#fdd">    beginSetupWorker(0);</span>
+}
+<span style = "background-color:#dfd">
+// -- Start sequence ------------------------------------------------------------
+
+void QtDySession::beginStartSequence()</span>
+<span style = "background-color:#fdd">{
+    m_activeWorkerCount = m_workers.size();
+    sendMsg(DY_START, DY_ALL_WORKERS);</span>
+<span style = "background-color:#dfd">    m_state = State::WaitStartReply;
+}</span>
+
+void QtDySession::processStartReply()
+<span style = "background-color:#dfd">{</span>
+<span style = "background-color:#fdd">    take(DY_MSG_SIZE);  // consume reply</span>
+<span style = "background-color:#dfd">    sendMsg(DY_BEGIN_IO, DY_ALL_WORKERS);</span>
+<span style = "background-color:#fdd">    m_state = State::WaitBeginIoReply;</span>
+<span style = "background-color:#dfd">}
+</span>
+void QtDySession::processBeginIoReply()
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    take(DY_MSG_SIZE);  // consume reply
+    sendMsg(DY_RECORD_ON, DY_ALL_WORKERS);</span>
+    // RECORD_ON has no reply
+<span style = "background-color:#fdd">    m_state = State::Running;
+    m_updateTimer.start(k_updateIntervalMs);
+    qDebug() &lt;&lt; "QtDySession: test started on" &lt;&lt; m_managerName;
+}</span>
+<span style = "background-color:#dfd">
+// -- Update timer - request results while running ------------------------------
+
+void QtDySession::onUpdateTimer()
+{</span>
+<span style = "background-color:#fdd">    if (m_state != State::Running) return;</span>
+
+<span style = "background-color:#dfd">    sendMsg(DY_REPORT_UPDATE, DY_MANAGER);
+    m_state             = State::WaitUpdateMgr;
+    m_workerResultIdx   = 0;
+    m_pendingResults.clear();
+</span>
+    // Trigger immediate dispatch in case data already arrived
+<span style = "background-color:#fdd">    dispatchMainData();</span>
+<span style = "background-color:#dfd">}
+
+void QtDySession::processUpdateMgr()</span>
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    QByteArray chunk = take(DY_DATAMSG_SIZE);
+    const DyDataMessage *dm = reinterpret_cast&lt;const DyDataMessage*&gt;(chunk.constData());
+    std::memcpy(&amp;m_pendingMgrResults, &amp;dm-&gt;data.manager_results, sizeof(m_pendingMgrResults));
+</span>
+<span style = "background-color:#fdd">    m_state           = State::WaitUpdateWorker;
+    m_workerResultIdx = 0;
+    dispatchMainData();
+}</span>
+<span style = "background-color:#dfd">
+void QtDySession::processUpdateWorker()</span>
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    QByteArray chunk = take(DY_DATAMSG_SIZE);</span>
+<span style = "background-color:#fdd">    const DyDataMessage *dm = reinterpret_cast&lt;const DyDataMessage*&gt;(chunk.constData());
+    const DyWorkerResults &amp;wr = dm-&gt;data.worker_results;</span>
+<span style = "background-color:#dfd"></span>
+<span style = "background-color:#fdd">    const QString wName = (m_workerResultIdx &lt; m_workers.size())</span>
+                          ? QString::fromStdString(m_workers[m_workerResultIdx].name)
+<span style = "background-color:#dfd">                          : QString("Worker%1").arg(m_workerResultIdx);
+</span>
+<span style = "background-color:#fdd">    WorkerResult result = decodeWorkerResults(wr, m_managerName, wName);
+    m_pendingResults.append(result);</span>
+<span style = "background-color:#dfd">
+    ++m_workerResultIdx;
+    if (m_workerResultIdx &gt;= m_activeWorkerCount) {
+        // All worker results received - back to Running state</span>
+<span style = "background-color:#fdd">        m_state = State::Running;</span>
+<span style = "background-color:#dfd">        if (m_stopRequested) {
+            m_stopRequested = false;
+            stopTest();
+        } else {</span>
+<span style = "background-color:#fdd">            emit resultsReady(this);</span>
+        }
+<span style = "background-color:#dfd">    } else {
+        dispatchMainData();
+    }
+}</span>
+
+<span style = "background-color:#dfd">// -- Stop sequence -------------------------------------------------------------</span>
+
+void QtDySession::stopTest()
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    if (m_state == State::WaitUpdateMgr || m_state == State::WaitUpdateWorker) {
+        // Wait until current update completes</span>
+<span style = "background-color:#fdd">        m_stopRequested = true;</span>
+<span style = "background-color:#dfd">        return;
+    }</span>
+<span style = "background-color:#fdd">    if (m_state != State::Running) return;</span>
+<span style = "background-color:#dfd">
+    m_updateTimer.stop();</span>
+<span style = "background-color:#fdd">    sendMsg(DY_RECORD_OFF, DY_ALL_WORKERS);
+    m_state = State::WaitRecordOff;
+    dispatchMainData();</span>
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">void QtDySession::stopAll()</span>
+<span style = "background-color:#fdd">{
+    stopTest();</span>
+<span style = "background-color:#dfd">    if (m_mainSocket &amp;&amp; m_mainSocket-&gt;state() == QAbstractSocket::ConnectedState) {</span>
+<span style = "background-color:#fdd">        sendMsg(DY_EXIT, DY_ALL_WORKERS);
+        m_mainSocket-&gt;flush();</span>
+    }
+<span style = "background-color:#fdd">}</span>
+<span style = "background-color:#dfd">
+void QtDySession::processRecordOffReply()</span>
+<span style = "background-color:#fdd">{
+    take(DY_MSG_SIZE);
+    sendMsg(DY_STOP, DY_ALL_WORKERS);
+    m_state = State::WaitStop;</span>
+<span style = "background-color:#dfd">}</span>
+
+<span style = "background-color:#dfd">void QtDySession::processStopReply()
+{</span>
+<span style = "background-color:#fdd">    take(DY_MSG_SIZE);</span>
+<span style = "background-color:#dfd">    sendMsg(DY_REPORT_RESULTS, DY_MANAGER);
+    m_state           = State::WaitFinalMgr;</span>
+    m_workerResultIdx = 0;
+<span style = "background-color:#fdd">    m_pendingResults.clear();
+}
+
+void QtDySession::processFinalMgr()
+{
+    QByteArray chunk = take(DY_DATAMSG_SIZE);
+    const DyDataMessage *dm = reinterpret_cast&lt;const DyDataMessage*&gt;(chunk.constData());
+    std::memcpy(&amp;m_pendingMgrResults, &amp;dm-&gt;data.manager_results, sizeof(m_pendingMgrResults));
+    m_state = State::WaitFinalWorker;
+    dispatchMainData();
+}
+
+void QtDySession::processFinalWorker()
+{
+    QByteArray chunk = take(DY_DATAMSG_SIZE);
+    const DyDataMessage *dm = reinterpret_cast&lt;const DyDataMessage*&gt;(chunk.constData());
+    const DyWorkerResults &amp;wr = dm-&gt;data.worker_results;
+
+    const QString wName = (m_workerResultIdx &lt; m_workers.size())
+                          ? QString::fromStdString(m_workers[m_workerResultIdx].name)</span>
+                          : QString("Worker%1").arg(m_workerResultIdx);
+
+<span style = "background-color:#fdd">    m_pendingResults.append(decodeWorkerResults(wr, m_managerName, wName));
+    ++m_workerResultIdx;</span>
+
+<span style = "background-color:#fdd">    if (m_workerResultIdx &gt;= m_activeWorkerCount) {
+        m_state = State::Ready;
+        emit resultsReady(this);
+        qDebug() &lt;&lt; "QtDySession: final results received on" &lt;&lt; m_managerName;
+    } else {
+        dispatchMainData();
+    }
+}</span>
+
+// -- Test control (called by QtDynamoEngine) -------------------------------------
+<span style = "background-color:#fdd">
+void QtDySession::startTest(const QList&lt;WorkerInfo&gt; &amp;workers, const QList&lt;AccessSpec&gt; &amp;specs)
+{
+    if (m_state != State::Ready) return;</span>
+
+<span style = "background-color:#fdd">    m_accessSpecs     = specs.isEmpty() ? QList&lt;AccessSpec&gt;{AccessSpec{}} : specs;
+    m_stopRequested   = false;
+    m_pendingResults.clear();</span>
+
+<span style = "background-color:#fdd">    // Use the provided workers (or fall back to the auto-discovered ones)
+    if (!workers.isEmpty()) {</span>
+        // Filter to only workers belonging to this session's manager
+<span style = "background-color:#fdd">        m_workers.clear();
+        for (const auto &amp;w : workers)
+            if (w.managerName == m_managerName.toStdString())
+                m_workers.append(w);
+    }
+
+    if (m_workers.isEmpty()) {
+        qWarning() &lt;&lt; "QtDySession: no workers for" &lt;&lt; m_managerName</span>
+                   &lt;&lt; "- creating" &lt;&lt; m_processorCount &lt;&lt; "default workers";
+<span style = "background-color:#fdd">        for (int i = 0; i &lt; m_processorCount; ++i) {
+            WorkerInfo w;
+            w.id          = QString("%1-disk-%2").arg(m_managerName).arg(i).toStdString();</span>
+<span style = "background-color:#dfd">            w.name        = QString("Worker %1").arg(i + 1).toStdString();
+            w.type        = "Disk";</span>
+<span style = "background-color:#fdd">            w.managerName = m_managerName.toStdString();</span>
+<span style = "background-color:#dfd">            w.queueDepth  = 1;
+            w.targets     = {};
+            m_workers.append(w);</span>
+<span style = "background-color:#fdd">        }</span>
+    }
+<span style = "background-color:#dfd"></span>
+<span style = "background-color:#fdd">    if (m_workers.isEmpty()) {</span>
+<span style = "background-color:#dfd">        qWarning() &lt;&lt; "QtDySession: no targets discovered for" &lt;&lt; m_managerName;
+        return;
+    }
+</span>
+<span style = "background-color:#fdd">    advanceSetupWorkers();
+}</span>
+<span style = "background-color:#dfd"></span>
+<span style = "background-color:#fdd">// -- Result decoding -----------------------------------------------------------</span>
+
+<span style = "background-color:#fdd">WorkerResult QtDySession::decodeWorkerResults(const DyWorkerResults &amp;wr,
+                                             const QString &amp;mgrName,
+                                             const QString &amp;workerName)
+{
+    WorkerResult r;
+    r.managerName = mgrName.toStdString();
+    r.workerName  = workerName.toStdString();
+    r.isAggregate = false;
+
+    // Elapsed time in seconds
+    const uint64_t t0 = wr.time[DY_FIRST_SNAP];
+    const uint64_t t1 = wr.time[DY_LAST_SNAP];
+    const double elapsed = (t1 &gt; t0 &amp;&amp; m_timerResolution &gt; 0.0)
+                           ? static_cast&lt;double&gt;(t1 - t0) / m_timerResolution
+                           : 1.0;</span>
+
+    // Sum all targets into one counter set (counters add, max-latencies take the
+<span style = "background-color:#dfd">    // max), then decode via the shared iocore formula - same math both GUIs use.
+    const int tcount = std::max(0, std::min(wr.target_results.count, DY_MAX_TARGETS));</span>
+<span style = "background-color:#fdd">    DyRawResult summed{};
+    for (int i = 0; i &lt; tcount; ++i) {
+        const DyRawResult &amp;raw = wr.target_results.result[i];
+        summed.bytes_read        += raw.bytes_read;
+        summed.bytes_written     += raw.bytes_written;
+        summed.read_count        += raw.read_count;</span>
+<span style = "background-color:#dfd">        summed.write_count       += raw.write_count;
+        summed.transaction_count += raw.transaction_count;
+        summed.connection_count  += raw.connection_count;
+        summed.read_errors       += raw.read_errors;
+        summed.write_errors      += raw.write_errors;</span>
+<span style = "background-color:#fdd">        summed.read_latency_sum  += raw.read_latency_sum;</span>
+        summed.write_latency_sum += raw.write_latency_sum;
+<span style = "background-color:#dfd">        summed.max_raw_read_latency  = std::max(summed.max_raw_read_latency,  raw.max_raw_read_latency);
+        summed.max_raw_write_latency = std::max(summed.max_raw_write_latency, raw.max_raw_write_latency);
+    }</span>
+
+<span style = "background-color:#fdd">    const iocore::ResultRates d = iocore::decodeRawResult(summed, elapsed, m_timerResolution);
+    r.iops         = d.iops;
+    r.readIops     = d.readIops;</span>
+<span style = "background-color:#dfd">    r.writeIops    = d.writeIops;
+    r.mbpsDec      = d.mbpsDec;
+    r.readMbpsDec  = d.readMbpsDec;
+    r.writeMbpsDec = d.writeMbpsDec;
+    r.mbpsBin      = d.mbpsBin;
+    r.errors       = static_cast&lt;int&gt;(d.totalErrors);</span>
+<span style = "background-color:#fdd">    r.avgLatencyMs = d.aveLatency;</span>
+<span style = "background-color:#dfd">    r.maxLatencyMs = d.maxLatency;
+
+    // CPU from manager results (average across CPUs)
+    r.cpuUtil   = 0.0;
+    r.cpuUser   = 0.0;
+    r.cpuKernel = 0.0;
+    if (m_pendingMgrResults.cpu_results.count &gt; 0) {
+        const int ncpu = std::min(m_pendingMgrResults.cpu_results.count,
+                                  DY_MAX_CPUS);
+        for (int i = 0; i &lt; ncpu; ++i) {
+            r.cpuUtil   += m_pendingMgrResults.cpu_results.CPU_utilization[i][0];
+            r.cpuUser   += m_pendingMgrResults.cpu_results.CPU_utilization[i][1];</span>
+<span style = "background-color:#fdd">            r.cpuKernel += m_pendingMgrResults.cpu_results.CPU_utilization[i][2];</span>
+        }
+<span style = "background-color:#dfd">        r.cpuUtil   /= ncpu;</span>
+<span style = "background-color:#fdd">        r.cpuUser   /= ncpu;</span>
+<span style = "background-color:#dfd">        r.cpuKernel /= ncpu;
+    }
+
+    return r;
+}
+
+// -- Build protocol messages ---------------------------------------------------
+</span>
+void QtDySession::buildTestSpec(DyDataMessage *dm, const AccessSpec &amp;spec)
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    dm-&gt;count = 1;
+    DyTestSpec &amp;ts = dm-&gt;data.spec;</span>
+<span style = "background-color:#fdd">    std::strncpy(ts.name, spec.name.c_str(), sizeof(ts.name) - 1);</span>
+<span style = "background-color:#dfd">    ts.default_assignment = spec.defaultSpec ? 1 : 0;
+    std::memset(ts.access, 0, sizeof(ts.access));</span>
+<span style = "background-color:#fdd">
+    const int n = qMin(static_cast&lt;int&gt;(spec.lines.size()), DY_MAX_ACCESS_SPECS - 1);
+    for (int i = 0; i &lt; n; ++i) {</span>
+        // Friendly-model -&gt; wire mapping is shared core logic (iocore).
+<span style = "background-color:#dfd">        iocore::fillWireAccess(ts.access[i], spec.lines[i]);
+    }</span>
+    // Terminator
+<span style = "background-color:#fdd">    if (n &lt; DY_MAX_ACCESS_SPECS)
+        ts.access[n].of_size = 0;
+}</span>
+<span style = "background-color:#dfd">
+void QtDySession::buildTargetMsg(DyDataMessage *dm, const WorkerInfo &amp;w)
+{
+    dm-&gt;count = 0;
+</span>
+    // -- Network workers: build a TCP server/client target via the shared core
+<span style = "background-color:#dfd">    //    NetworkSetup (same logic the MFC controller will use). The role comes
+    //    from this worker's position among the session's network workers
+    //    (single-manager loopback pairing). Disk workers fall through below.
+    if (NetworkSetup::isNetworkWorker(w.type)) {</span>
+<span style = "background-color:#fdd">        int netCount = 0, netIndex = -1;</span>
+<span style = "background-color:#dfd">        for (const WorkerInfo &amp;mw : m_workers) {
+            if (NetworkSetup::isNetworkWorker(mw.type)) {
+                if (mw.id == w.id) netIndex = netCount;</span>
+<span style = "background-color:#fdd">                ++netCount;</span>
+            }
+<span style = "background-color:#dfd">        }
+        const auto plan = NetworkSetup::planLoopback(netCount);</span>
+<span style = "background-color:#fdd">        if (netIndex &gt;= 0 &amp;&amp; netIndex &lt; static_cast&lt;int&gt;(plan.size())) {
+            const NetworkSetup::NetworkTarget &amp;nt = plan[netIndex];</span>
+            DyTargetSpec &amp;dst = dm-&gt;data.targets[0];
+<span style = "background-color:#fdd">            std::memset(&amp;dst, 0, sizeof(dst));</span>
+<span style = "background-color:#dfd">            const std::string addr = (nt.role == NetworkSetup::Role::Server)
+                                     ? nt.localInterface : nt.remoteAddress;
+            std::strncpy(dst.name, nt.name.c_str(), DY_MAX_NAME - 1);
+            dst.type = (nt.role == NetworkSetup::Role::Server)
+                       ? DY_TCP_SERVER_TYPE : DY_TCP_CLIENT_TYPE;
+            std::strncpy(dst.tcp_info.remote_address, addr.c_str(), DY_MAX_NAME - 1);</span>
+<span style = "background-color:#fdd">            dst.queue_depth = w.queueDepth;</span>
+<span style = "background-color:#dfd">            dm-&gt;count = 1;
+        }</span>
+<span style = "background-color:#fdd">        return;</span>
+<span style = "background-color:#dfd">    }</span>
+
+    // Find each target in the discovered disk list
+<span style = "background-color:#dfd">    for (const std::string &amp;targetName : w.targets) {
+        for (const DyTargetSpec &amp;t : m_diskTargets) {
+            if (QString::fromLocal8Bit(t.name) == QString::fromStdString(targetName)) {</span>
+<span style = "background-color:#fdd">                if (dm-&gt;count &lt; DY_MAX_TARGETS) {
+                    DyTargetSpec &amp;dst = dm-&gt;data.targets[dm-&gt;count];</span>
+<span style = "background-color:#dfd">                    std::memcpy(&amp;dst, &amp;t, sizeof(dst));
+                    dst.queue_depth = w.queueDepth;</span>
+<span style = "background-color:#fdd">                    ++dm-&gt;count;</span>
+                }
+                break;
+            }
+        }
+<span style = "background-color:#dfd">    }</span>
+<span style = "background-color:#fdd">
+    // If no targets matched, fall back to first disk
+    if (dm-&gt;count == 0 &amp;&amp; !m_diskTargets.isEmpty()) {
+        std::memcpy(&amp;dm-&gt;data.targets[0], &amp;m_diskTargets.first(), sizeof(DyTargetSpec));
+        dm-&gt;data.targets[0].queue_depth = w.queueDepth;
+        dm-&gt;count = 1;</span>
+    }
+<span style = "background-color:#fdd">}
+
+// -----------------------------------------------------------------------------</span>
+// QtDynamoEngine
+<span style = "background-color:#fdd">// -----------------------------------------------------------------------------
+</span>
+QtDynamoEngine::QtDynamoEngine(bool startListening, QObject *parent)
+<span style = "background-color:#fdd">    : QtIometerEngine(parent)
+{
+    m_specs = QtIometerEngine::builtinAccessSpecs();
+
+    // Bridge the core TestRunner's std::function callbacks to Qt signals.
+    m_testRunner.onStatusMessage = [this](const std::string &amp;msg) {
+        emit statusMessage(QString::fromStdString(msg));
+    };
+    m_testRunner.onErrorOccurred = [this](const std::string &amp;msg) {
+        emit errorOccurred(QString::fromStdString(msg));
+    };</span>
+<span style = "background-color:#dfd">
+    m_server = new QTcpServer(this);
+    connect(m_server, &amp;QTcpServer::newConnection, this, &amp;QtDynamoEngine::onNewConnection);</span>
+<span style = "background-color:#fdd">
+    if (startListening) {
+        if (m_server-&gt;listen(QHostAddress::Any, DY_PORT)) {
+            emit statusMessage(QString("Listening for Dynamo on port %1 - start Dynamo.exe to connect")
+                               .arg(DY_PORT));
+        } else {
+            emit errorOccurred(QString("Cannot listen on port %1: %2")</span>
+                               .arg(DY_PORT).arg(m_server-&gt;errorString()));
+        }
+    }
+<span style = "background-color:#fdd">}</span>
+
+<span style = "background-color:#dfd">QtDynamoEngine::~QtDynamoEngine()
+{
+    for (auto *s : m_sessions) s-&gt;deleteLater();
+    m_server-&gt;close();</span>
+<span style = "background-color:#fdd">}</span>
+<span style = "background-color:#dfd"></span>
+// -- New Dynamo connection -----------------------------------------------------
+
+void QtDynamoEngine::onNewConnection()
+<span style = "background-color:#fdd">{
+    while (m_server-&gt;hasPendingConnections()) {
+        QTcpSocket *sock = m_server-&gt;nextPendingConnection();</span>
+<span style = "background-color:#dfd">        auto *session = new QtDySession(sock, this);
+
+        connect(session, &amp;QtDySession::managerConnected,</span>
+                this, &amp;QtDynamoEngine::onSessionConnected);
+<span style = "background-color:#fdd">        connect(session, &amp;QtDySession::managerDisconnected,</span>
+<span style = "background-color:#dfd">                this, &amp;QtDynamoEngine::onSessionDisconnected);</span>
+<span style = "background-color:#fdd">        connect(session, &amp;QtDySession::resultsReady,
+                this, &amp;QtDynamoEngine::onSessionResults);</span>
+<span style = "background-color:#dfd">        connect(session, &amp;QtDySession::errorOccurred,</span>
+<span style = "background-color:#fdd">                this, &amp;QtDynamoEngine::onSessionError);
+
+        m_sessions.append(session);</span>
+<span style = "background-color:#dfd">        emit statusMessage(QString("Dynamo connecting from %1â¦")
+                           .arg(sock-&gt;peerAddress().toString()));</span>
+    }
+<span style = "background-color:#dfd">}
+
+// -- Session event handlers ----------------------------------------------------</span>
+
+<span style = "background-color:#dfd">void QtDynamoEngine::onSessionConnected(QtDySession *s)</span>
+<span style = "background-color:#fdd">{
+    rebuildManagers();</span>
+
+<span style = "background-color:#fdd">    ManagerInfo mgr;</span>
+<span style = "background-color:#dfd">    mgr.name             = s-&gt;managerName().toStdString();</span>
+<span style = "background-color:#fdd">    mgr.address          = s-&gt;address().toStdString();
+    mgr.connected        = true;</span>
+<span style = "background-color:#dfd">    mgr.processorCount   = s-&gt;processorCount();
+    mgr.workers          = toVec(s-&gt;workers());
+    mgr.availableTargets = toVec(s-&gt;diskTargetInfos());
+</span>
+<span style = "background-color:#fdd">    emit managerConnected(mgr);</span>
+
+    // Restore: match this Dynamo to an expected ICF manager (shared core logic).
+<span style = "background-color:#fdd">    if (m_restoreMap.managerLoggedIn(s-&gt;managerName().toStdString(),</span>
+<span style = "background-color:#dfd">                                     s-&gt;address().toStdString(), s)) {
+        emit statusMessage(QString("Manager '%1' matched config (%2/%3 expected connected)")
+                           .arg(s-&gt;managerName())
+                           .arg(connectedManagerCount())</span>
+                           .arg(expectedManagers().size()));
+<span style = "background-color:#dfd">    }</span>
+
+<span style = "background-color:#dfd">    emit statusMessage(QString("Dynamo manager '%1' connected (%2 targets)")</span>
+                       .arg(s-&gt;managerName())
+<span style = "background-color:#dfd">                       .arg(s-&gt;discoveredTargets().size()));</span>
+<span style = "background-color:#fdd">    emit configChanged();</span>
+<span style = "background-color:#dfd">}</span>
+
+void QtDynamoEngine::onSessionDisconnected(QtDySession *s)
+<span style = "background-color:#dfd">{
+    const QString name = s-&gt;managerName();</span>
+<span style = "background-color:#fdd">    m_sessions.removeAll(s);</span>
+
+<span style = "background-color:#dfd">    // Restore: this manager slot returns to the waiting state (shared core logic).</span>
+<span style = "background-color:#fdd">    m_restoreMap.managerLoggedOut(s);
+    s-&gt;deleteLater();</span>
+
+<span style = "background-color:#fdd">    rebuildManagers();</span>
+<span style = "background-color:#dfd">    emit managerDisconnected(name);
+    emit configChanged();</span>
+<span style = "background-color:#fdd">    emit statusMessage(QString("Dynamo '%1' disconnected").arg(name));</span>
+<span style = "background-color:#dfd">}
+
+void QtDynamoEngine::onSessionResults(QtDySession *s)
+{
+    // Merge this session's results into m_currentResults
+    QVector&lt;WorkerResult&gt; all;
+    for (auto *sess : m_sessions)</span>
+<span style = "background-color:#fdd">        all += sess-&gt;pendingResults();</span>
+<span style = "background-color:#dfd"></span>
+    // Prepend the ALL aggregate (shared core logic - same math as the CSV writer).
+<span style = "background-color:#fdd">    if (!all.isEmpty()) {</span>
+<span style = "background-color:#dfd">        const std::vector&lt;WorkerResult&gt; v(all.begin(), all.end());</span>
+<span style = "background-color:#fdd">        all.prepend(iocore::aggregateResults(v).all);
+    }</span>
+
+<span style = "background-color:#fdd">    m_currentResults = all;
+    emit resultsUpdated(m_currentResults);
+}</span>
+
+<span style = "background-color:#dfd">void QtDynamoEngine::onSessionError(QtDySession *s, const QString &amp;msg)</span>
+<span style = "background-color:#fdd">{
+    emit errorOccurred(QString("[%1] %2").arg(s-&gt;managerName(), msg));</span>
+<span style = "background-color:#dfd">}
+</span>
+// -- QtIometerEngine interface ---------------------------------------------------
+
+<span style = "background-color:#fdd">void QtDynamoEngine::startTest()
+{
+    if (m_running) return;
+    if (m_sessions.isEmpty()) {
+        emit errorOccurred("No Dynamo managers connected");
+        return;
+    }</span>
+
+<span style = "background-color:#fdd">    m_running = true;
+    m_savedResults.clear();
+
+    QList&lt;WorkerInfo&gt; allWorkers;
+    auto managers = m_workerPool.managerInfos();
+    for (const auto &amp;mgr : managers)
+        for (const auto &amp;w : m_workerPool.workers(mgr.name))</span>
+<span style = "background-color:#dfd">            allWorkers.append(w);</span>
+
+<span style = "background-color:#dfd">    // In batch mode the ICF specifies an exact worker count.  Trim the list so
+    // that extra Dynamo workers (beyond what the ICF defines) never receive
+    // DY_SET_ACCESS / DY_SET_TARGETS and stay idle - matching original behaviour.</span>
+<span style = "background-color:#fdd">    if (!m_batchWorkers.isEmpty() &amp;&amp; allWorkers.size() &gt; m_batchWorkers.size())
+        allWorkers = allWorkers.mid(0, m_batchWorkers.size());</span>
+<span style = "background-color:#dfd">
+    // Use the override spec if set (cycling), otherwise the global list
+    const QList&lt;AccessSpec&gt; specs = m_hasCurrentTestSpec
+        ? QList&lt;AccessSpec&gt;{m_currentTestSpec}</span>
+        : m_specs;
+<span style = "background-color:#dfd">
+    // Delegate to the core TestRunner (Qt container -&gt; std::vector; same elements)
+    if (!m_testRunner.startTest(m_testConfig, toVec(allWorkers), toVec(specs))) {</span>
+<span style = "background-color:#fdd">        m_running = false;
+        emit errorOccurred(QString::fromStdString(m_testRunner.lastError()));
+        return;
+    }
+</span>
+    // Start test on all sessions (protocol-level)
+<span style = "background-color:#fdd">    for (auto *s : m_sessions)
+        s-&gt;startTest(allWorkers, specs);</span>
+
+<span style = "background-color:#dfd">    m_hasCurrentTestSpec = false;   // consumed
+    emit testStarted();
+    emit statusMessage("Test started");</span>
+<span style = "background-color:#fdd">}
+</span>
+void QtDynamoEngine::stopTest()
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    if (!m_running) return;
+</span>
+    // Stop test in TestRunner (state machine)
+<span style = "background-color:#dfd">    m_testRunner.stopTest();
+
+    // Stop protocol-level test on all sessions
+    for (auto *s : m_sessions)
+        s-&gt;stopTest();</span>
+
+    m_running = false;
+<span style = "background-color:#fdd">    m_savedResults = m_currentResults;
+    emit testStopped();</span>
+<span style = "background-color:#dfd">    emit statusMessage("Test stopped");
+}</span>
+
+void QtDynamoEngine::stopAll()
+<span style = "background-color:#dfd">{</span>
+    // Stop tests only - do NOT exit Dynamo workers; managers stay connected
+<span style = "background-color:#fdd">    m_testRunner.stopAll();</span>
+
+<span style = "background-color:#fdd">    for (auto *s : m_sessions)</span>
+<span style = "background-color:#dfd">        s-&gt;stopTest();</span>
+<span style = "background-color:#fdd">
+    m_running = false;
+    m_savedResults = m_currentResults;
+    emit testStopped();
+    emit statusMessage("All tests stopped");
+}</span>
+<span style = "background-color:#dfd">
+// =============================================================================</span>
+// ICF load / save  (original Iometer 1.1.0 text format)
+<span style = "background-color:#dfd">// =============================================================================
+
+bool QtDynamoEngine::loadConfig(const QString &amp;filepath)
+{</span>
+<span style = "background-color:#fdd">    TestConfig cfg;
+    std::vector&lt;AccessSpec&gt; specs;</span>
+<span style = "background-color:#dfd">    std::vector&lt;IcfFile::BatchWorker&gt; batchWorkers;
+</span>
+    // Use IcfFile to parse entire ICF format
+<span style = "background-color:#fdd">    if (!IcfFile::load(filepath.toStdString(), cfg, specs, batchWorkers)) {</span>
+<span style = "background-color:#dfd">        return false;</span>
+    }
+
+<span style = "background-color:#dfd">    // Convert IcfFile BatchWorker to QtDynamoEngine BatchWorkerConfig
+    m_batchWorkers.clear();</span>
+<span style = "background-color:#fdd">    for (const auto &amp;bw : batchWorkers) {
+        BatchWorkerConfig wc;</span>
+<span style = "background-color:#dfd">        wc.name = QString::fromStdString(bw.name);
+        wc.type = QString::fromStdString(bw.type.empty() ? "DISK" : bw.type);
+        wc.assignedSpecs = toQStringList(bw.assignedSpecs);
+        wc.targets = toQStringList(bw.targets);</span>
+<span style = "background-color:#fdd">        wc.managerName = QString::fromStdString(bw.managerName);
+        m_batchWorkers.append(wc);
+    }</span>
+
+<span style = "background-color:#fdd">    // Build the manager restore map (shared core logic) from the ICF's managers,</span>
+    // so connecting Dynamos can be matched to the named managers / waited for.
+<span style = "background-color:#fdd">    m_restoreMap = buildRestoreMap(batchWorkers);
+
+    setAccessSpecs(specs.empty() ? builtinAccessSpecs() : toQList(specs));
+    m_testConfig = cfg;
+    emit configChanged();
+    return true;
+}
+</span>
+iocore::ManagerMap QtDynamoEngine::buildRestoreMap(
+    const std::vector&lt;IcfFile::BatchWorker&gt; &amp;workers)
+<span style = "background-color:#fdd">{
+    iocore::ManagerMap map;
+    for (const auto &amp;bw : workers) {
+        if (bw.managerName.empty())</span>
+<span style = "background-color:#dfd">            continue;
+        // One entry per distinct manager (name+id); store unassigned (waiting).
+        bool exists = false;
+        for (const auto &amp;e : map.entries()) {</span>
+<span style = "background-color:#fdd">            if (e.name == bw.managerName &amp;&amp; e.id == bw.managerId) { exists = true; break; }</span>
+        }
+<span style = "background-color:#dfd">        if (!exists)</span>
+<span style = "background-color:#fdd">            map.store(bw.managerName, bw.managerId, bw.managerAddress, nullptr);</span>
+    }
+    return map;
+<span style = "background-color:#fdd">}</span>
+<span style = "background-color:#dfd">
+QList&lt;QtDynamoEngine::BatchWorkerConfig&gt;
+QtDynamoEngine::workersForManager(const QString &amp;mgrName) const
+{
+    QList&lt;BatchWorkerConfig&gt; out;
+    for (const auto &amp;wc : m_batchWorkers)
+        if (wc.managerName == mgrName)
+            out.append(wc);
+    return out;</span>
+<span style = "background-color:#fdd">}</span>
+
+QStringList QtDynamoEngine::expectedManagers() const
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    QStringList names;</span>
+<span style = "background-color:#fdd">    for (const auto &amp;e : m_restoreMap.entries())</span>
+<span style = "background-color:#dfd">        names &lt;&lt; QString::fromStdString(e.name);
+    return names;
+}
+
+int QtDynamoEngine::connectedManagerCount() const</span>
+<span style = "background-color:#fdd">{</span>
+    int n = 0;
+<span style = "background-color:#fdd">    for (const auto &amp;e : m_restoreMap.entries())</span>
+<span style = "background-color:#dfd">        if (e.handle != nullptr)
+            ++n;
+    return n;
+}</span>
+
+bool QtDynamoEngine::saveConfig(const QString &amp;filepath)
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    // Convert QtDynamoEngine BatchWorkerConfig to IcfFile BatchWorker
+    std::vector&lt;IcfFile::BatchWorker&gt; batchWorkers;</span>
+
+<span style = "background-color:#fdd">    auto managers = m_workerPool.managerInfos();</span>
+<span style = "background-color:#dfd">    if (!managers.empty()) {</span>
+        // Live Dynamo connection - write actual connected state
+<span style = "background-color:#fdd">        for (const auto &amp;mgr : managers) {</span>
+<span style = "background-color:#dfd">            for (const auto &amp;w : m_workerPool.workers(mgr.name)) {</span>
+<span style = "background-color:#fdd">                IcfFile::BatchWorker bw;
+                bw.name = w.name;                 // std::string -&gt; std::string</span>
+                // WorkerInfo.type is "Disk"/"Network"; map to ICF DISK/TCP.
+<span style = "background-color:#dfd">                bw.type = (w.type == "Network") ? "TCP" : "DISK";
+                bw.assignedSpecs = w.assignedSpecs;
+                bw.targets = w.targets;
+                batchWorkers.push_back(bw);
+            }</span>
+        }
+<span style = "background-color:#dfd">    } else {</span>
+        // No live connection - use batch config from loaded ICF
+<span style = "background-color:#fdd">        for (const auto &amp;bw : m_batchWorkers) {</span>
+<span style = "background-color:#dfd">            IcfFile::BatchWorker ibw;
+            ibw.name = bw.name.toStdString();
+            ibw.type = bw.type.toStdString();
+            ibw.assignedSpecs = toStdStrings(bw.assignedSpecs);</span>
+<span style = "background-color:#fdd">            ibw.targets = toStdStrings(bw.targets);</span>
+<span style = "background-color:#dfd">            batchWorkers.push_back(ibw);</span>
+<span style = "background-color:#fdd">        }</span>
+    }
+<span style = "background-color:#dfd"></span>
+<span style = "background-color:#fdd">    return IcfFile::save(filepath.toStdString(), m_testConfig, toVec(m_specs), batchWorkers);</span>
+<span style = "background-color:#dfd">}</span>
+bool QtDynamoEngine::saveBatchResults(const QString &amp;filepath)
+<span style = "background-color:#fdd">{</span>
+    const auto &amp;r = m_savedResults.isEmpty() ? m_currentResults : m_savedResults;
+<span style = "background-color:#dfd">    return writeBatchResultsCsv(filepath, r, m_testConfig);</span>
+}
+
+<span style = "background-color:#dfd">bool QtDynamoEngine::writeBatchResultsCsv(const QString &amp;filepath,</span>
+                                        const QVector&lt;WorkerResult&gt; &amp;results,
+<span style = "background-color:#dfd">                                        const TestConfig &amp;cfg)</span>
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    // Delegate to ResultsWriter for CSV generation
+    // This keeps CSV format logic in one place for both MFC and Qt</span>
+<span style = "background-color:#fdd">    return ResultsWriter::writeBatchResultsCsv(filepath.toStdString(), toVec(results), cfg);
+}
+
+void QtDynamoEngine::newConfig()
+{
+    for (auto *s : m_sessions) s-&gt;deleteLater();
+    m_sessions.clear();
+    m_workerPool.clear();
+    m_testRunner.stopAll();  // Reset test state machine
+    m_currentResults.clear();
+    m_running = false;
+    emit configChanged();
+}</span>
+
+<span style = "background-color:#dfd">QList&lt;ManagerInfo&gt; QtDynamoEngine::managers() const
+{
+    return toQList(m_workerPool.managerInfos());
+}
+
+void QtDynamoEngine::connectManager(const QString &amp;, const QString &amp;)
+{
+    // Managers connect by launching Dynamo.exe - this is a no-op here</span>
+<span style = "background-color:#fdd">    emit statusMessage(QString("To connect a manager: run Dynamo.exe -i &lt;this-host&gt; on the target machine"));
+}</span>
+<span style = "background-color:#dfd">
+void QtDynamoEngine::disconnectManager(const QString &amp;mgrName)</span>
+<span style = "background-color:#fdd">{</span>
+<span style = "background-color:#dfd">    for (auto *s : m_sessions) {</span>
+<span style = "background-color:#fdd">        if (s-&gt;managerName() == mgrName) {</span>
+<span style = "background-color:#dfd">            s-&gt;stopAll();</span>
+            break;
+        }
+    }
+<span style = "background-color:#fdd">}</span>
+
+<span style = "background-color:#dfd">void QtDynamoEngine::addWorker(const QString &amp;mgrName, const WorkerInfo &amp;w)</span>
+<span style = "background-color:#fdd">{
+    m_workerPool.addWorker(mgrName.toStdString(), w);</span>
+<span style = "background-color:#dfd">    emit configChanged();
+}</span>
+
+void QtDynamoEngine::removeWorker(const QString &amp;mgrName, const QString &amp;workerId)
+<span style = "background-color:#fdd">{
+    m_workerPool.removeWorker(mgrName.toStdString(), workerId.toStdString());
+    emit configChanged();
+}
+
+void QtDynamoEngine::updateWorker(const WorkerInfo &amp;w)
+{
+    m_workerPool.updateWorker(w);
+    emit configChanged();
+}</span>
+
+<span style = "background-color:#dfd">void QtDynamoEngine::setAccessSpecs(const QList&lt;AccessSpec&gt; &amp;specs)
+{
+    m_specs = specs;</span>
+}
+
+<span style = "background-color:#fdd">// -- Helpers -------------------------------------------------------------------</span>
+
+<span style = "background-color:#fdd">void QtDynamoEngine::rebuildManagers()
+{
+    m_workerPool.clear();
+    for (const auto *s : m_sessions) {
+        if (s-&gt;state() == QtDySession::State::Ready ||
+            s-&gt;state() == QtDySession::State::Running ||
+            s-&gt;isRunning()) {
+            ManagerInfo mgr;
+            mgr.name             = s-&gt;managerName().toStdString();
+            mgr.address          = s-&gt;address().toStdString();
+            mgr.connected        = true;
+            mgr.processorCount   = s-&gt;processorCount();</span>
+            // Convert QList to std::vector
+<span style = "background-color:#fdd">            for (const auto &amp;w : s-&gt;workers())
+                mgr.workers.push_back(w);
+            // Convert QList to std::vector
+            for (const auto &amp;t : s-&gt;diskTargetInfos())
+                mgr.availableTargets.push_back(t);</span>
+
+            // Add manager to WorkerPool
+<span style = "background-color:#fdd">            m_workerPool.addManager(mgr);
+
+            // Add workers from this session
+            for (const auto &amp;w : s-&gt;workers()) {
+                m_workerPool.addWorker(mgr.name, w);</span>
+            }
+<span style = "background-color:#dfd">        }
+    }
+}</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>

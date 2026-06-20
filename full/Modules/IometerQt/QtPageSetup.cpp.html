@@ -1,0 +1,432 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+	<head>
+        <meta charset="utf-8"/>
+	    <title>QtPageSetup.cpp</title>
+	    <link href="../../third-party/google-code-prettify/prettify-CppCoverage.css" type="text/css" rel="stylesheet" />
+	    <script type="text/javascript" src="../../third-party/google-code-prettify/prettify.js"></script>
+	</head>
+    <body onload="prettyPrint()">
+        <h4></h4>
+        <pre class="prettyprint lang-cpp linenums">
+// QtPageSetup.cpp -- "Disk Targets" tab
+#include "QtPageSetup.h"
+#include "QtIometerEngine.h"
+#include &lt;QHBoxLayout&gt;
+#include &lt;QVBoxLayout&gt;
+#include &lt;QGroupBox&gt;
+#include &lt;QListWidget&gt;
+#include &lt;QListWidgetItem&gt;
+#include &lt;QSpinBox&gt;
+#include &lt;QCheckBox&gt;
+#include &lt;QComboBox&gt;
+#include &lt;QLabel&gt;
+#include &lt;QLineEdit&gt;
+#include &lt;QFrame&gt;
+#include &lt;QApplication&gt;
+#include &lt;QStyle&gt;
+#include &lt;QPainter&gt;
+#include &lt;QPen&gt;
+#include &lt;QPixmap&gt;
+
+// =============================================================================
+// Icon helpers
+// =============================================================================
+
+// Build the "unprepared logical disk" icon: take a standard HD icon and
+// paint a red diagonal slash across it - matches the original MFC red-slash.
+static QIcon makeUnpreparedDiskIcon()
+<span style = "background-color:#dfd">{</span>
+    const int sz = 16;
+<span style = "background-color:#dfd">    QPixmap px = QApplication::style()</span>
+                     -&gt;standardIcon(QStyle::SP_DriveHDIcon)
+                     .pixmap(sz, sz);
+<span style = "background-color:#dfd">    if (px.isNull()) {</span>
+<span style = "background-color:#fdd">        px = QPixmap(sz, sz);
+        px.fill(Qt::transparent);</span>
+    }
+<span style = "background-color:#dfd">    QPainter p(&amp;px);
+    p.setRenderHint(QPainter::Antialiasing);</span>
+    // Red slash from bottom-left to top-right (the "not ready" indicator)
+<span style = "background-color:#dfd">    p.setPen(QPen(QColor(220, 0, 0), 2.5, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(2, sz - 3, sz - 3, 2);
+    p.end();
+    return QIcon(px);
+}</span>
+
+// =============================================================================
+
+QtPageSetup::QtPageSetup(QtIometerEngine *engine, QWidget *parent)
+<span style = "background-color:#dfd">    : QWidget(parent), m_engine(engine)
+{
+    setupUi();
+    connect(engine, &amp;QtIometerEngine::configChanged,       this, &amp;QtPageSetup::refreshForEngine);
+    connect(engine, &amp;QtIometerEngine::managerConnected,    this, [this](const ManagerInfo&amp;){ refreshForEngine(); });
+    connect(engine, &amp;QtIometerEngine::managerDisconnected, this, [this](const QString&amp;){ refreshForEngine(); });
+}</span>
+
+// =============================================================================
+// UI construction -- matches the original Disk Targets tab layout
+// =============================================================================
+
+void QtPageSetup::setupUi()
+<span style = "background-color:#dfd">{
+    auto *root = new QHBoxLayout(this);
+    root-&gt;setContentsMargins(6, 6, 6, 6);
+    root-&gt;setSpacing(6);</span>
+
+    // ---- Left: Targets group box -------------------------------------------
+<span style = "background-color:#dfd">    auto *targGroup = new QGroupBox("Targets");
+    auto *targLay   = new QVBoxLayout(targGroup);
+    targLay-&gt;setContentsMargins(4, 8, 4, 4);
+    m_targetList = new QListWidget;
+    m_targetList-&gt;setUniformItemSizes(true);
+    targLay-&gt;addWidget(m_targetList);
+    root-&gt;addWidget(targGroup, 1);</span>
+
+    // ---- Right: disk parameters (stacked group boxes) -----------------------
+<span style = "background-color:#dfd">    auto *rightLay = new QVBoxLayout;
+    rightLay-&gt;setSpacing(4);</span>
+
+    // Maximum Disk Size
+<span style = "background-color:#dfd">    auto *maxGroup = new QGroupBox("Maximum Disk Size");
+    auto *maxLay   = new QHBoxLayout(maxGroup);
+    maxLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_maxDiskSize = new QSpinBox;
+    m_maxDiskSize-&gt;setRange(0, 2147483647);
+    m_maxDiskSize-&gt;setValue(0);
+    m_maxDiskSize-&gt;setFixedWidth(80);
+    maxLay-&gt;addWidget(m_maxDiskSize);
+    maxLay-&gt;addWidget(new QLabel("Sectors"));
+    maxLay-&gt;addStretch();
+    rightLay-&gt;addWidget(maxGroup);</span>
+
+    // Starting Disk Sector
+<span style = "background-color:#dfd">    auto *startGroup = new QGroupBox("Starting Disk Sector");
+    auto *startLay   = new QHBoxLayout(startGroup);
+    startLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_startSector = new QSpinBox;
+    m_startSector-&gt;setRange(0, 2147483647);
+    m_startSector-&gt;setValue(0);
+    m_startSector-&gt;setFixedWidth(80);
+    startLay-&gt;addWidget(m_startSector);
+    startLay-&gt;addStretch();
+    rightLay-&gt;addWidget(startGroup);</span>
+
+    // # of Outstanding I/Os
+<span style = "background-color:#dfd">    auto *qGroup = new QGroupBox("# of Outstanding I/Os");
+    auto *qLay   = new QHBoxLayout(qGroup);
+    qLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_queueDepth = new QSpinBox;
+    m_queueDepth-&gt;setRange(1, 256);
+    m_queueDepth-&gt;setValue(1);
+    m_queueDepth-&gt;setFixedWidth(80);
+    qLay-&gt;addWidget(m_queueDepth);
+    qLay-&gt;addWidget(new QLabel("per target"));
+    qLay-&gt;addStretch();
+    rightLay-&gt;addWidget(qGroup);</span>
+
+    // Use Fixed Seed
+<span style = "background-color:#dfd">    auto *seedGroup = new QGroupBox("Use Fixed Seed");
+    auto *seedLay   = new QHBoxLayout(seedGroup);
+    seedLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_fixedSeedChk  = new QCheckBox;
+    m_fixedSeedEdit = new QLineEdit("0");
+    m_fixedSeedEdit-&gt;setFixedWidth(80);
+    m_fixedSeedEdit-&gt;setEnabled(false);
+    seedLay-&gt;addWidget(m_fixedSeedChk);
+    seedLay-&gt;addWidget(m_fixedSeedEdit);
+    seedLay-&gt;addWidget(new QLabel("Fixed Seed Value"));
+    seedLay-&gt;addStretch();
+    rightLay-&gt;addWidget(seedGroup);</span>
+
+    // Test Connection Rate
+<span style = "background-color:#dfd">    auto *connGroup = new QGroupBox("Test Connection Rate");
+    auto *connLay   = new QHBoxLayout(connGroup);
+    connLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_connRateChk  = new QCheckBox;
+    m_transPerConn = new QSpinBox;
+    m_transPerConn-&gt;setRange(1, 100000);
+    m_transPerConn-&gt;setValue(1);
+    m_transPerConn-&gt;setFixedWidth(80);
+    m_transPerConn-&gt;setEnabled(false);
+    connLay-&gt;addWidget(m_connRateChk);
+    connLay-&gt;addWidget(m_transPerConn);
+    connLay-&gt;addWidget(new QLabel("Transactions per connection"));
+    connLay-&gt;addStretch();
+    rightLay-&gt;addWidget(connGroup);</span>
+
+    // Write IO Data Pattern
+<span style = "background-color:#dfd">    auto *patGroup = new QGroupBox("Write IO Data Pattern");
+    auto *patLay   = new QHBoxLayout(patGroup);
+    patLay-&gt;setContentsMargins(6, 8, 6, 4);
+    m_dataPattern = new QComboBox;
+    m_dataPattern-&gt;addItems({"Repeating bytes", "Pseudo-random", "Full random"});
+    patLay-&gt;addWidget(m_dataPattern);
+    patLay-&gt;addStretch();
+    rightLay-&gt;addWidget(patGroup);</span>
+
+<span style = "background-color:#dfd">    rightLay-&gt;addStretch();
+    root-&gt;addLayout(rightLay, 1);</span>
+
+    // ---- Connections --------------------------------------------------------
+<span style = "background-color:#dfd">    connect(m_targetList,   &amp;QListWidget::itemChanged,</span>
+            this, &amp;QtPageSetup::onTargetItemChanged);
+<span style = "background-color:#dfd">    connect(m_queueDepth,   QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged),</span>
+            this, &amp;QtPageSetup::onQueueDepthChanged);
+<span style = "background-color:#dfd">    connect(m_maxDiskSize,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged),</span>
+            this, &amp;QtPageSetup::onMaxDiskSizeChanged);
+<span style = "background-color:#dfd">    connect(m_startSector,  QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged),</span>
+            this, &amp;QtPageSetup::onStartSectorChanged);
+<span style = "background-color:#dfd">    connect(m_fixedSeedChk, &amp;QCheckBox::toggled,</span>
+            this, &amp;QtPageSetup::onFixedSeedToggled);
+<span style = "background-color:#dfd">    connect(m_fixedSeedEdit, &amp;QLineEdit::editingFinished,</span>
+            this, &amp;QtPageSetup::onFixedSeedValueChanged);
+<span style = "background-color:#dfd">    connect(m_connRateChk,  &amp;QCheckBox::toggled,</span>
+            this, &amp;QtPageSetup::onConnRateToggled);
+<span style = "background-color:#dfd">    connect(m_transPerConn, QOverload&lt;int&gt;::of(&amp;QSpinBox::valueChanged),</span>
+            this, &amp;QtPageSetup::onTransPerConnChanged);
+<span style = "background-color:#dfd">    connect(m_dataPattern,  QOverload&lt;int&gt;::of(&amp;QComboBox::currentIndexChanged),</span>
+            this, &amp;QtPageSetup::onDataPatternChanged);
+
+<span style = "background-color:#dfd">    setParamsEnabled(false);
+}</span>
+
+// =============================================================================
+// Selection control (called by QtMainWindow::onWorkerTreeSelectionChanged)
+// =============================================================================
+
+void QtPageSetup::clearSelection()
+<span style = "background-color:#dfd">{
+    m_selManagerName.clear();
+    m_selWorkerId.clear();
+    m_targetList-&gt;clear();
+    setParamsEnabled(false);
+}</span>
+
+void QtPageSetup::setSelectedManager(const QString &amp;mgrName)
+<span style = "background-color:#dfd">{
+    m_selManagerName = mgrName;
+    m_selWorkerId.clear();
+    populateTargetList();   // show available disks, none checked
+    setParamsEnabled(false);
+}</span>
+
+void QtPageSetup::setSelectedWorker(const QString &amp;mgrName, const QString &amp;workerId)
+<span style = "background-color:#dfd">{
+    m_selManagerName = mgrName;
+    m_selWorkerId    = workerId;
+    populateTargetList();
+    loadWorkerParams();
+    setParamsEnabled(true);
+}</span>
+
+void QtPageSetup::refreshForEngine()
+<span style = "background-color:#dfd">{</span>
+    // Ignore the configChanged our own edit just caused; rebuilding the target
+<span style = "background-color:#fdd">    // list here would delete the item whose itemChanged signal is still running.</span>
+<span style = "background-color:#dfd">    if (m_applyingEdit) return;</span>
+<span style = "background-color:#fdd">    // Re-populate with the current selection intact (e.g. after manager connects)</span>
+<span style = "background-color:#dfd">    if (!m_selManagerName.isEmpty() &amp;&amp; !m_selWorkerId.isEmpty())
+        setSelectedWorker(m_selManagerName, m_selWorkerId);
+    else if (!m_selManagerName.isEmpty())
+        setSelectedManager(m_selManagerName);</span>
+    else
+<span style = "background-color:#dfd">        clearSelection();
+}</span>
+
+// =============================================================================
+// Internal helpers
+<span style = "background-color:#fdd">// =============================================================================
+
+void QtPageSetup::populateTargetList()</span>
+<span style = "background-color:#dfd">{
+    m_updating = true;
+    m_targetList-&gt;clear();</span>
+<span style = "background-color:#fdd"></span>
+    // Find the manager to get its availableTargets list
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName.toStdString()) continue;</span>
+<span style = "background-color:#fdd">
+        // Collect available targets, falling back to worker assignments if needed</span>
+<span style = "background-color:#dfd">        QList&lt;TargetInfo&gt; avail(mgr.availableTargets.begin(), mgr.availableTargets.end());
+        if (avail.isEmpty()) {</span>
+<span style = "background-color:#fdd">            QStringList seen;
+            for (const auto &amp;w : mgr.workers) {
+                for (const auto &amp;t : w.targets) {
+                    const QString tq = QString::fromStdString(t);
+                    if (!seen.contains(tq)) {
+                        seen.append(tq);
+                        // Infer type from name: PhysicalDrive â physical, else logical
+                        const bool isPhys = tq.contains("PhysicalDrive", Qt::CaseInsensitive)</span>
+                                         || tq.startsWith("\\\\.\\");
+<span style = "background-color:#fdd">                        avail.append(TargetInfo{</span>
+                            t,
+                            isPhys ? TargetKind::PhysicalDisk : TargetKind::LogicalDisk,
+<span style = "background-color:#fdd">                            !isPhys   // assume logical disks from existing assignments are prepared</span>
+                        });
+                    }
+<span style = "background-color:#fdd">                }</span>
+            }
+<span style = "background-color:#fdd">        }
+
+        // Build the set of targets currently assigned to the selected worker</span>
+<span style = "background-color:#dfd">        QStringList assigned;
+        if (!m_selWorkerId.isEmpty()) {
+            for (const auto &amp;w : mgr.workers)
+                if (w.id == m_selWorkerId.toStdString()) {
+                    for (const auto &amp;t : w.targets) assigned &lt;&lt; QString::fromStdString(t);</span>
+                    break;
+                }
+<span style = "background-color:#fdd">        }
+
+        // Prepare the three possible icons</span>
+<span style = "background-color:#dfd">        const QIcon physDiskIcon    = QApplication::style()-&gt;standardIcon(QStyle::SP_DriveHDIcon);
+        const QIcon logReadyIcon    = QApplication::style()-&gt;standardIcon(QStyle::SP_DriveHDIcon);
+        static const QIcon logUnreadyIcon = makeUnpreparedDiskIcon();</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">        for (const auto &amp;ti : avail) {
+            QIcon icon;
+            if (ti.kind == TargetKind::PhysicalDisk)
+                icon = physDiskIcon;
+            else if (ti.ready)
+                icon = logReadyIcon;</span>
+<span style = "background-color:#fdd">            else</span>
+<span style = "background-color:#dfd">                icon = logUnreadyIcon;</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">            auto *item = new QListWidgetItem(icon, QString::fromStdString(ti.name));
+            item-&gt;setFlags(item-&gt;flags() | Qt::ItemIsUserCheckable);
+            item-&gt;setCheckState(assigned.contains(QString::fromStdString(ti.name)) ? Qt::Checked : Qt::Unchecked);
+            m_targetList-&gt;addItem(item);
+        }
+        break;</span>
+    }
+<span style = "background-color:#dfd">    m_updating = false;
+}</span>
+<span style = "background-color:#fdd">
+void QtPageSetup::loadWorkerParams()</span>
+<span style = "background-color:#dfd">{
+    if (m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    m_updating = true;
+    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (const auto &amp;w : mgr.workers) {
+            if (w.id != m_selWorkerId) continue;
+            m_queueDepth-&gt;setValue(w.queueDepth);
+            m_maxDiskSize-&gt;setValue((int)qMin(w.maxDiskSize, (qint64)2147483647));
+            m_startSector-&gt;setValue((int)qMin(w.startingSector, (qint64)2147483647));
+            m_fixedSeedChk-&gt;setChecked(w.useFixedSeed);
+            m_fixedSeedEdit-&gt;setText(QString::number(w.fixedSeedValue));
+            m_fixedSeedEdit-&gt;setEnabled(w.useFixedSeed);
+            m_connRateChk-&gt;setChecked(w.testConnRate);
+            m_transPerConn-&gt;setValue(w.transPerConn);
+            m_transPerConn-&gt;setEnabled(w.testConnRate);
+            m_dataPattern-&gt;setCurrentIndex(w.dataPattern);</span>
+            break;
+<span style = "background-color:#fdd">        }
+        break;</span>
+    }
+<span style = "background-color:#dfd">    m_updating = false;
+}</span>
+<span style = "background-color:#fdd">
+void QtPageSetup::saveWorkerParams()</span>
+<span style = "background-color:#dfd">{
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName) continue;
+        for (auto w : mgr.workers) {
+            if (w.id != m_selWorkerId) continue;
+            w.queueDepth    = m_queueDepth-&gt;value();
+            w.maxDiskSize   = m_maxDiskSize-&gt;value();
+            w.startingSector= m_startSector-&gt;value();
+            w.useFixedSeed  = m_fixedSeedChk-&gt;isChecked();
+            w.fixedSeedValue= m_fixedSeedEdit-&gt;text().toLongLong();
+            w.testConnRate  = m_connRateChk-&gt;isChecked();
+            w.transPerConn  = m_transPerConn-&gt;value();
+            w.dataPattern   = m_dataPattern-&gt;currentIndex();
+            m_applyingEdit = true;
+            m_engine-&gt;updateWorker(w);
+            m_applyingEdit = false;
+            return;</span>
+<span style = "background-color:#fdd">        }
+    }</span>
+<span style = "background-color:#dfd">}</span>
+<span style = "background-color:#fdd">
+void QtPageSetup::setParamsEnabled(bool enabled)</span>
+<span style = "background-color:#dfd">{
+    m_maxDiskSize-&gt;setEnabled(enabled);
+    m_startSector-&gt;setEnabled(enabled);
+    m_queueDepth-&gt;setEnabled(enabled);
+    m_fixedSeedChk-&gt;setEnabled(enabled);
+    m_fixedSeedEdit-&gt;setEnabled(enabled &amp;&amp; m_fixedSeedChk-&gt;isChecked());
+    m_connRateChk-&gt;setEnabled(enabled);
+    m_transPerConn-&gt;setEnabled(enabled &amp;&amp; m_connRateChk-&gt;isChecked());
+    m_dataPattern-&gt;setEnabled(enabled);
+}</span>
+
+<span style = "background-color:#fdd">// =============================================================================
+// Slots
+// =============================================================================</span>
+
+void QtPageSetup::onTargetItemChanged(QListWidgetItem *item)
+<span style = "background-color:#dfd">{
+    if (m_updating || m_selManagerName.isEmpty() || m_selWorkerId.isEmpty()) return;
+    if (!item) return;</span>
+<span style = "background-color:#fdd">
+    // Rebuild the assigned targets from all check states</span>
+<span style = "background-color:#dfd">    QStringList assigned;
+    for (int r = 0; r &lt; m_targetList-&gt;count(); ++r) {
+        auto *it = m_targetList-&gt;item(r);
+        if (it &amp;&amp; it-&gt;checkState() == Qt::Checked)
+            assigned.append(it-&gt;text());</span>
+<span style = "background-color:#fdd">    }
+</span>
+<span style = "background-color:#dfd">    for (const auto &amp;mgr : m_engine-&gt;managers()) {
+        if (mgr.name != m_selManagerName.toStdString()) continue;
+        for (auto w : mgr.workers) {
+            if (w.id != m_selWorkerId.toStdString()) continue;
+            w.targets.clear();
+            for (const auto &amp;s : assigned) w.targets.push_back(s.toStdString());
+            m_applyingEdit = true;
+            m_engine-&gt;updateWorker(w);
+            m_applyingEdit = false;
+            return;</span>
+        }
+    }
+<span style = "background-color:#dfd">}</span>
+<span style = "background-color:#fdd"></span>
+<span style = "background-color:#dfd">void QtPageSetup::onQueueDepthChanged(int)    { saveWorkerParams(); }
+void QtPageSetup::onMaxDiskSizeChanged(int)   { saveWorkerParams(); }
+void QtPageSetup::onStartSectorChanged(int)   { saveWorkerParams(); }</span>
+<span style = "background-color:#fdd"></span>
+void QtPageSetup::onFixedSeedToggled(bool checked)
+<span style = "background-color:#dfd">{
+    m_fixedSeedEdit-&gt;setEnabled(checked);
+    saveWorkerParams();
+}</span>
+<span style = "background-color:#fdd">
+void QtPageSetup::onFixedSeedValueChanged()   { saveWorkerParams(); }
+
+void QtPageSetup::onConnRateToggled(bool checked)</span>
+<span style = "background-color:#dfd">{
+    m_transPerConn-&gt;setEnabled(checked);
+    saveWorkerParams();
+}</span>
+
+<span style = "background-color:#dfd">void QtPageSetup::onTransPerConnChanged(int)  { saveWorkerParams(); }
+void QtPageSetup::onDataPatternChanged(int)   { saveWorkerParams(); }</span></pre>
+        <hr />
+        <table width="100%">
+            <thead>
+                <tr>
+                    <th align="center">
+                        <small>Generated by</small>
+                        <a href="https://github.com/OpenCppCoverage/OpenCppCoverage/releases">
+                            <strong>OpenCppCoverage (Version: 0.9.9.0)</strong>
+                        </a>
+                    </th>
+                </tr>
+            </thead>
+        </table>
+    </body>
+</html>
