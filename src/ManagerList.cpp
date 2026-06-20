@@ -1307,8 +1307,6 @@ BOOL ManagerList::SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targ
 //
 BOOL ManagerList::LoadConfigPreprocess(const CString & infilename, BOOL * flags, BOOL replace)
 {
-	ICF_ifstream infileForCount(infilename);
-	CString key, value;
 	CString mgr_name, mgr_network;
 	int mgr_id, counter;
 	Manager *mgr;
@@ -1319,30 +1317,30 @@ BOOL ManagerList::LoadConfigPreprocess(const CString & infilename, BOOL * flags,
 	for (counter = 0; counter < mgr_count; counter++)
 		mgr_flag.Add(FALSE);
 
-	// Skip into the MANAGER LIST section.
-	// If it can't find it, return TRUE.  (This is okay.)
-	if (!infileForCount.SkipTo("'MANAGER LIST"))
-		return TRUE;
-
-	//Count the # of managers in the .icf file being processed.
-	int icfManagerCount = 0;
-
-	while (infileForCount.SkipTo("'Manager ID, manager name")) {
-		// Read the manager info from the config file.
-		if (!GetManagerInfo(infileForCount, mgr_name, mgr_id, mgr_network))
-			return FALSE;
-		icfManagerCount++;
+	// Parse the MANAGER LIST with the shared core parser (the same one LoadConfig
+	// uses) instead of the legacy ICF_ifstream scan. Preprocess only needs each
+	// manager's name/id/network to build the load map, so access specs and
+	// targets are not collected here.
+	iocore::IcfDocument doc((LPCTSTR) infilename);
+	std::vector < iocore::IcfManagerConfig > parsed;
+	if (!doc.loadManagerList(parsed, false, false)) {
+		// Fatal parse error: report it here (LoadConfig won't be reached). Any
+		// non-fatal errors on success are left for LoadConfig to report once.
+		for (size_t e = 0; e < doc.errors().size(); e++)
+			ErrorMessage(CString(doc.errors()[e].c_str()));
+		return FALSE;
 	}
 
-	// "Rewind" the .icf file and re-position to start of "MANAGER LIST" section.
-	ICF_ifstream infile(infilename);
+	// No MANAGER LIST section (or an empty one): nothing to map.  (This is okay.)
+	if (parsed.empty())
+		return TRUE;
 
-	infile.SkipTo("'MANAGER LIST");
+	const int icfManagerCount = (int) parsed.size();
 
-	while (infile.SkipTo("'Manager ID, manager name")) {
-		// Read the manager info from the config file.
-		if (!GetManagerInfo(infile, mgr_name, mgr_id, mgr_network))
-			return FALSE;
+	for (size_t mgr_index = 0; mgr_index < parsed.size(); mgr_index++) {
+		mgr_name = parsed[mgr_index].name.c_str();
+		mgr_id = parsed[mgr_index].id;
+		mgr_network = parsed[mgr_index].address.c_str();
 
 		// Identify the first unused manager matching these specs
 		for (counter = 0; counter < mgr_count; counter++) {
@@ -1394,8 +1392,6 @@ BOOL ManagerList::LoadConfigPreprocess(const CString & infilename, BOOL * flags,
 			}
 		}
 	}
-
-	infile.close();
 
 	// If there is exactly one manager in Iometer and one manager
 	// in the ManagerMap, they should be mapped together.
@@ -1521,50 +1517,6 @@ void ManagerList::IndexManagers()
 			}
 		}
 	}
-}
-
-//
-// Retrieves the manager name, network address, and discriminator value from an
-// the infile.  Expects the file pointer to be immediately after the newline
-// following a "'Manager ID, manager name'" comment.
-//
-// Return value of FALSE indicates an error.  The calling function
-// should NOT report an error.  Error reporting is handled here.
-//
-BOOL ManagerList::GetManagerInfo(ICF_ifstream & infile, CString & manager_name, int &id, CString & network_name)
-{
-	CString key = "";
-	CString value = "";
-
-	value = infile.GetNextLine();
-
-	if (value.IsEmpty()) {
-		ErrorMessage("File is improperly formatted.  " "Error retrieving manager name or empty manager name.");
-		return FALSE;
-	}
-
-	if (!ICF_ifstream::ExtractFirstInt(value, id)) {
-		ErrorMessage("File is improperly formatted.  "
-			     "Error retrieving manager ID.  This value must be an integer.");
-		return FALSE;
-	}
-
-	manager_name = value;
-
-	if (!infile.GetPair(key, value)) {
-		ErrorMessage("File is improperly formatted.  " "Error retrieving manager network address.");
-		return FALSE;
-	}
-
-	if (key.CompareNoCase("'Manager network address") != 0) {
-		ErrorMessage("File is improperly formatted.  Expected a \"Manager network "
-			     "address\" comment after manager ID.");
-		return FALSE;
-	}
-
-	network_name = value;
-
-	return TRUE;
 }
 
 void ManagerList::SaveResultsInstantaneous(ostream * file, int access_index, int result_type)

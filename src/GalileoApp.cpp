@@ -288,10 +288,11 @@ BOOL CGalileoApp::InitInstance()
 		// If the default config file exists, load it.
 		if (::GetFileAttributes(DEFAULT_CONFIG_FILE) != 0xFFFFFFFF) {
 			OpenDocumentFile(DEFAULT_CONFIG_FILE);
-		} else {
+		} else if (!cmdline.GetNoAutoDynamo()) {
 			// If no config file was specified on the command line
 			// and the default config file doesn't exist, start a
 			// local manager.with no command line options.
+			// (/g suppresses this auto-spawn - and its UAC prompt.)
 			LaunchDynamo();
 		}
 #endif

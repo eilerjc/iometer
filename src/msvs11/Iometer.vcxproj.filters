@@ -42,9 +42,6 @@
     <ClCompile Include="..\GalileoView.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\ICF_ifstream.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\ICFOpenDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -135,9 +132,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\GalileoView.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\ICF_ifstream.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\ICFOpenDialog.h">

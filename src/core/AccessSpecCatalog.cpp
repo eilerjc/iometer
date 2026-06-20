@@ -76,12 +76,14 @@ std::vector<AccessSpec> defaultAccessSpecs()
         specs.push_back(s);
     }
 
-    // -- Default (64 KiB, 100% read, sequential) -------------------------------
+    // -- Default (2 KiB, 67% read, 100% random, request-size aligned) ----------
+    // This is the canonical MFC default (AccessSpecList::InitAccessSpecLine):
+    // size 2048, 67% reads, fully random, aligned to the request size (2048).
     {
         AccessSpec s;
         s.name        = "Default";
         s.defaultSpec = true;
-        s.lines.push_back(line(65536, 100, 100));
+        s.lines.push_back(line(2048, 67, 0, 2048));
         specs.push_back(s);
     }
 
