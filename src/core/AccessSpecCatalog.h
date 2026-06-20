@@ -27,8 +27,9 @@ std::string accessSpecLabel(const AccessSpec &spec);
 // concern (they need the spec list).
 std::string smartNameText(int sizeBytes, int randomPct, int readPct);
 
-// The built-in access specifications: Idle, Default (64 KiB seq read), the
-// size x read-mix matrix, and the combined "All in one" spec.
+// The built-in access specifications: Idle, Default (2 KiB, 67% read, random -
+// the canonical MFC InitAccessSpecLine values), the size x read-mix matrix, and
+// the combined "All in one" spec.
 std::vector<AccessSpec> defaultAccessSpecs();
 
 // Fill one wire access-spec row from the friendly AccessSpecLine model. Templated

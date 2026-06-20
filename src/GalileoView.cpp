@@ -67,6 +67,7 @@
 #include "GalileoView.h"
 #include "Mainfrm.h"
 #include "ManagerList.h"
+#include "core/IcfStream.h"	// shared low-level ICF reader (iocore), replaces ICF_ifstream
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -1352,22 +1353,20 @@ BOOL CGalileoView::PrepareToOpenConfigFile(const CString & infilename, BOOL * fl
 {
 	// Do some preliminary checking on the file before we toss
 	// the filename off to the other LoadConfig routines.
+	{
+		iocore::IcfStream infile((LPCTSTR) infilename);
 
-	ICF_ifstream infile(infilename);
-
-	// Was the file opened successfully?
-	if (!infile.is_open()) {
-		ErrorMessage("Could not open \"" + infilename + "\"");
-		return FALSE;
+		// Was the file opened successfully?
+		if (!infile.isOpen()) {
+			ErrorMessage("Could not open \"" + infilename + "\"");
+			return FALSE;
+		}
+		// Verify that the file can be read.
+		if (infile.failed()) {
+			ErrorMessage("Error reading from \"" + infilename + "\"");
+			return FALSE;
+		}
 	}
-	// Verify that the file can be read.
-	if (infile.rdstate()) {
-		ErrorMessage("Error reading from \"" + infilename + "\"");
-		infile.close();
-		return FALSE;
-	}
-
-	infile.close();
 
 	if (flags[ICFManagerWorkerFlag]) {
 		// Manager configuration is being restored,

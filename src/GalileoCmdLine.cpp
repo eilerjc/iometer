@@ -89,7 +89,8 @@ const int CGalileoCmdLine::DefaultTimeout = 10;
 const char CGalileoCmdLine::DefaultConfigFile[] = "iometer.icf";
 
 CGalileoCmdLine::CGalileoCmdLine():m_bSwitches(FALSE), m_bFail(FALSE),
-m_sConfigFile(""), m_sResultFile(""), m_iTimeout(-1), m_bOverrideBatch(FALSE), m_iLoginportnumber(0), m_bShowBigmeter(FALSE)
+m_sConfigFile(""), m_sResultFile(""), m_iTimeout(-1), m_bOverrideBatch(FALSE), m_iLoginportnumber(0), m_bShowBigmeter(FALSE),
+m_bNoAutoDynamo(FALSE)
 {
 }
 
@@ -229,6 +230,15 @@ void CGalileoCmdLine::ParseParam(const char *pszParam, BOOL bFlag, BOOL bLast)
 		m_bSwitches = TRUE;
 		last_switch = toupper(pszParam[0]);
 
+		// /g (GUI only): a standalone switch with no following parameter.
+		// Suppresses the no-config auto-spawn of a local Dynamo (and its UAC
+		// prompt). See GetNoAutoDynamo().
+		if (last_switch == 'G') {
+			m_bNoAutoDynamo = TRUE;
+			last_switch = 0;	// no additional parameter expected
+			return;			// skip the bLast "expected another parameter" check
+		}
+
 		//////////////////////////////////////////////////////////////////////
 		// This is an example of how to allow switches that have meaning on
 		// their own, without any additional parameters.
@@ -342,6 +352,11 @@ int CGalileoCmdLine::GetLoginportnumber()
 BOOL CGalileoCmdLine::GetShowBigmeter()
 {
 	return m_bShowBigmeter;
+}
+
+BOOL CGalileoCmdLine::GetNoAutoDynamo()
+{
+	return m_bNoAutoDynamo;
 }
 
 //

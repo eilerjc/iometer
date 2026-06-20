@@ -211,8 +211,6 @@ class ManagerList {
 	BOOL SaveConfig(ostream & outfile, BOOL save_aspecs, BOOL save_targets);
 	BOOL LoadConfigPreprocess(const CString & infilename, BOOL * flags, BOOL replace);
 	BOOL LoadConfig(const CString & infilename, BOOL save_aspecs, BOOL save_targets, BOOL replace);
-      private:
-	 BOOL GetManagerInfo(ICF_ifstream & infile, CString & manager_name, int &id, CString & network_name);
 	//
 	///////////////////////////////////////////////////////////////////////////
 

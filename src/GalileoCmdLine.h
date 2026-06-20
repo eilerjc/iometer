@@ -80,6 +80,13 @@ class CGalileoCmdLine:public CCommandLineInfo {
 	int GetLoginportnumber();
 	BOOL GetShowBigmeter();
 
+	// /g: GUI-only mode. When Iometer starts with no config file it normally
+	// auto-spawns a local Dynamo (which prompts for elevation). This flag
+	// suppresses that single-spawn, so the GUI comes up with the built-in
+	// defaults and no UAC prompt - useful for offline inspection and for the
+	// File>New built-in-spec golden test.
+	BOOL GetNoAutoDynamo();
+
 	// Interactive mode is the normal mode of operation for Iometer.
 	// If the user specifies both the config file and the results file
 	// on the command line, Iometer goes into batch mode, in which
@@ -110,6 +117,7 @@ class CGalileoCmdLine:public CCommandLineInfo {
 	int m_iTimeout;		// the specified timeout value
 	int m_iLoginportnumber; // the specified port number
 	BOOL m_bShowBigmeter;// automatically show bigmeter
+	BOOL m_bNoAutoDynamo;	// /g: don't auto-spawn a local Dynamo when no config given
 
 	BOOL m_bOverrideBatch;	// if set, forces IsBatchMode to return FALSE
 };

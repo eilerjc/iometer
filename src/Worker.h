@@ -67,7 +67,6 @@
 #include "IOCommon.h"
 #include "IOMessage.h"
 #include "IOTransfers.h"
-#include "ICF_ifstream.h"
 #include <afxtempl.h>
 
 class Manager;			// forward declaration

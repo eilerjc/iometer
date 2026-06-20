@@ -258,7 +258,6 @@
     <ClCompile Include="..\GalileoDoc.cpp" />
     <ClCompile Include="..\GalileoGlobals.cpp" />
     <ClCompile Include="..\GalileoView.cpp" />
-    <ClCompile Include="..\ICF_ifstream.cpp" />
     <ClCompile Include="..\ICFOpenDialog.cpp" />
     <ClCompile Include="..\ICFSaveDialog.cpp" />
     <ClCompile Include="..\IOAccess.cpp" />
@@ -306,7 +305,6 @@
     <ClInclude Include="..\GalileoDefs.h" />
     <ClInclude Include="..\GalileoDoc.h" />
     <ClInclude Include="..\GalileoView.h" />
-    <ClInclude Include="..\ICF_ifstream.h" />
     <ClInclude Include="..\ICFOpenDialog.h" />
     <ClInclude Include="..\ICFSaveDialog.h" />
     <ClInclude Include="..\IOAccess.h" />

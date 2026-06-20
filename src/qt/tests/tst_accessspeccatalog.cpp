@@ -58,7 +58,19 @@ void TestAccessSpecCatalog::defaultSpecs_haveIdleDefaultAndAllInOne() {
     QCOMPARE(specs.front().name, std::string("Idle"));
     bool hasDefault = false, hasAllInOne = false;
     for (const auto &s : specs) {
-        if (s.name == "Default")     { hasDefault = true;  QVERIFY(s.defaultSpec); QCOMPARE(s.lines.size(), size_t(1)); }
+        if (s.name == "Default") {
+            hasDefault = true;  QVERIFY(s.defaultSpec); QCOMPARE(s.lines.size(), size_t(1));
+            // The Default spec must match the canonical MFC InitAccessSpecLine
+            // values (2 KiB, 67% read, 100% random, request-size aligned), so the
+            // two GUIs agree on the default workload. (Saved ICF row would be
+            // 2048,100,67,100,0,1,2048,0.)
+            const AccessSpecLine &l = s.lines[0];
+            QCOMPARE(l.sizeBytes,   2048);
+            QCOMPARE(l.readPercent, 67);
+            QCOMPARE(l.seqPercent,  0);      // 100% random
+            QCOMPARE(l.alignBytes,  2048);   // aligned to the request size
+            QCOMPARE(l.ofSize,      100);
+        }
         if (s.name == "All in one")  { hasAllInOne = true; QVERIFY(s.lines.size() > 1); }
     }
     QVERIFY(hasDefault);
