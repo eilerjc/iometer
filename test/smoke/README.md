@@ -40,7 +40,17 @@ cd test\smoke
 .\run_smoke.ps1 -Mode real            # real Dynamo; self-elevates (UAC)
 .\run_smoke.ps1 -Mode both
 .\run_smoke.ps1 -IncludePending       # also run scenarios marked pending
+.\run_smoke.ps1 -Coverage             # also collect line coverage (opt-in)
 ```
+
+### Coverage (`-Coverage`)
+Re-runs the selected suite under **OpenCppCoverage** with `--cover_children`, so
+every binary the scenarios launch (`IometerQt`, `dynamotest`, `Dynamo`, the MFC GUI,
+the ctest unit exes) contributes line coverage to one `.cov` under `cov_raw/`. It's
+opt-in because it needs **PDB-carrying builds**: it forces `QtConfig=RelWithDebInfo`
+(build that config first; the MSVC `Release\x64` binaries already ship PDBs).
+`src/qt/collect_coverage_all.ps1` auto-folds `cov_raw/*.cov` into the published
+report. (Linux `run_smoke.sh` coverage is a TODO — OpenCppCoverage is Windows-only.)
 
 Bash (Linux/macOS — needs `jq`, a built `IometerQt`, and a `dynamo`):
 

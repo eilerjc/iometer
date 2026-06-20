@@ -11,6 +11,15 @@
 #   .\run_smoke.ps1 -Only qt-dynamotest,unit-tests
 #   .\run_smoke.ps1 -List                 # list scenarios, run nothing
 #   .\run_smoke.ps1 -IncludePending       # also run scenarios marked status=pending
+#   .\run_smoke.ps1 -Coverage             # also collect line coverage (opt-in)
+#
+# Coverage (-Coverage): re-runs the WHOLE selected suite under OpenCppCoverage with
+# --cover_children, so every binary the scenarios launch (IometerQt, dynamotest,
+# Dynamo, the MFC GUI, the ctest unit exes) contributes line coverage to a single
+# .cov under cov_raw/. Opt-in because it needs PDB-carrying builds: it forces
+# QtConfig=RelWithDebInfo (build that config first); the MSVC Release x64 binaries
+# already ship PDBs. src/qt/collect_coverage_all.ps1 auto-folds cov_raw/*.cov into
+# the published report. (Linux run_smoke.sh coverage is a TODO - OCC is Windows-only.)
 
 [CmdletBinding()]
 param(
@@ -19,6 +28,9 @@ param(
     [string[]]$Only,
     [switch]$IncludePending,
     [switch]$List,
+    [switch]$Coverage,
+    [string]$CovDir,
+    [string]$OccExe = "C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe",
     [string]$QtPrefix = "C:\Qt\6.8.3\msvc2022_64",
     [string]$QtConfig = "Release"
 )
@@ -32,6 +44,38 @@ $repo     = (Resolve-Path (Join-Path $here "..\..")).Path     # repo root (src/ 
 $manifest = Get-Content (Join-Path $here "scenarios.json") -Raw | ConvertFrom-Json
 $cfg      = $manifest.config
 $host4    = $env:COMPUTERNAME
+
+# --- Coverage: re-run the whole suite under OpenCppCoverage (opt-in) ----------
+# --cover_children records every binary the scenarios spawn (controllers, workers,
+# unit-test exes) into one .cov - even ones the runners kill, since OCC flushes per
+# child exit. We just re-invoke this script under OCC and let it run normally; the
+# IOMETER_SMOKE_OCC sentinel (inherited by the child) prevents an infinite relaunch.
+if (-not $List -and $Coverage -and -not $env:IOMETER_SMOKE_OCC) {
+    if (-not (Test-Path $OccExe)) { Write-Host "ERROR: OpenCppCoverage not found at $OccExe" -ForegroundColor Red; exit 2 }
+    if (-not $CovDir) { $CovDir = Join-Path $here "cov_raw" }
+    New-Item -ItemType Directory -Path $CovDir -Force | Out-Null
+    # Qt binaries need PDBs; the Release Qt build has none, so use RelWithDebInfo.
+    if ($QtConfig -eq "Release") {
+        $QtConfig = "RelWithDebInfo"
+        Write-Host "NOTE: coverage needs PDBs - using QtConfig=RelWithDebInfo (build that config first)." -ForegroundColor Yellow
+    }
+    $cov     = Join-Path $CovDir ("smoke_{0}.cov" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    $srcFilt = "iometer\github\iometer\src"
+    # One verbatim command string so the quoted .ps1 / .cov paths (with spaces) survive.
+    $inner = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Mode $Mode -QtConfig $QtConfig"
+    if ($Only)           { $inner += " -Only $($Only -join ',')" }
+    if ($IncludePending) { $inner += " -IncludePending" }
+    $occ = "--quiet --cover_children --sources $srcFilt " +
+           "--excluded_sources tests --excluded_sources moc_ --excluded_sources qrc_ " +
+           "--export_type binary:`"$cov`" -- powershell.exe $inner"
+    $env:IOMETER_SMOKE_OCC = "1"
+    Write-Host "=== Smoke suite UNDER OpenCppCoverage -> $cov ===" -ForegroundColor Cyan
+    $p = Start-Process $OccExe -ArgumentList $occ -NoNewWindow -PassThru -Wait
+    $env:IOMETER_SMOKE_OCC = $null
+    if (Test-Path $cov) { Write-Host "[cov] wrote $cov ($([math]::Round((Get-Item $cov).Length/1kb))kb)" -ForegroundColor Green }
+    else { Write-Host "WARNING: no .cov produced (built the RelWithDebInfo/PDB binaries?)" -ForegroundColor Yellow }
+    exit $p.ExitCode
+}
 
 # --- Resolve logical binary names -> real Windows paths ----------------------
 $relBin = Join-Path $repo "src\msvs11\Release\x64"
