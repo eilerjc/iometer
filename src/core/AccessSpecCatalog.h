@@ -32,6 +32,24 @@ std::string smartNameText(int sizeBytes, int randomPct, int readPct);
 // the combined "All in one" spec.
 std::vector<AccessSpec> defaultAccessSpecs();
 
+// Result of validating an access specification for the editor's OK/Save action.
+struct SpecValidation {
+    bool        ok;
+    std::string error;   // exact MFC ErrorMessage text when !ok; empty when ok
+};
+
+// Validate an access spec the way the editor's OK does (port of MFC
+// CAccessDialog::CheckAccess), in the same order with the same messages:
+//   - every line's size must be > 0
+//   - the lines' "% of access" (ofSize) must sum to exactly 100
+//   - the name (already trimmed by the caller) must be non-empty
+//   - the name must not contain a comma (commas break the CSV results file)
+//   - the name must be unique vs `otherNames` (case-insensitive, like MFC
+//     strcasecmp) - pass every OTHER spec's name (exclude the one being edited)
+// MFC is the canonical oracle; the Qt editor previously did NONE of this.
+SpecValidation validateAccessSpec(const AccessSpec &spec,
+                                  const std::vector<std::string> &otherNames);
+
 // Fill one wire access-spec row from the friendly AccessSpecLine model. Templated
 // on the wire struct so it works for ANY type with the canonical fields
 // (of_size/reads/random/delay/burst/reply/size/align) - the canonical Access_Spec

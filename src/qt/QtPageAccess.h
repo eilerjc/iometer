@@ -41,7 +41,8 @@ private:
     void setupUi();
     void rebuildGlobalList();
     void rebuildAssignedList();
-    bool editSpecDialog(AccessSpec &spec, const QString &title);
+    bool editSpecDialog(AccessSpec &spec, const QString &title,
+                        const std::vector<std::string> &otherNames);
 
     QtIometerEngine *m_engine    = nullptr;
     QListWidget   *m_assigned  = nullptr;   // left column

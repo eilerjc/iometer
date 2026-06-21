@@ -1,6 +1,7 @@
 // tst_accessspeccatalog - the shared iocore access-spec naming + default catalog.
 #include <QtTest>
 #include "AccessSpecCatalog.h"
+#include "SizeUnits.h"
 
 using namespace iocore;
 
@@ -15,6 +16,8 @@ private slots:
     void defaultSpecs_allInOneDistributesToHundred();
     void fillWireAccess_mapsFriendlyToWire();
     void smartNameText_formats();
+    void mkb_composeDecomposeRoundTrip();
+    void validateAccessSpec_rules();
 };
 
 // A stand-in for a wire access-spec row (canonical Access_Spec / Qt DyAccessSpec):
@@ -116,6 +119,70 @@ void TestAccessSpecCatalog::smartNameText_formats() {
     QCOMPARE(smartNameText(512,    0,   0), std::string("512 B sequential writes"));
     QCOMPARE(smartNameText(1048576, 0, 100), std::string("1 MiB sequential reads"));
     QCOMPARE(smartNameText(8192,  30,  67), std::string("8 KiB 30% random 67% reads"));
+}
+
+void TestAccessSpecCatalog::mkb_composeDecomposeRoundTrip() {
+    // Compose: MiB*1048576 + KiB*1024 + B.
+    QCOMPARE(mkbToBytes(0, 64, 0), 65536);
+    QCOMPARE(mkbToBytes(0,  2, 0), 2048);
+    QCOMPARE(mkbToBytes(1,  2, 3), 1050627);
+
+    // Decompose: each level's remainder, exactly as both editors display it.
+    auto eq = [](const Mkb &m, int mb, int kb, int b) {
+        return m.megabytes == mb && m.kilobytes == kb && m.bytes == b;
+    };
+    QVERIFY(eq(bytesToMkb(65536),      0,   64,   0));
+    QVERIFY(eq(bytesToMkb(2048),       0,    2,   0));
+    QVERIFY(eq(bytesToMkb(1050627),    1,    2,   3));
+    QVERIFY(eq(bytesToMkb(1073741823), 1023, 1023, 1023)); // 1023 MiB + 1023 KiB + 1023 B
+
+    // Round-trip a spread of sizes.
+    for (int bytes : {0, 1, 512, 4096, 65536, 262144, 1048576, 1050627, 999999}) {
+        const Mkb m = bytesToMkb(bytes);
+        QCOMPARE(mkbToBytes(m.megabytes, m.kilobytes, m.bytes), bytes);
+    }
+}
+
+void TestAccessSpecCatalog::validateAccessSpec_rules() {
+    auto line = [](int size, int ofSize) {
+        AccessSpecLine l; l.sizeBytes = size; l.ofSize = ofSize; return l;
+    };
+    auto specOf = [&](const std::string &name, std::vector<AccessSpecLine> lines) {
+        AccessSpec s; s.name = name; s.lines = std::move(lines); return s;
+    };
+
+    // Valid single-line spec, no name clash.
+    QVERIFY(validateAccessSpec(specOf("Foo", {line(4096, 100)}), {}).ok);
+
+    // Size 0 on any line.
+    auto zero = validateAccessSpec(specOf("Foo", {line(0, 100)}), {});
+    QVERIFY(!zero.ok);
+    QCOMPARE(zero.error, std::string("A line in the access specification is for 0 bytes.  "
+                                     "All sizes must be greater than 0."));
+
+    // % of access must sum to exactly 100.
+    auto sum = validateAccessSpec(specOf("Foo", {line(512, 50), line(512, 40)}), {});
+    QVERIFY(!sum.ok);
+    QCOMPARE(sum.error, std::string("Percent of Access Specification values must sum to exactly 100."));
+    QVERIFY(validateAccessSpec(specOf("Foo", {line(512, 60), line(512, 40)}), {}).ok);
+
+    // Empty name.
+    auto blank = validateAccessSpec(specOf("", {line(4096, 100)}), {});
+    QVERIFY(!blank.ok);
+    QCOMPARE(blank.error, std::string("You must assign a name to this access specification."));
+
+    // Comma in name.
+    auto comma = validateAccessSpec(specOf("a,b", {line(4096, 100)}), {});
+    QVERIFY(!comma.ok);
+    QCOMPARE(comma.error, std::string("Commas are not allowed in access specification names."));
+
+    // Duplicate name (case-insensitive, like MFC strcasecmp); message embeds the name.
+    auto dup = validateAccessSpec(specOf("Foo", {line(4096, 100)}), {"bar", "FOO"});
+    QVERIFY(!dup.ok);
+    QCOMPARE(dup.error, std::string("An access specification named \"Foo\" already exists.  "
+                                    "Access specification names must be unique."));
+    // A different name against the same others is fine.
+    QVERIFY(validateAccessSpec(specOf("Baz", {line(4096, 100)}), {"bar", "FOO"}).ok);
 }
 
 QTEST_APPLESS_MAIN(TestAccessSpecCatalog)

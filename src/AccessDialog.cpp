@@ -64,6 +64,8 @@
 
 #include "StdAfx.h"
 #include "AccessDialog.h"
+#include "core/SizeUnits.h"	// shared MiB/KiB/B <-> bytes conversion (iocore)
+#include "core/AccessSpecCatalog.h"	// shared access-spec validation (iocore)
 
 // Needed for MFC Library support for assisting in finding memory leaks
 //
@@ -313,16 +315,17 @@ void CAccessDialog::SizeToText(DWORD size, CString * size_text)
 //
 DWORD CAccessDialog::GetMKBEditbox(MKBControls * which)
 {
-	// If any edit boxes are blank, set their sliders to the appropriate current value 
+	// If any edit boxes are blank, set their sliders to the appropriate current value
 	// (which, in turn, sets the edit box).
+	const iocore::Mkb cur = iocore::bytesToMkb((this->*(which->GetFunc)) ());
 	if (!which->EBytesCtrl->LineLength())
-		which->SBytesCtrl->SetPos((this->*(which->GetFunc)) () % KILOBYTE_BIN);
+		which->SBytesCtrl->SetPos(cur.bytes);
 
 	if (!which->EKilobytesCtrl->LineLength())
-		which->SKilobytesCtrl->SetPos(((this->*(which->GetFunc)) () % MEGABYTE_BIN) / KILOBYTE_BIN);
+		which->SKilobytesCtrl->SetPos(cur.kilobytes);
 
 	if (!which->EMegabytesCtrl->LineLength())
-		which->SMegabytesCtrl->SetPos((this->*(which->GetFunc)) () / MEGABYTE_BIN);
+		which->SMegabytesCtrl->SetPos(cur.megabytes);
 
 	// Verify that the megabyte value has not overflowed.
 	if (GetDlgItemInt(which->EMegabytesID) > MAX_SIZE_RANGE) {
@@ -331,8 +334,9 @@ DWORD CAccessDialog::GetMKBEditbox(MKBControls * which)
 			     "is 1023 MiB + 1023 KiB + 1023 B.");
 	}
 
-	return GetDlgItemInt(which->EBytesID)
-	    + GetDlgItemInt(which->EKilobytesID) * KILOBYTE_BIN + GetDlgItemInt(which->EMegabytesID) * MEGABYTE_BIN;
+	return iocore::mkbToBytes(GetDlgItemInt(which->EMegabytesID),
+				  GetDlgItemInt(which->EKilobytesID),
+				  GetDlgItemInt(which->EBytesID));
 }
 
 //
@@ -341,8 +345,9 @@ DWORD CAccessDialog::GetMKBEditbox(MKBControls * which)
 //
 DWORD CAccessDialog::GetMKBSpinners(MKBControls * which)
 {
-	return (which->SBytesCtrl->GetPos() +
-		which->SKilobytesCtrl->GetPos() * KILOBYTE_BIN + which->SMegabytesCtrl->GetPos() * MEGABYTE_BIN);
+	return iocore::mkbToBytes(which->SMegabytesCtrl->GetPos(),
+				  which->SKilobytesCtrl->GetPos(),
+				  which->SBytesCtrl->GetPos());
 }
 
 //
@@ -547,47 +552,42 @@ void CAccessDialog::OnChangeLAccess(NMHDR * pNMHDR, LRESULT * pResult)
 BOOL CAccessDialog::CheckAccess()
 {
 	int line_index;
-	int total_access = 0;
 	CString spec_name;
-	Test_Spec *name_spec;
 
-	// There must be no more than 100 entries, the sum of the "% of Access" 
-	// fields for all the entries must equal 100, and all sizes must be > 0.
+	// Gather the spec's lines (transfer size + "% of Access") into the shared
+	// core model. GetSize()/GetAccess() read the row named by item_being_changed.
+	AccessSpec spec_data;
 	for (line_index = 0; line_index < m_LAccess.GetItemCount(); line_index++) {
 		item_being_changed = line_index;
-		if (GetSize() <= 0) {
-			ErrorMessage("A line in the access specification is for 0 bytes.  "
-				     "All sizes must be greater than 0.");
-			return FALSE;
-		}
-		total_access += GetAccess();
+		AccessSpecLine line;
+		line.sizeBytes = GetSize();
+		line.ofSize = GetAccess();
+		spec_data.lines.push_back(line);
 	}
-	if (total_access != 100) {
-		ErrorMessage("Percent of Access Specification values must sum to exactly 100.");
-		return FALSE;
-	}
-	// Update the spec's name with the name in the edit box.
+
+	// Trim leading/trailing whitespace (bug #363) and reflect it back into the
+	// edit control, as MFC always has. (Done before the shared check, so a fixed-
+	// up name is shown even if the size/percent checks fail - cosmetic only.)
 	m_EName.GetWindowText(spec_name.GetBuffer(MAX_WORKER_NAME), MAX_WORKER_NAME);
 	spec_name.ReleaseBuffer();
-	spec_name.TrimLeft();	//remove leading & trailing whitespace (bug #363)
+	spec_name.TrimLeft();
 	spec_name.TrimRight();
-	m_EName.SetWindowText(spec_name);	//update edit control
+	m_EName.SetWindowText(spec_name);
+	spec_data.name = (LPCTSTR) spec_name;
 
-	// Check for a blank name
-	if (spec_name.IsEmpty()) {
-		ErrorMessage("You must assign a name to this access specification.");
-		return FALSE;
+	// Every OTHER spec's name (uniqueness is checked case-insensitively in core).
+	std::vector < std::string > other_names;
+	for (int i = 0; i < theApp.access_spec_list.Count(); i++) {
+		Test_Spec *other = theApp.access_spec_list.Get(i);
+		if (other != spec)
+			other_names.push_back(other->name);
 	}
-	// Check for commas in the name.  Commas invalidate the results file, which is comma separated.
-	if (spec_name.Find(',') != -1) {
-		ErrorMessage("Commas are not allowed in access specification names.");
-		return FALSE;
-	}
-	// Check for duplicate names.
-	name_spec = theApp.access_spec_list.RefByName((LPCTSTR) spec_name);
-	if (name_spec && name_spec != spec) {
-		ErrorMessage("An access specification named \"" + spec_name + "\" already exists.  " +
-			     "Access specification names must be unique.");
+
+	// Shared validation: sizes > 0, % of access sums to 100, name non-empty /
+	// comma-free / unique - with the exact MFC error texts.
+	iocore::SpecValidation v = iocore::validateAccessSpec(spec_data, other_names);
+	if (!v.ok) {
+		ErrorMessage(CString(v.error.c_str()));
 		return FALSE;
 	}
 
@@ -718,12 +718,13 @@ void CAccessDialog::SetMKBSpinners(MKBControls * which, DWORD new_value)
 	}
 	// Updating the display.  Since the spin controls are linked to the
 	// edit boxes, we only need to update the spinners.
+	const iocore::Mkb m = iocore::bytesToMkb(new_value);
 	if (GetFocus() != which->EBytesCtrl)
-		which->SBytesCtrl->SetPos(new_value % KILOBYTE_BIN);
+		which->SBytesCtrl->SetPos(m.bytes);
 	if (GetFocus() != which->EKilobytesCtrl)
-		which->SKilobytesCtrl->SetPos((new_value % MEGABYTE_BIN) / KILOBYTE_BIN);
+		which->SKilobytesCtrl->SetPos(m.kilobytes);
 	if (GetFocus() != which->EMegabytesCtrl)
-		which->SMegabytesCtrl->SetPos(new_value / MEGABYTE_BIN);
+		which->SMegabytesCtrl->SetPos(m.megabytes);
 }
 
 //
