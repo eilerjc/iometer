@@ -1,6 +1,20 @@
 #include "AccessSpecCatalog.h"
 
+#include <cctype>
+
 namespace iocore {
+
+// Case-insensitive compare (MFC used strcasecmp on the spec names).
+static bool iequals(const std::string &a, const std::string &b)
+{
+    if (a.size() != b.size())
+        return false;
+    for (size_t i = 0; i < a.size(); ++i)
+        if (std::tolower(static_cast<unsigned char>(a[i])) !=
+            std::tolower(static_cast<unsigned char>(b[i])))
+            return false;
+    return true;
+}
 
 std::string formatSize(int bytes)
 {
@@ -139,6 +153,34 @@ std::vector<AccessSpec> defaultAccessSpecs()
     }
 
     return specs;
+}
+
+SpecValidation validateAccessSpec(const AccessSpec &spec,
+                                  const std::vector<std::string> &otherNames)
+{
+    // Sizes must all be > 0, and the "% of access" must total exactly 100
+    // (MFC CheckAccess checks these first, in this order).
+    int total = 0;
+    for (const AccessSpecLine &l : spec.lines) {
+        if (l.sizeBytes <= 0)
+            return { false, "A line in the access specification is for 0 bytes.  "
+                            "All sizes must be greater than 0." };
+        total += l.ofSize;
+    }
+    if (total != 100)
+        return { false, "Percent of Access Specification values must sum to exactly 100." };
+
+    // Name checks (the caller passes the already-trimmed name).
+    if (spec.name.empty())
+        return { false, "You must assign a name to this access specification." };
+    if (spec.name.find(',') != std::string::npos)
+        return { false, "Commas are not allowed in access specification names." };
+    for (const std::string &other : otherNames)
+        if (iequals(spec.name, other))
+            return { false, "An access specification named \"" + spec.name +
+                            "\" already exists.  Access specification names must be unique." };
+
+    return { true, std::string() };
 }
 
 } // namespace iocore

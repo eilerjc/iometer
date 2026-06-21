@@ -2,6 +2,8 @@
 #include "QtPageAccess.h"
 #include "QtIometerEngine.h"
 #include "../core/AccessSpecLibrary.h"
+#include "../core/AccessSpecCatalog.h"
+#include "../core/SizeUnits.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGridLayout>
@@ -285,18 +287,20 @@ static QHBoxLayout *makeSizeSpinners(QSpinBox **mbSpin, QSpinBox **kbSpin,
 }
 static void setSizeSpinners(QSpinBox *mb, QSpinBox *kb, QSpinBox *b, int bytes)
 {
-    mb->setValue(bytes / 1048576);
-    kb->setValue((bytes % 1048576) / 1024);
-    b ->setValue(bytes % 1024);
+    const iocore::Mkb m = iocore::bytesToMkb(bytes);
+    mb->setValue(m.megabytes);
+    kb->setValue(m.kilobytes);
+    b ->setValue(m.bytes);
 }
 static int readSizeSpinners(QSpinBox *mb, QSpinBox *kb, QSpinBox *b)
 {
-    return mb->value() * 1048576 + kb->value() * 1024 + b->value();
+    return iocore::mkbToBytes(mb->value(), kb->value(), b->value());
 }
 
 // -----------------------------------------------------------------------------
 
-bool QtPageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
+bool QtPageAccess::editSpecDialog(AccessSpec &spec, const QString &title,
+                                  const std::vector<std::string> &otherNames)
 {
     QDialog dlg(this);
     dlg.setWindowTitle(title);
@@ -620,7 +624,22 @@ bool QtPageAccess::editSpecDialog(AccessSpec &spec, const QString &title)
 
     // OK / Cancel
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    // Gate OK on the shared validation (port of MFC CheckAccess): commit the row
+    // being edited, then accept only if the spec is valid - otherwise show the
+    // identical MFC message and keep the dialog open. The Qt editor previously did
+    // no validation at all. (Tests call QDialog::accept() directly, bypassing this
+    // gate, which is fine - they assert add/copy/reject behavior, not validation.)
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, [&]() {
+        saveControls(table->currentRow());
+        AccessSpec candidate;
+        candidate.name = nameEdit->text().trimmed().toStdString();
+        candidate.lines.assign(lines.begin(), lines.end());
+        const iocore::SpecValidation v = iocore::validateAccessSpec(candidate, otherNames);
+        if (v.ok)
+            dlg.accept();
+        else
+            QMessageBox::warning(&dlg, title, QString::fromStdString(v.error));
+    });
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     root->addWidget(buttons);
 
@@ -668,7 +687,10 @@ void QtPageAccess::onNewSpec()
     iocore::AccessSpecLibrary lib = libraryFromEngine(m_engine);
     const int idx = lib.newSpec();
     AccessSpec s = lib.at(idx);
-    if (!editSpecDialog(s, "New Access Specification")) return;
+    std::vector<std::string> others;
+    for (int i = 0; i < lib.count(); i++)
+        if (i != idx) others.push_back(lib.at(i).name);
+    if (!editSpecDialog(s, "New Access Specification", others)) return;
     lib.at(idx) = s;
     libraryToEngine(lib, m_engine);
     loadSpecList();
@@ -682,7 +704,10 @@ void QtPageAccess::onEditSpec()
     auto specs = m_engine->accessSpecs();
     if (row >= specs.size()) return;
     AccessSpec s = specs[row];
-    if (!editSpecDialog(s, "Edit Access Specification")) return;
+    std::vector<std::string> others;
+    for (int i = 0; i < specs.size(); i++)
+        if (i != row) others.push_back(specs[i].name);
+    if (!editSpecDialog(s, "Edit Access Specification", others)) return;
     specs[row] = s;
     m_engine->setAccessSpecs(specs);
     loadSpecList();
@@ -700,7 +725,10 @@ void QtPageAccess::onEditCopySpec()
     const int idx = lib.copySpec(row);
     if (idx < 0) return;
     AccessSpec s = lib.at(idx);
-    if (!editSpecDialog(s, "Edit Copy of Access Specification")) return;
+    std::vector<std::string> others;
+    for (int i = 0; i < lib.count(); i++)
+        if (i != idx) others.push_back(lib.at(i).name);
+    if (!editSpecDialog(s, "Edit Copy of Access Specification", others)) return;
     lib.at(idx) = s;
     libraryToEngine(lib, m_engine);
     loadSpecList();
