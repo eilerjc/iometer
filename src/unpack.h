@@ -53,6 +53,7 @@
 // Anything included before this file will have the prior byte alignment
 //
 
+#include "IOPlatform.h"		// derive IOMTR_OSFAMILY_* from the OS (used just below)
 
 #if defined(FORCE_STRUCT_ALIGN)// && !defined(GCC_ATTRIBUTE_ALIGN)
 

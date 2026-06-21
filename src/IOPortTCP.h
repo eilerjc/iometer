@@ -83,6 +83,8 @@
 #ifndef PORTTCP_DEFINED
 #define PORTTCP_DEFINED
 
+#include "IOPlatform.h"		// derive IOMTR_OSFAMILY_* from the OS
+
 #if _MSC_VER >= 1000
 #pragma once
 #endif				// _MSC_VER >= 1000

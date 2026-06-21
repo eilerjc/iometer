@@ -75,6 +75,8 @@
 #ifndef _IOVERSION
 #define _IOVERSION
 
+#include "IOPlatform.h"		// derive IOMTR_OSFAMILY_* from the OS
+
 
 #if defined(IOMTR_OSFAMILY_WINDOWS)
  #include <winver.h>
