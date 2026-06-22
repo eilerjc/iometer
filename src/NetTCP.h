@@ -75,6 +75,8 @@
 #ifndef NET_ASYNC_TCP_DEFINED
 #define NET_ASYNC_TCP_DEFINED
 
+#include "IOPlatform.h"		// derive IOMTR_OSFAMILY_* from the OS
+
 #include "Network.h"
 #if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
 #include "winsock2.h"

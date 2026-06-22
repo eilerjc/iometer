@@ -30,7 +30,7 @@ set(CMAKE_AUTORCC ON)
 if(WIN32)
     add_compile_definitions(
         IOMTR_NO_MFC
-        IOMTR_OSFAMILY_WINDOWS
+        # IOMTR_OSFAMILY_WINDOWS is now derived from IOMTR_OS_* by IOPlatform.h
         FORCE_STRUCT_ALIGN
     )
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)

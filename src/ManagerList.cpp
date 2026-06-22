@@ -79,23 +79,7 @@
 #include "core/IcfDocument.h"	// shared MANAGER LIST parser (iocore)
 #include "core/IcfWriter.h"	// shared ICF section writers (iocore)
 #include "core/ResultsCsv.h"	// canonical results-CSV schema (iocore)
-
-// Needed for MFC Library support for assisting in finding memory leaks
-//
-// NOTE: Based on the documentation[1] I found, it should be enough to have
-//       a "#define new DEBUG_NEW" statement for the case, that we are
-//       running Windows. There should be no need for checking the _DEBUG
-//       flag and no need for redefiniting the THIS_FILE string. Maybe there
-//       will be a MFC hacker who could advice here.
-//       [1] = http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vclib/html/_mfc_debug_new.asp
-//
-#if defined(IOMTR_OS_WIN32) || defined(IOMTR_OS_WIN64)
-#ifdef IOMTR_SETTING_MFC_MEMALLOC_DEBUG
-#define new DEBUG_NEW
-#undef THIS_FILE
-static char THIS_FILE[] = __FILE__;
-#endif
-#endif
+#include "IOMemDebug.h"	// MUST be the LAST include (it #defines new for leak tracking)
 
 ManagerList::ManagerList()
 {

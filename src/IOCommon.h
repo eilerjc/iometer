@@ -156,6 +156,8 @@
 #define ___IOCOMMON_H_DEFINED___
 
 
+// Derive IOMTR_OSFAMILY_* from the selected IOMTR_OS_* before the checks below.
+#include "IOPlatform.h"
 
 // Check and map the different global defines for Operating
 // System family, Operating System and CPU (see README).

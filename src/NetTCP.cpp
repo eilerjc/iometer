@@ -906,7 +906,7 @@ void NetAsyncTCP::SetOptions( CONNECTION *s )
 	LINGER lstruct = {TRUE, 0};
 
 	
-#if (NETWORK_DETAILS || defined(_DEBUG)) && defined(IOMTR_OS_FAMILY_WINDOWS)
+#if (NETWORK_DETAILS || defined(_DEBUG)) && defined(IOMTR_OSFAMILY_WINDOWS)
 	BOOL CHECK_setoption;
 	LINGER	CHECK_lstruct;
 	int size;
@@ -943,7 +943,7 @@ void NetAsyncTCP::SetOptions( CONNECTION *s )
 	// CHECK the socket option settings
 	/////////////////////////////////////
 
-#if defined(IOMTR_OS_FAMILY_WINDOWS)
+#if defined(IOMTR_OSFAMILY_WINDOWS)
 	#if NETWORK_DETAILS || defined(_DEBUG)
 		// When closing the connection, do a hard close.
 		size = sizeof(CHECK_lstruct);

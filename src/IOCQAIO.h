@@ -65,6 +65,8 @@
 #ifndef	CQAIO_DEFINED
 #define	CQAIO_DEFINED
 
+#include "IOPlatform.h"		// derive IOMTR_OSFAMILY_* from the OS
+
 #include "IOCQ.h"
 
 ///////////////////////////////////////////////////////////////////////////////

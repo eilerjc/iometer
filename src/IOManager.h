@@ -89,6 +89,8 @@
 #ifndef MANAGER_DEFINED
 #define MANAGER_DEFINED
 
+#include "IOPlatform.h"		// derive IOMTR_OSFAMILY_* from the OS
+
 #include "IOGrunt.h"
 #include "IOPort.h"
 #include "IOPerformance.h"
