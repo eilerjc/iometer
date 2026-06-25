@@ -1,6 +1,7 @@
 // QtPageSetup.cpp -- "Disk Targets" tab
 #include "QtPageSetup.h"
 #include "QtIometerEngine.h"
+#include "../core/DataPattern.h"	// shared data-pattern catalog (combo labels)
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QGroupBox>
@@ -150,7 +151,9 @@ void QtPageSetup::setupUi()
     auto *patLay   = new QHBoxLayout(patGroup);
     patLay->setContentsMargins(6, 8, 6, 4);
     m_dataPattern = new QComboBox;
-    m_dataPattern->addItems({"Repeating bytes", "Pseudo-random", "Full random"});
+    // Labels come from the shared catalog; new patterns appear here automatically.
+    for (int i = 0; i < iocore::dataPatternCount(); ++i)
+        m_dataPattern->addItem(QString::fromLatin1(iocore::dataPatternName(i)));
     patLay->addWidget(m_dataPattern);
     patLay->addStretch();
     rightLay->addWidget(patGroup);

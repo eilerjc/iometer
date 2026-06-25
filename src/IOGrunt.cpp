@@ -129,6 +129,7 @@ Grunt::Grunt()
 	type = InvalidType;
 
 	holdrand = 1L;
+	content_holdrand = 1L;
 	grunt_state = TestIdle;
 	not_ready = 0;
 	target_count = 0;
@@ -900,6 +901,11 @@ void Grunt::Record_IO(Transaction * transaction, DWORDLONG end_IO)
 		// (If end_IO is zero, this value won't be used anyway)
 		transfer_time = end_IO - transaction->start_IO;
 
+		// Hoisted once: the latency-bin scan below compares against the bin
+		// thresholds (a double[]) in the double domain, so convert here instead
+		// of re-converting inside each loop iteration.
+		const double dbl_transfer_time = (double) transfer_time;
+
 		// Calculating is_read...the value is the opposite for client threads.
 		if (transaction->is_read ^ IsType(targets[transaction->target_id]->spec.type, GenericServerType)) {
 			if (end_IO) {
@@ -915,7 +921,7 @@ void Grunt::Record_IO(Transaction * transaction, DWORDLONG end_IO)
 					prev_result->max_raw_read_latency = transfer_time;
 
 				for(int binNum=1; binNum < LATENCY_BIN_SIZE; binNum++) {
-					if((double)transfer_time < access_spec.latency_bin_values[binNum]) {
+					if(dbl_transfer_time < access_spec.latency_bin_values[binNum]) {
 						result->latency_bin[binNum - 1] += 1;
 						break;
 					}
@@ -939,7 +945,7 @@ void Grunt::Record_IO(Transaction * transaction, DWORDLONG end_IO)
 					prev_result->max_raw_write_latency = transfer_time;
 
 				for(int binNum=1; binNum < LATENCY_BIN_SIZE; binNum++) {
-					if((double)transfer_time < access_spec.latency_bin_values[binNum]) {
+					if(dbl_transfer_time < access_spec.latency_bin_values[binNum]) {
 						result->latency_bin[binNum - 1] += 1;
 						break;
 					}
@@ -1334,10 +1340,14 @@ void Grunt::Do_IOs()
 			} else {
 
 				// Depending on the data pattern selected, set the write_data appropriately
+				// (the pattern set is catalogued in core/DataPattern.h).
 				switch (((TargetDisk *) targets[target_id])->spec.DataPattern){
+					default:	// unknown pattern -> safe fallback (repeating bytes)
 					case DATA_PATTERN_REPEATING_BYTES:
 						write_data = saved_write_data_pointer;
-						memset(write_data, rand(), transaction->size);
+						// Fresh repeating byte per write, via the fast content RNG
+						// (was a per-write libc rand() call).
+						memset(write_data, ContentByte(), transaction->size);
 						break;
 					case DATA_PATTERN_PSEUDO_RANDOM:
 						// Do nothing...pattern set by the "Set_Access" routine
@@ -1627,6 +1637,9 @@ void Grunt::Begin_IO()
 void Grunt::Srand(DWORDLONG seed)
 {
 	holdrand = seed;
+	// Seed the content RNG separately (distinct from the access seed) so write
+	// content varies with the seed but never perturbs the access sequence.
+	content_holdrand = seed ^ 0x5DEECE66DULL;
 }
 
 DWORDLONG Grunt::Rand(DWORDLONG limit)
@@ -1636,4 +1649,13 @@ DWORDLONG Grunt::Rand(DWORDLONG limit)
 #else
 	return (holdrand = A * holdrand + B) % limit;
 #endif
+}
+
+// Next pseudo-random byte for write-buffer content (repeating-bytes pattern).
+// Same LCG as Rand() but on the dedicated content_holdrand state; the high bits
+// are used (better distributed than an LCG's low bits) and no modulo is needed.
+unsigned char Grunt::ContentByte()
+{
+	content_holdrand = A * content_holdrand + B;
+	return (unsigned char) (content_holdrand >> 24);
 }
