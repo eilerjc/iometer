@@ -231,8 +231,15 @@ class Grunt {
 	void Srand(DWORDLONG seed);
 	DWORDLONG Rand(DWORDLONG limit);
 
+	// Fast next byte for the repeating-bytes data pattern. Uses a SEPARATE RNG
+	// state (content_holdrand) so generating write-buffer content never consumes
+	// draws from the access RNG (holdrand) - the disk access sequence is
+	// unchanged. (Replaces the old per-write libc rand() in Do_IOs.)
+	unsigned char ContentByte();
+
 	// Used by random number generator functions.
 	DWORDLONG holdrand;
+	DWORDLONG content_holdrand;	// RNG state for data-pattern content (see ContentByte)
 };
 
 #endif

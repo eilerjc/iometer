@@ -68,6 +68,7 @@
 #include "PageDisk.h"
 #include "ManagerList.h"
 #include "GalileoView.h"
+#include "core/DataPattern.h"	// shared data-pattern catalog (combo labels)
 #include "IOMemDebug.h"	// MUST be the LAST include (it #defines new for leak tracking)
 
 /////////////////////////////////////////////////////////////////////////////
@@ -142,6 +143,12 @@ BOOL CPageDisk::OnInitDialog()
 
 	// Set the spin control to translate an up click into a positive movement.
 	m_SConnectionRate.SetRange(0, UD_MAXVAL);
+
+	// Populate the data-pattern combo from the shared catalog (core/DataPattern.h),
+	// so new patterns appear automatically. The item index is the pattern id.
+	m_CDataPattern.ResetContent();
+	for (int i = 0; i < iocore::dataPatternCount(); i++)
+		m_CDataPattern.AddString(iocore::dataPatternName(i));
 
 	Reset();
 	return TRUE;		// return TRUE unless you set the focus to a control
